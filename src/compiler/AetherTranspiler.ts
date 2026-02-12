@@ -12,6 +12,7 @@ interface Scope {
   functionName: string;
   variables: Set<string>;
   args: string[];
+  varInits: Map<string, any>;
 }
 
 interface StructDef {
@@ -41,6 +42,8 @@ export class AetherTranspiler {
   private static globalVars: Set<string> = new Set();
   private static globalConsts: Map<string, any> = new Map();
   private static varTypes: Map<string, string> = new Map(); // Name -> "Uint8Array" | "Uint32Array" | etc
+  private static structArrayCounts: Map<string, any> = new Map();
+  private static exportedArrays: Map<string, string> = new Map(); // StructName -> VarName
 
   static transpile(jsCode: string, kernelId: number = 0): string {
     this.scopes = [];
@@ -53,6 +56,8 @@ export class AetherTranspiler {
     this.globalVars = new Set();
     this.globalConsts = new Map();
     this.varTypes = new Map();
+    this.structArrayCounts = new Map();
+    this.exportedArrays = new Map();
 
     if (!jsCode || !jsCode.trim()) {
         return "";
@@ -77,9 +82,10 @@ export class AetherTranspiler {
 
   private static extractStructs(code: string): string {
       const structRegex = /struct\s+(\w+)\s*\{\s*([^}]+)\s*\}/g;
+      const exportRegex = /export\s+(\w+);?/g;
       let match;
       
-      // We remove the structs from JS code so Acorn handles the rest, 
+      // We remove the structs and exports from JS code so Acorn handles the rest,
       // but we parse them to build offsets.
       let cleanCode = code;
 
@@ -110,6 +116,15 @@ export class AetherTranspiler {
           // Remove from source code to avoid parse error
           cleanCode = cleanCode.replace(match[0], "");
       }
+
+      // Handle exports
+      while ((match = exportRegex.exec(code)) !== null) {
+          const varName = match[1];
+          // We don't know the type yet, so we'll resolve it in analyzeScopes
+          this.exportedArrays.set("__PENDING_" + varName, varName);
+          cleanCode = cleanCode.replace(match[0], "");
+      }
+
       return cleanCode;
   }
 
@@ -139,6 +154,19 @@ export class AetherTranspiler {
                 this.varTypes.set(name, "Uint8Array");
             } else if (decl.init && decl.init.type === "CallExpression" && decl.init.callee.name === "Uint8Array") {
                 this.varTypes.set(name, "Uint8Array");
+            } else if (decl.init && decl.init.type === "NewExpression" && decl.init.callee.name === "Array") {
+                const firstArg = decl.init.arguments[0];
+                const secondArg = decl.init.arguments[1];
+                if (firstArg && firstArg.type === "Identifier" && this.structs.has(firstArg.name)) {
+                    this.varTypes.set(name, `struct ${firstArg.name}`);
+                    if (secondArg) {
+                        if (secondArg.type === "Literal") {
+                            this.structArrayCounts.set(name, secondArg.value);
+                        } else if (secondArg.type === "Identifier") {
+                            this.structArrayCounts.set(name, secondArg.name.toUpperCase());
+                        }
+                    }
+                }
             }
 
             if (n.kind === "const") {
@@ -149,6 +177,17 @@ export class AetherTranspiler {
           });
         }
       });
+
+      // Resolve pending exports
+      const pending = Array.from(this.exportedArrays.keys()).filter(k => k.startsWith("__PENDING_"));
+      pending.forEach(pk => {
+          const varName = this.exportedArrays.get(pk)!;
+          const structType = this.getStructType(varName);
+          if (structType) {
+              this.exportedArrays.set(structType, varName.toUpperCase());
+          }
+          this.exportedArrays.delete(pk);
+      });
     }
 
     if (node.type === "FunctionDeclaration") {
@@ -158,7 +197,8 @@ export class AetherTranspiler {
       const scope: Scope = {
         functionName: funcName,
         variables: new Set(),
-        args: args
+        args: args,
+        varInits: new Map()
       };
       
       this.findVariables(node.body, scope);
@@ -179,9 +219,24 @@ export class AetherTranspiler {
         scope.variables.add(name);
 
         if (decl.init) {
+            const fullName = `LV_${scope.functionName}_${name}`;
             if ((decl.init.type === "NewExpression" || decl.init.type === "CallExpression") &&
                 decl.init.callee.name && decl.init.callee.name.includes("Uint8")) {
-                this.varTypes.set(`LV_${scope.functionName}_${name}`, "Uint8Array");
+                this.varTypes.set(fullName, "Uint8Array");
+            } else if (decl.init.type === "NewExpression" && decl.init.callee.name === "Array") {
+                const firstArg = decl.init.arguments[0];
+                const secondArg = decl.init.arguments[1];
+                if (firstArg && firstArg.type === "Identifier" && this.structs.has(firstArg.name)) {
+                    this.varTypes.set(fullName, `struct ${firstArg.name}`);
+                    if (secondArg) {
+                        if (secondArg.type === "Literal") {
+                            this.structArrayCounts.set(fullName, secondArg.value);
+                        } else if (secondArg.type === "Identifier") {
+                            this.structArrayCounts.set(fullName, secondArg.name.toUpperCase());
+                        }
+                    }
+                    scope.varInits.set(name, decl.init);
+                }
             }
         }
       });
@@ -202,8 +257,10 @@ export class AetherTranspiler {
   private static emitGlobals() {
     this.emit("( --- AETHER AUTO-GLOBALS --- )");
 
-    // Top-Level Constants
+    // 1. Emit simple constants first
     this.globalConsts.forEach((init, name) => {
+      if (this.isStructArray(name)) return;
+
       let val = 0;
       if (init) {
           if (init.type === "Literal") {
@@ -218,17 +275,39 @@ export class AetherTranspiler {
       this.emit(`${val} CONSTANT ${name}`);
     });
 
-    // Top-Level Variables
+    // 2. Emit Top-Level Variables (including struct arrays)
     this.globalVars.forEach(v => {
-      this.emit(`VARIABLE ${v}`);
+      if (this.isStructArray(v)) {
+          const structName = this.getStructType(v);
+          const count = this.structArrayCounts.get(v) || 0;
+          this.emit(`CREATE ${v} ${count} SIZEOF_${structName?.toUpperCase()} * ALLOT`);
+      } else {
+          this.emit(`VARIABLE ${v}`);
+      }
     });
 
+    // 3. Emit struct arrays that were declared as 'const'
+    this.globalConsts.forEach((init, name) => {
+        if (!this.isStructArray(name)) return;
+        const structName = this.getStructType(name);
+        const count = this.structArrayCounts.get(name) || 0;
+        this.emit(`CREATE ${name} ${count} SIZEOF_${structName?.toUpperCase()} * ALLOT`);
+    });
+
+    // 4. Emit Local Variables
     this.scopes.forEach(scope => {
       scope.args.forEach(arg => {
         this.emit(`VARIABLE LV_${scope.functionName}_${arg}`);
       });
       scope.variables.forEach(v => {
-        this.emit(`VARIABLE LV_${scope.functionName}_${v}`);
+        const fullName = `LV_${scope.functionName}_${v}`;
+        if (this.isStructArray(fullName)) {
+            const structName = this.getStructType(fullName);
+            const count = this.structArrayCounts.get(fullName) || 0;
+            this.emit(`CREATE ${fullName} ${count} SIZEOF_${structName?.toUpperCase()} * ALLOT`);
+        } else {
+            this.emit(`VARIABLE ${fullName}`);
+        }
       });
     });
     this.emit("( ------------------------- )");
@@ -272,8 +351,17 @@ export class AetherTranspiler {
                if (this.globalConsts.has(varName)) {
                    return;
                }
+               // If it's a struct array, it's already handled by CREATE ... ALLOT in emitGlobals
+               if (this.isStructArray(decl.id.name)) {
+                   return;
+               }
                this.compileNode(decl.init);
                this.emit(`  ${varName} !`);
+
+               const rhsType = this.inferType(decl.init);
+               if (rhsType) {
+                   this.varTypes.set(varName, rhsType);
+               }
            }
         });
         break;
@@ -369,6 +457,11 @@ export class AetherTranspiler {
             if (node.operator === "=") {
                 this.compileNode(node.right); // Value
                 this.emit(`  ${varName} !`); // Store
+
+                const rhsType = this.inferType(node.right);
+                if (rhsType) {
+                    this.varTypes.set(varName, rhsType);
+                }
             } else if (node.operator === "+=") {
                 this.compileNode(node.right);
                 this.emit(`  ${varName} +!`);
@@ -427,14 +520,20 @@ export class AetherTranspiler {
             this.compileNode(node.left.object); // Pushes Base Address
             this.compileNode(node.left.property); // Pushes Index
             
-            const isByte = node.left.object.name && this.isByteType(node.left.object.name);
+            const isByte = node.left.object.type === "Identifier" && this.isByteType(node.left.object.name);
+            const structType = this.getExpressionStructType(node.left.object);
 
             if (node.operator === "=") {
                 if (isByte) this.emit(`  + C!`);
+                else if (structType) {
+                    this.emit(`  SIZEOF_${structType.toUpperCase()} * + !`);
+                }
                 else this.emit(`  CELLS + !`);
             } else if (node.operator === "+=") {
                 if (isByte) {
                     this.emit(`  + DUP C@ ROT + SWAP C!`); // Complex because no C+! in standard forth usually
+                } else if (structType) {
+                    this.emit(`  SIZEOF_${structType.toUpperCase()} * + +!`);
                 } else {
                     this.emit(`  CELLS + +!`);
                 }
@@ -463,9 +562,12 @@ export class AetherTranspiler {
             // HANDLE ARRAY READ: arr[i]
             this.compileNode(node.object); // Base Address
             this.compileNode(node.property); // Index
-            const isByte = node.object.name && this.isByteType(node.object.name);
+            const isByte = node.object.type === "Identifier" && this.isByteType(node.object.name);
+            const structType = this.getExpressionStructType(node.object);
             if (isByte) {
                 this.emit(`  + C@`);
+            } else if (structType) {
+                this.emit(`  SIZEOF_${structType.toUpperCase()} * +`); // Just return pointer for struct arrays
             } else {
                 this.emit(`  CELLS + @`);
             }
@@ -490,6 +592,19 @@ export class AetherTranspiler {
         break;
 
       case "CallExpression":
+        if (node.callee.type === "Identifier") {
+            const funcName = node.callee.name;
+            const func = funcName.toUpperCase();
+
+            // --- EXPORTED STRUCT ARRAY ACCESS: NPC(id) ---
+            if (this.exportedArrays.has(funcName)) {
+                const arrayVar = this.exportedArrays.get(funcName)!;
+                this.compileNode(node.arguments[0]);
+                this.emit(`  ${arrayVar} SWAP SIZEOF_${func} * +`);
+                return;
+            }
+        }
+
         node.arguments.forEach((arg: any) => {
             this.compileNode(arg);
         });
@@ -585,13 +700,21 @@ export class AetherTranspiler {
         // 2. Local Variable or Argument
         if (this.currentScope && (this.currentScope.args.includes(upName) || this.currentScope.variables.has(upName))) {
              const varName = this.resolveVar(node.name);
-             this.emit(`  ${varName} @`);
+             if (this.isStructArray(node.name)) {
+                 this.emit(`  ${varName}`);
+             } else {
+                 this.emit(`  ${varName} @`);
+             }
              return;
         }
 
         // 3. Top-Level Variable (Automatic Dereference)
         if (this.globalVars.has(upName)) {
-            this.emit(`  ${upName} @`);
+            if (this.isStructArray(node.name)) {
+                this.emit(`  ${upName}`);
+            } else {
+                this.emit(`  ${upName} @`);
+            }
             return;
         }
 
@@ -651,6 +774,47 @@ export class AetherTranspiler {
   private static isByteType(name: string): boolean {
       const resolved = this.resolveVar(name);
       return this.varTypes.get(resolved) === "Uint8Array";
+  }
+
+  private static getStructType(name: string): string | null {
+      const resolved = this.resolveVar(name);
+      const type = this.varTypes.get(resolved);
+      if (type && type.startsWith("struct ")) {
+          return type.substring(7);
+      }
+      return null;
+  }
+
+  private static isStructArray(name: string): boolean {
+      const resolved = this.resolveVar(name);
+      return this.structArrayCounts.has(resolved);
+  }
+
+  private static getExpressionStructType(node: ASTNode): string | null {
+      if (!node) return null;
+      if (node.type === "Identifier") {
+          return this.getStructType(node.name);
+      }
+      if (node.type === "MemberExpression") {
+          if (node.computed) {
+              return this.getExpressionStructType(node.object);
+          }
+      }
+      if (node.type === "CallExpression") {
+          if (node.callee.type === "Identifier") {
+              const funcName = node.callee.name;
+              if (this.structs.has(funcName)) return funcName;
+              if (this.exportedArrays.has(funcName)) return funcName;
+          }
+      }
+      return null;
+  }
+
+  private static inferType(node: ASTNode): string | null {
+    if (!node) return null;
+    const structType = this.getExpressionStructType(node);
+    if (structType) return `struct ${structType}`;
+    return null;
   }
 
   private static resolveVar(name: string): string {
