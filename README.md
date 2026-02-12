@@ -64,6 +64,16 @@ The project includes a suite of tests for kernels and integration.
 
 ## ⚙️ Tech Stack
 - **Frontend**: React 19, TypeScript, Vite
-- **Logic**: WAForth (WebAssembly Forth)
-- **Compiler**: Acorn (for AJS parsing)
-- **AI**: Google Generative AI (Gemini)
+- **Logic**: [WAForth](https://github.com/remko/waforth) (WebAssembly Forth)
+- **Compiler**: [Acorn](https://github.com/acornjs/acorn) (for AJS parsing)
+- **AI**: [Google Generative AI (Gemini)](https://ai.google.dev/)
+
+## 🔗 External Resources
+
+- **WAForth**: [GitHub - remko/waforth](https://github.com/remko/waforth)
+- **React**: [react.dev](https://react.dev/)
+- **Vite**: [vite.dev](https://vite.dev/)
+- **TypeScript**: [typescriptlang.org](https://www.typescriptlang.org/)
+- **Acorn**: [GitHub - acornjs/acorn](https://github.com/acornjs/acorn)
+- **Google Gemini API**: [ai.google.dev](https://ai.google.dev/)
+- **Vitest**: [vitest.dev](https://vitest.dev/)
