@@ -197,6 +197,7 @@ export class AetherTranspiler {
             } else if (decl.init && decl.init.type === "NewExpression" && decl.init.callee.name === "Array") {
                 const firstArg = decl.init.arguments[0];
                 const secondArg = decl.init.arguments[1];
+                const thirdArg = decl.init.arguments[2];
                 if (firstArg && firstArg.type === "Identifier" && this.structs.has(firstArg.name)) {
                     this.varTypes.set(name, `struct ${firstArg.name}`);
                     if (secondArg) {
@@ -205,6 +206,9 @@ export class AetherTranspiler {
                         } else if (secondArg.type === "Identifier") {
                             this.structArrayCounts.set(name, secondArg.name.toUpperCase());
                         }
+                    }
+                    if (thirdArg && thirdArg.type === "Literal") {
+                        this.globalConsts.set(name, thirdArg);
                     }
                 }
             }
@@ -280,6 +284,7 @@ export class AetherTranspiler {
             } else if (decl.init.type === "NewExpression" && decl.init.callee.name === "Array") {
                 const firstArg = decl.init.arguments[0];
                 const secondArg = decl.init.arguments[1];
+                const thirdArg = decl.init.arguments[2];
                 if (firstArg && firstArg.type === "Identifier" && this.structs.has(firstArg.name)) {
                     this.varTypes.set(fullName, `struct ${firstArg.name}`);
                     if (secondArg) {
@@ -288,6 +293,10 @@ export class AetherTranspiler {
                         } else if (secondArg.type === "Identifier") {
                             this.structArrayCounts.set(fullName, secondArg.name.toUpperCase());
                         }
+                    }
+                    if (thirdArg && thirdArg.type === "Literal") {
+                        // Local constant-addressed array (rare but supported)
+                        this.globalConsts.set(fullName, thirdArg);
                     }
                     scope.varInits.set(name, decl.init);
                 }

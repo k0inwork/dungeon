@@ -9,8 +9,6 @@ const AJS_LOGIC = `
 ${STANDARD_AJS_PREAMBLE}
 
 // 1. MEMORY MAP
-const HIVE_ENT_TABLE = 0x90000;
-const ENT_SIZE = 16;
 const MAX_ENTITIES = 32;
 let HIVE_ENT_COUNT = 0;
 let RNG_SEED = 12345;
@@ -33,6 +31,9 @@ struct HiveEntity {
     y,
     type
 }
+
+let hive_entities = new Array(HiveEntity, MAX_ENTITIES, 0x90000);
+export hive_entities;
 
 function get_hive_ptr(id) {
     return HiveEntity(id);
