@@ -1,5 +1,9 @@
-import { expect, test } from 'vitest';
+import { expect, test, beforeEach } from 'vitest';
 import { AetherTranspiler } from '../compiler/AetherTranspiler';
+
+beforeEach(() => {
+  AetherTranspiler.reset();
+});
 
 test('transpiles simple assignment', () => {
   const js = 'function test() { let x = 10; }';

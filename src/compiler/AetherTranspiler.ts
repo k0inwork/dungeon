@@ -49,18 +49,41 @@ export class AetherTranspiler {
   private static globalExportRegistry: Map<string, { owner: number, varName: string, typeId: number, sizeBytes: number }> = new Map();
   private static nextVsoTypeId = 1000;
 
-  static resetGlobalRegistry() {
+  static reset() {
+      this.structs = new Map();
+      this.globalFieldOffsets = new Map();
       this.globalExportRegistry = new Map();
       this.nextVsoTypeId = 1000;
+      this.loadVsoRegistry();
+  }
+
+  static loadVsoRegistry() {
+      for (const [name, def] of Object.entries(VSO_REGISTRY)) {
+          const structDef: StructDef = {
+              name,
+              fields: new Map(),
+              size: def.sizeBytes
+          };
+          def.fields.forEach((f, i) => {
+              const offset = i * 4;
+              structDef.fields.set(f, offset);
+              this.globalFieldOffsets.set(f, offset);
+          });
+          this.structs.set(name, structDef);
+      }
   }
 
   static transpile(jsCode: string, kernelId: number = 0): string {
+    // Lazy-load VSO registry on first use
+    if (this.structs.size === 0) {
+        this.loadVsoRegistry();
+    }
+
     this.scopes = [];
     this.output = [];
     this.currentScope = null;
     this.loopVars = [];
-    this.structs = new Map();
-    this.globalFieldOffsets = new Map();
+    // this.structs and this.globalFieldOffsets are persistent
     this.currentKernelId = kernelId;
     this.globalVars = new Set();
     this.globalConsts = new Map();
@@ -103,24 +126,32 @@ export class AetherTranspiler {
           const fieldsStr = match[2];
           const fields = fieldsStr.split(',').map(s => s.trim()).filter(s => s);
           
-          const def: StructDef = {
-              name,
-              fields: new Map(),
-              size: fields.length * 4
-          };
-
-          fields.forEach((f, i) => {
-              const offset = i * 4;
-              def.fields.set(f, offset);
-
-              if (this.globalFieldOffsets.has(f) && this.globalFieldOffsets.get(f) !== offset) {
-                  throw new Error(`Field offset collision for field '${f}' in struct '${name}'. Existing offset: ${this.globalFieldOffsets.get(f)}, new offset: ${offset}. Field names must have consistent offsets across all structs within the same kernel.`);
+          const existing = this.structs.get(name);
+          if (existing) {
+              // Verify consistency (Simplified: just check field count for now)
+              if (existing.fields.size !== fields.length) {
+                  throw new Error(`Struct '${name}' re-defined with different number of fields. Existing: ${existing.fields.size}, New: ${fields.length}`);
               }
+          } else {
+              const def: StructDef = {
+                  name,
+                  fields: new Map(),
+                  size: fields.length * 4
+              };
 
-              this.globalFieldOffsets.set(f, offset);
-          });
-          
-          this.structs.set(name, def);
+              fields.forEach((f, i) => {
+                  const offset = i * 4;
+                  def.fields.set(f, offset);
+
+                  if (this.globalFieldOffsets.has(f) && this.globalFieldOffsets.get(f) !== offset) {
+                      throw new Error(`Field offset collision for field '${f}' in struct '${name}'. Existing offset: ${this.globalFieldOffsets.get(f)}, new offset: ${offset}. Field names must have consistent offsets across all structs within the same kernel.`);
+                  }
+
+                  this.globalFieldOffsets.set(f, offset);
+              });
+
+              this.structs.set(name, def);
+          }
           
           // Remove from source code to avoid parse error
           cleanCode = cleanCode.replace(match[0], "");

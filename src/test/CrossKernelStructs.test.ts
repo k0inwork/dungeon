@@ -6,12 +6,12 @@ import { KernelID } from '../types/Protocol';
 
 describe('Cross-Kernel Struct Arrays', () => {
   beforeAll(() => {
-    AetherTranspiler.resetGlobalRegistry();
+    AetherTranspiler.reset();
   });
 
   test('Kernel A exports, Kernel B consumes', async () => {
     const jsA = `
-      struct NPC { hp, atk }
+      struct NPC { hp, power }
       let npcs = new Array(NPC, 10);
       export npcs;
       function init() {
@@ -21,7 +21,6 @@ describe('Cross-Kernel Struct Arrays', () => {
     `;
 
     const jsB = `
-      struct NPC { hp, atk }
       function check(id) {
         let n = NPC(id);
         return n.hp;
