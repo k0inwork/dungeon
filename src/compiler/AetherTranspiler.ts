@@ -38,6 +38,9 @@ export class AetherTranspiler {
   // Global map of ALL field names to offsets (Simplification: assumes unique fields globally or shared layout)
   private static globalFieldOffsets: Map<string, number> = new Map();
   private static currentKernelId: number = 0;
+  private static globalVars: Set<string> = new Set();
+  private static globalConsts: Map<string, any> = new Map();
+  private static varTypes: Map<string, string> = new Map(); // Name -> "Uint8Array" | "Uint32Array" | etc
 
   static transpile(jsCode: string, kernelId: number = 0): string {
     this.scopes = [];
@@ -47,6 +50,9 @@ export class AetherTranspiler {
     this.structs = new Map();
     this.globalFieldOffsets = new Map();
     this.currentKernelId = kernelId;
+    this.globalVars = new Set();
+    this.globalConsts = new Map();
+    this.varTypes = new Map();
 
     if (!jsCode || !jsCode.trim()) {
         return "";
@@ -122,6 +128,29 @@ export class AetherTranspiler {
 
   // --- PASS 1: ANALYSIS ---
   private static analyzeScopes(node: ASTNode) {
+    if (node.type === "Program") {
+      node.body.forEach((n: any) => {
+        if (n.type === "VariableDeclaration") {
+          n.declarations.forEach((decl: any) => {
+            const name = decl.id.name.toUpperCase();
+
+            // Detect Type Hints: const x = new Uint8Array(...)
+            if (decl.init && decl.init.type === "NewExpression" && decl.init.callee.name.includes("Uint8")) {
+                this.varTypes.set(name, "Uint8Array");
+            } else if (decl.init && decl.init.type === "CallExpression" && decl.init.callee.name === "Uint8Array") {
+                this.varTypes.set(name, "Uint8Array");
+            }
+
+            if (n.kind === "const") {
+              this.globalConsts.set(name, decl.init);
+            } else {
+              this.globalVars.add(name);
+            }
+          });
+        }
+      });
+    }
+
     if (node.type === "FunctionDeclaration") {
       const funcName = node.id.name.toUpperCase();
       const args = node.params.map((p: any) => p.name.toUpperCase());
@@ -146,7 +175,15 @@ export class AetherTranspiler {
     
     if (node.type === "VariableDeclaration") {
       node.declarations.forEach((decl: any) => {
-        scope.variables.add(decl.id.name.toUpperCase());
+        const name = decl.id.name.toUpperCase();
+        scope.variables.add(name);
+
+        if (decl.init) {
+            if ((decl.init.type === "NewExpression" || decl.init.type === "CallExpression") &&
+                decl.init.callee.name && decl.init.callee.name.includes("Uint8")) {
+                this.varTypes.set(`LV_${scope.functionName}_${name}`, "Uint8Array");
+            }
+        }
       });
     }
 
@@ -164,6 +201,28 @@ export class AetherTranspiler {
 
   private static emitGlobals() {
     this.emit("( --- AETHER AUTO-GLOBALS --- )");
+
+    // Top-Level Constants
+    this.globalConsts.forEach((init, name) => {
+      let val = 0;
+      if (init) {
+          if (init.type === "Literal") {
+            val = init.value;
+          } else if (init.type === "NewExpression" || init.type === "CallExpression") {
+              // Handle new Uint8Array(0x30000) -> 0x30000
+              if (init.arguments && init.arguments.length > 0 && init.arguments[0].type === "Literal") {
+                  val = init.arguments[0].value;
+              }
+          }
+      }
+      this.emit(`${val} CONSTANT ${name}`);
+    });
+
+    // Top-Level Variables
+    this.globalVars.forEach(v => {
+      this.emit(`VARIABLE ${v}`);
+    });
+
     this.scopes.forEach(scope => {
       scope.args.forEach(arg => {
         this.emit(`VARIABLE LV_${scope.functionName}_${arg}`);
@@ -208,8 +267,12 @@ export class AetherTranspiler {
       case "VariableDeclaration":
         node.declarations.forEach((decl: any) => {
            if (decl.init) {
-               this.compileNode(decl.init);
                const varName = this.resolveVar(decl.id.name);
+               // If it's a top-level constant, it's already defined
+               if (this.globalConsts.has(varName)) {
+                   return;
+               }
+               this.compileNode(decl.init);
                this.emit(`  ${varName} !`);
            }
         });
@@ -364,10 +427,17 @@ export class AetherTranspiler {
             this.compileNode(node.left.object); // Pushes Base Address
             this.compileNode(node.left.property); // Pushes Index
             
+            const isByte = node.left.object.name && this.isByteType(node.left.object.name);
+
             if (node.operator === "=") {
-                this.emit(`  CELLS + !`); // Calc offset and Store
+                if (isByte) this.emit(`  + C!`);
+                else this.emit(`  CELLS + !`);
             } else if (node.operator === "+=") {
-                this.emit(`  CELLS + +!`); // Add to value at addr
+                if (isByte) {
+                    this.emit(`  + DUP C@ ROT + SWAP C!`); // Complex because no C+! in standard forth usually
+                } else {
+                    this.emit(`  CELLS + +!`);
+                }
             } else {
                  this.emit(`  ( TODO: Complex Array assignment op ) 2DROP DROP`);
             }
@@ -393,7 +463,12 @@ export class AetherTranspiler {
             // HANDLE ARRAY READ: arr[i]
             this.compileNode(node.object); // Base Address
             this.compileNode(node.property); // Index
-            this.emit(`  CELLS + @`); // Calc offset and Fetch
+            const isByte = node.object.name && this.isByteType(node.object.name);
+            if (isByte) {
+                this.emit(`  + C@`);
+            } else {
+                this.emit(`  CELLS + @`);
+            }
         } 
         else if (!node.computed) {
              // HANDLE STRUCT READ: ent.hp
@@ -422,6 +497,12 @@ export class AetherTranspiler {
         if (node.callee.type === "Identifier") {
             const funcName = node.callee.name;
             const func = funcName.toUpperCase();
+
+            // Type "Casts" / Mappings
+            if (func === "UINT8ARRAY" || func === "UINT32ARRAY") {
+                // If it's a mapping like Uint8Array(0x30000), just return the address
+                return;
+            }
 
             // --- VIRTUAL SHARED OBJECTS (VSO) SUPPORT ---
             if (VSO_REGISTRY[funcName]) {
@@ -508,7 +589,13 @@ export class AetherTranspiler {
              return;
         }
 
-        // 3. Known Global Variable (Automatic Dereference)
+        // 3. Top-Level Variable (Automatic Dereference)
+        if (this.globalVars.has(upName)) {
+            this.emit(`  ${upName} @`);
+            return;
+        }
+
+        // 4. Known Global Variable (Automatic Dereference)
         if (KNOWN_GLOBALS.has(upName)) {
             this.emit(`  ${upName} @`);
             return;
@@ -523,6 +610,8 @@ export class AetherTranspiler {
             this.emit(`  S" ${node.value}"`);
         } else if (typeof node.value === "boolean") {
             this.emit(node.value ? `  -1` : `  0`);
+        } else if (typeof node.value === "number") {
+            this.emit(`  ${node.value}`);
         } else {
             this.emit(`  ${node.raw}`);
         }
@@ -544,11 +633,24 @@ export class AetherTranspiler {
         this.emit(`  EXIT`);
         break;
 
+      case "NewExpression":
+        if (node.arguments.length > 0) {
+            this.compileNode(node.arguments[0]);
+        } else {
+            this.emit(`  0`);
+        }
+        return;
+
       default:
         const msg = `UNHANDLED AST: ${node.type}`;
         this.emit(`  ( ERROR: ${msg} )`);
         console.error(`[AetherTranspiler] ${msg}`, node);
     }
+  }
+
+  private static isByteType(name: string): boolean {
+      const resolved = this.resolveVar(name);
+      return this.varTypes.get(resolved) === "Uint8Array";
   }
 
   private static resolveVar(name: string): string {
