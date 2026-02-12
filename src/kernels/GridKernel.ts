@@ -17,7 +17,6 @@ const COLLISION_MAP = new Uint8Array(0x30000);
 const ENTITY_MAP    = new Uint8Array(0x31000);
 const TERRAIN_MAP   = new Uint32Array(0x40000);
 const VRAM          = new Uint32Array(0x80000);
-const ENTITY_TABLE  = 0x90000;
 
 let ENTITY_COUNT = 0;
 
@@ -40,6 +39,9 @@ struct GridEntity {
     x,
     type
 }
+
+let entities = new Array(GridEntity, MAX_ENTITIES, 0x90000);
+export entities;
 
 function get_ent_ptr(id) {
     return GridEntity(id);
