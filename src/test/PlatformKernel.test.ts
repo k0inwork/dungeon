@@ -39,8 +39,8 @@ describe('PlatformKernel Logic Tests', () => {
     runner.proc.run('UPDATE_PHYSICS');
 
     runner.proc.run('CMD_JUMP');
-    // VY should be jump_force (-60000)
-    runner.proc.run('PLAYER_VY @ 60000 NEGATE JS_ASSERT');
+    // VY should be jump_force (-100000)
+    runner.proc.run('PLAYER_VY @ 100000 NEGATE JS_ASSERT');
   });
 
   test('Horizontal Movement', () => {
@@ -48,8 +48,8 @@ describe('PlatformKernel Logic Tests', () => {
     runner.proc.run('1 CMD_MOVE'); // Move Right
     runner.proc.run('UPDATE_PHYSICS');
 
-    // VX should be move_speed (5000) * friction_factor
-    // Friction is (vx * 4) / 5. So 5000 * 4 / 5 = 4000
-    runner.proc.run('PLAYER_VX @ 4000 JS_ASSERT');
+    // VX should be move_speed (40000) * friction_factor
+    // Friction is (vx * 8) / 10. So 40000 * 8 / 10 = 32000
+    runner.proc.run('PLAYER_VX @ 32000 JS_ASSERT');
   });
 });

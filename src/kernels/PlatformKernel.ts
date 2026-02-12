@@ -20,10 +20,9 @@ let player_y = 10 * 65536;
 let player_vx = 0;
 let player_vy = 0;
 
-let gravity = 3000;
-let jump_force = -60000;
-let move_speed = 5000;
-let friction = 52428; // 0.8 * 65536
+let gravity = 4000;
+let jump_force = -100000;
+let move_speed = 40000;
 
 function calc_idx(x, y) { return (y * MAP_WIDTH + x); }
 
@@ -40,7 +39,7 @@ function init_platformer() {
     player_y = 10 * 65536;
     player_vx = 0;
     player_vy = 0;
-    Log("[PLATFORM] Kernel Ready");
+    Log("[PLATFORM] Kernel Ready (v2)");
 }
 
 function load_tile(x, y, color, char, type) {
@@ -51,26 +50,55 @@ function load_tile(x, y, color, char, type) {
 
 function update_physics() {
     player_vy = player_vy + gravity;
-    player_vx = (player_vx * 4) / 5;
+    player_vx = (player_vx * 8) / 10; // More friction for better control
 
     let nx = player_x + player_vx;
     let ny = player_y + player_vy;
 
-    // Feet check (bottom of the character)
-    let bx = nx / 65536;
-    let by = (ny + 32768) / 65536;
+    // 1. Vertical Collision
+    let bx = player_x / 65536;
+    let by_foot = (ny + 65535) / 65536;
+    let by_head = ny / 65536;
 
-    if (get_collision(bx, by) != 0) {
-        if (player_vy > 0) {
+    if (player_vy > 0) {
+        if (get_collision(bx, by_foot)) {
             player_vy = 0;
-            player_y = (by - 1) * 65536;
+            player_y = (by_foot - 1) * 65536;
+            ny = player_y;
         } else {
+            player_y = ny;
+        }
+    } else if (player_vy < 0) {
+        if (get_collision(bx, by_head)) {
             player_vy = 0;
-            player_vx = 0;
+            player_y = (by_head + 1) * 65536;
+            ny = player_y;
+        } else {
+            player_y = ny;
         }
     } else {
-        player_x = nx;
         player_y = ny;
+    }
+
+    // 2. Horizontal Collision
+    let rx = (nx + 65535) / 65536;
+    let lx = nx / 65536;
+    let py = player_y / 65536;
+
+    if (player_vx > 0) {
+        if (get_collision(rx, py)) {
+            player_vx = 0;
+            player_x = (rx - 1) * 65536;
+        } else {
+            player_x = nx;
+        }
+    } else if (player_vx < 0) {
+        if (get_collision(lx, py)) {
+            player_vx = 0;
+            player_x = (lx + 1) * 65536;
+        } else {
+            player_x = nx;
+        }
     }
 
     // Bounds clamp
@@ -78,10 +106,10 @@ function update_physics() {
     if (player_y < 0) player_y = 0;
 
     // Win condition: reach right side
-    if (player_x > 38 * 65536) {
+    if (player_x >= 38 * 65536) {
         bus_send(EVT_LEVEL_TRANSITION, K_PLATFORM, K_HOST, 0, 0, 0); // Back to Hub
         // Reset pos to prevent multiple triggers
-        player_x = 37 * 65536;
+        player_x = 5 * 65536;
     }
 
     if (player_x > 39 * 65536) player_x = 39 * 65536;
@@ -96,13 +124,13 @@ function render() {
         i++;
     }
 
-    // 2. Draw Player 'G'
+    // 2. Draw Player '@'
     let px = player_x / 65536;
     let py = player_y / 65536;
     let pidx = calc_idx(px, py);
     if (pidx >= 0) {
         if (pidx < 800) {
-            VRAM[pidx] = (0xFF00FF << 8) | 71; // Magenta 'G'
+            VRAM[pidx] = (0x00FF00 << 8) | 64; // Green '@'
         }
     }
 }

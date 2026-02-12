@@ -72,6 +72,7 @@ const App = () => {
   const [isValidTarget, setIsValidTarget] = useState(true);
 
   const platformerRef = useRef(new PlatformerPhysics());
+  const keysDownRef = useRef<Set<string>>(new Set());
   const requestRef = useRef<number>(0);
   const lastTickTimeRef = useRef<number>(0);
 
@@ -516,6 +517,9 @@ const App = () => {
     else if (mode === "PLATFORM") {
       const platProc = forthService.get("PLATFORM");
       if (platProc && platProc.isReady && activeKernels.has("PLATFORM")) {
+          if (keysDownRef.current.has("ArrowLeft")) platProc.run("-1 CMD_MOVE");
+          if (keysDownRef.current.has("ArrowRight")) platProc.run("1 CMD_MOVE");
+
           try {
               platProc.run("RUN_PLATFORM_CYCLE");
               const raw = platProc.getMemory() as ArrayBuffer;
@@ -558,13 +562,12 @@ const App = () => {
   useEffect(() => {
     const handleKeyDown = (e: React.KeyboardEvent | KeyboardEvent) => {
         const k = e.key;
+        keysDownRef.current.add(k);
 
         if (mode === "PLATFORM") {
             const platProc = forthService.get("PLATFORM");
             if (platProc.isReady) {
                 if (k === "ArrowUp") platProc.run("CMD_JUMP");
-                if (k === "ArrowLeft") platProc.run("-1 CMD_MOVE");
-                if (k === "ArrowRight") platProc.run("1 CMD_MOVE");
                 if (k === "Escape") switchMode("GRID");
             }
             return;
@@ -710,8 +713,17 @@ const App = () => {
             triggerPickup();
         }
     };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+        keysDownRef.current.delete(e.key);
+    };
+
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+        window.removeEventListener("keydown", handleKeyDown);
+        window.removeEventListener("keyup", handleKeyUp);
+    };
   }, [mode, targetMode, cursorPos, selectedSkill, isValidTarget, playerPos, currentLevelId]);
 
   return (
