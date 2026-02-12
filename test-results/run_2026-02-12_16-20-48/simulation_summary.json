@@ -1,0 +1,258 @@
+{
+  "test_name": "Rat Chase",
+  "timestamp": "2026-02-12T16:20:48.221Z",
+  "ticks": 10,
+  "final_state": {
+    "player": {
+      "x": 10,
+      "y": 10
+    },
+    "rat": {
+      "x": 11,
+      "y": 10
+    }
+  },
+  "success": true,
+  "trace": [
+    {
+      "tick": 0,
+      "player": {
+        "x": 10,
+        "y": 10
+      },
+      "rat": {
+        "x": 15,
+        "y": 10
+      },
+      "events": ""
+    },
+    {
+      "tick": 1,
+      "player": {
+        "x": 10,
+        "y": 10
+      },
+      "rat": {
+        "x": 15,
+        "y": 10
+      },
+      "events": "[BUS] GRID -> BUS: EVT_SPAWN (0, 0, 0) | [BUS] GRID -> BUS: EVT_MOVED (0, 10, 10) | [BUS] GRID -> BUS: EVT_SPAWN (1, 2, 0) | [BUS] GRID -> BUS: EVT_MOVED (1, 15, 10)"
+    },
+    {
+      "tick": 2,
+      "player": {
+        "x": 10,
+        "y": 10
+      },
+      "rat": {
+        "x": 14,
+        "y": 10
+      },
+      "events": "[BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10)"
+    },
+    {
+      "tick": 3,
+      "player": {
+        "x": 10,
+        "y": 10
+      },
+      "rat": {
+        "x": 13,
+        "y": 10
+      },
+      "events": "[BUS] GRID -> BUS: EVT_MOVED (1, 14, 10) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10)"
+    },
+    {
+      "tick": 4,
+      "player": {
+        "x": 10,
+        "y": 10
+      },
+      "rat": {
+        "x": 12,
+        "y": 10
+      },
+      "events": "[BUS] GRID -> BUS: EVT_MOVED (1, 13, 10) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10)"
+    },
+    {
+      "tick": 5,
+      "player": {
+        "x": 10,
+        "y": 10
+      },
+      "rat": {
+        "x": 11,
+        "y": 10
+      },
+      "events": "[BUS] GRID -> BUS: EVT_MOVED (1, 12, 10) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10)"
+    },
+    {
+      "tick": 6,
+      "player": {
+        "x": 10,
+        "y": 10
+      },
+      "rat": {
+        "x": 11,
+        "y": 10
+      },
+      "events": "[BUS] GRID -> BUS: EVT_MOVED (1, 11, 10) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10)"
+    },
+    {
+      "tick": 7,
+      "player": {
+        "x": 10,
+        "y": 10
+      },
+      "rat": {
+        "x": 11,
+        "y": 10
+      },
+      "events": "[BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10)"
+    },
+    {
+      "tick": 8,
+      "player": {
+        "x": 10,
+        "y": 10
+      },
+      "rat": {
+        "x": 11,
+        "y": 10
+      },
+      "events": "[BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10)"
+    },
+    {
+      "tick": 9,
+      "player": {
+        "x": 10,
+        "y": 10
+      },
+      "rat": {
+        "x": 11,
+        "y": 10
+      },
+      "events": "[BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)"
+    },
+    {
+      "tick": 10,
+      "player": {
+        "x": 10,
+        "y": 10
+      },
+      "rat": {
+        "x": 11,
+        "y": 10
+      },
+      "events": "[BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)"
+    },
+    {
+      "tick": 11,
+      "player": {
+        "x": 10,
+        "y": 10
+      },
+      "rat": {
+        "x": 11,
+        "y": 10
+      },
+      "events": "[BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)"
+    },
+    {
+      "tick": 12,
+      "player": {
+        "x": 10,
+        "y": 10
+      },
+      "rat": {
+        "x": 11,
+        "y": 10
+      },
+      "events": "[BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)"
+    },
+    {
+      "tick": 13,
+      "player": {
+        "x": 10,
+        "y": 10
+      },
+      "rat": {
+        "x": 11,
+        "y": 10
+      },
+      "events": "[BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)"
+    },
+    {
+      "tick": 14,
+      "player": {
+        "x": 10,
+        "y": 10
+      },
+      "rat": {
+        "x": 11,
+        "y": 10
+      },
+      "events": "[BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)"
+    },
+    {
+      "tick": 15,
+      "player": {
+        "x": 10,
+        "y": 10
+      },
+      "rat": {
+        "x": 11,
+        "y": 10
+      },
+      "events": "[BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)"
+    },
+    {
+      "tick": 16,
+      "player": {
+        "x": 10,
+        "y": 10
+      },
+      "rat": {
+        "x": 11,
+        "y": 10
+      },
+      "events": "[BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)"
+    },
+    {
+      "tick": 17,
+      "player": {
+        "x": 10,
+        "y": 10
+      },
+      "rat": {
+        "x": 11,
+        "y": 10
+      },
+      "events": "[BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)"
+    },
+    {
+      "tick": 18,
+      "player": {
+        "x": 10,
+        "y": 10
+      },
+      "rat": {
+        "x": 11,
+        "y": 10
+      },
+      "events": "[BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)"
+    },
+    {
+      "tick": 19,
+      "player": {
+        "x": 10,
+        "y": 10
+      },
+      "rat": {
+        "x": 11,
+        "y": 10
+      },
+      "events": "[BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)"
+    }
+  ]
+}

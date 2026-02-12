@@ -1,22 +1,20 @@
 
-// Aethelgard Battle Kernel v1.3 (AJS HYBRID)
-import { STANDARD_KERNEL_FIRMWARE, BLOCK_STANDARD_INBOX } from "./SharedBlocks";
+// Aethelgard Battle Kernel v2.0 (PURE AJS)
+import { STANDARD_KERNEL_FIRMWARE } from "./SharedBlocks";
+import { STANDARD_AJS_PREAMBLE, STANDARD_AJS_POSTAMBLE } from "./SharedAJS";
 import { AetherTranspiler } from "../compiler/AetherTranspiler";
 import { KernelID } from "../types/Protocol";
 
-// RPG Stats Memory
-const BLOCK_MEMORY = `
-HEX
-A0000 CONSTANT RPG_TABLE
-DECIMAL
-32 CONSTANT MAX_ENTITIES
-32 CONSTANT RPG_SIZE
-VARIABLE ENTITY_COUNT
-0 ENTITY_COUNT !
-`;
-
-// AJS Logic using the new Struct system
 const AJS_LOGIC = `
+${STANDARD_AJS_PREAMBLE}
+
+// 1. RPG Stats Memory
+const RPG_TABLE = 0xA0000;
+const MAX_ENTITIES = 32;
+const RPG_SIZE = 32;
+let ENTITY_COUNT = 0;
+
+// 2. LOGIC
 struct RpgEntity {
     hp,
     maxHp,
@@ -161,18 +159,18 @@ function handle_events() {
         execute_skill(M_P1, M_P2, M_P3);
     }
 }
+
+${STANDARD_AJS_POSTAMBLE}
+
+function run_battle_cycle() {
+    process_inbox();
+}
 `;
 
 export const BATTLE_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
-  BLOCK_MEMORY,
-  AetherTranspiler.transpile(AJS_LOGIC, KernelID.BATTLE),
-  BLOCK_STANDARD_INBOX
+  AetherTranspiler.transpile(AJS_LOGIC, KernelID.BATTLE)
 ];
 
 export const BATTLE_AJS_SOURCE = AJS_LOGIC;
-export const BATTLE_FORTH_SOURCE = [
-    BLOCK_MEMORY,
-    "( %%%_AJS_INJECTION_%%% )",
-    BLOCK_STANDARD_INBOX
-].join("\n");
+export const BATTLE_FORTH_SOURCE = BATTLE_KERNEL_BLOCKS.join("\n");
