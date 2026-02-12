@@ -172,17 +172,46 @@ function move_entity(id, dx, dy) {
   bus_send(EVT_MOVED, K_GRID, K_BUS, id, tx, ty);
 }
 
-function kill_entity(id) {
+function kill_entity(id, itemId) {
     let ent = get_ent_ptr(id);
-    let i = calc_idx(ent.x, ent.y);
+    let ex = ent.x;
+    let ey = ent.y;
+    let i = calc_idx(ex, ey);
+
     COLLISION_MAP[i] = 0;
     ENTITY_MAP[i] = 0;
     LOOT_MAP[i] = id + 1;
     // Keep character (e.g. 'r' or 'R'), change color to gray
     ent.color = 8947848; // 0x888888 in decimal
     ent.type = 3; // ITEM
-    redraw_cell(ent.x, ent.y, ent.color, ent.char);
+    redraw_cell(ex, ey, ent.color, ent.char);
     Log("[GRID] Entity Died (Corpse)");
+
+    // Pop Item if present
+    if (itemId != 0) {
+        // Try to spawn Gold Coin ($ = 36, Color Gold = 16766720)
+        // at an adjacent passable tile
+        let found = 0;
+        let tx = ex + 1; let ty = ey;
+        if (check_bounds(tx, ty) && COLLISION_MAP[calc_idx(tx, ty)] == 0) { found = 1; }
+        else {
+            tx = ex - 1; ty = ey;
+            if (check_bounds(tx, ty) && COLLISION_MAP[calc_idx(tx, ty)] == 0) { found = 1; }
+            else {
+                tx = ex; ty = ey + 1;
+                if (check_bounds(tx, ty) && COLLISION_MAP[calc_idx(tx, ty)] == 0) { found = 1; }
+                else {
+                    tx = ex; ty = ey - 1;
+                    if (check_bounds(tx, ty) && COLLISION_MAP[calc_idx(tx, ty)] == 0) { found = 1; }
+                }
+            }
+        }
+
+        if (found) {
+            spawn_entity(tx, ty, 16766720, 36, 3);
+            Log("[GRID] Item Popped on Ground!");
+        }
+    }
 }
 
 function try_pickup(playerId, x, y) {
@@ -269,7 +298,7 @@ function handle_events() {
   if (M_TARGET == K_GRID || M_TARGET == K_BUS || M_TARGET == 0) {
      if (M_OP == REQ_MOVE) { move_entity(M_P1, M_P2, M_P3); }
      if (M_OP == REQ_PATH_STEP) { move_towards(M_P1, M_P2, M_P3); }
-     if (M_OP == EVT_DEATH) { kill_entity(M_P1); }
+     if (M_OP == EVT_DEATH) { kill_entity(M_P1, M_P2); }
      if (M_OP == CMD_PICKUP) { try_pickup(M_P1, M_P2, M_P3); }
   }
 }

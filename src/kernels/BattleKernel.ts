@@ -11,7 +11,7 @@ ${STANDARD_AJS_PREAMBLE}
 // 1. RPG Stats Memory
 const RPG_TABLE = 0xA0000;
 const MAX_ENTITIES = 32;
-const RPG_SIZE = 32;
+const RPG_SIZE = 36;
 let ENTITY_COUNT = 0;
 
 // 2. LOGIC
@@ -23,7 +23,8 @@ struct RpgEntity {
     level,
     exp,
     state,
-    targetId
+    targetId,
+    invItem
 }
 
 function get_rpg_ptr(id) {
@@ -40,6 +41,7 @@ function init_stats(id, type) {
     e.def = 2;
     e.level = 1;
     e.state = 0; // 0=Alive
+    e.invItem = 0;
     
     if (id == 0) {
         // Player Buff
@@ -153,7 +155,7 @@ function execute_skill(srcId, tgtId, skillId) {
     if (remainingHp <= 0) {
         if (tgt.state == 0) { // Only die once
             tgt.state = 1; // Dead
-            Bus.send(EVT_DEATH, K_BATTLE, K_BUS, tgtId, 0, 0);
+            Bus.send(EVT_DEATH, K_BATTLE, K_BUS, tgtId, tgt.invItem, 0);
             Log("Entity Died:");
             Log(tgtId);
             if (tgtId == 0) Log("GAME OVER");
@@ -165,6 +167,14 @@ function handle_events() {
     if (M_OP == EVT_SPAWN) {
         // M_P1 = ID, M_P2 = Type
         init_stats(M_P1, M_P2);
+
+        // Assign Inventory for Testing
+        let e = get_rpg_ptr(M_P1);
+        if (M_P2 == 2) { // Big Rats / Aggressive
+             e.invItem = 2001;
+        } else if (M_P2 == 1) { // Regular Rats / Passive
+             e.invItem = 2003;
+        }
     }
     
     if (M_OP == CMD_ATTACK) {
