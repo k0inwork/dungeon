@@ -24,6 +24,7 @@ interface StructDef {
 const KNOWN_GLOBALS = new Set([
   "ENTITY_COUNT", "HIVE_ENT_COUNT", "RNG_SEED",
   "PLAYER_HP", "PLAYER_GOLD",
+  "LAST_PLAYER_X", "LAST_PLAYER_Y",
   "M_OP", "M_SENDER", "M_TARGET", "M_P1", "M_P2", "M_P3",
   "OUT_PTR"
 ]);

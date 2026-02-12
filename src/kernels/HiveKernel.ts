@@ -120,7 +120,7 @@ function decide_action(id) {
       if (m < 50) {
          let rdx = rand_dir_x();
          let rdy = rand_dir_y();
-         Bus.send(REQ_MOVE, K_HIVE, K_PHYSICS, id, rdx, rdy);
+         Bus.send(REQ_MOVE, K_HIVE, K_GRID, id, rdx, rdy);
       }
   }
 }

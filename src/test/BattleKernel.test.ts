@@ -13,16 +13,17 @@ describe('BattleKernel Logic Tests', () => {
   });
 
   test('RPG Stats Initialization', () => {
-    runner.run('0 1 INIT_STATS');
+    runner.proc.run('0 1 INIT_STATS');
     // HP for Player (ID 0) should be 200
-    runner.run('0 GET_RPG_PTR OFF_HP + @ 200 JS_ASSERT');
+    // JS_ASSERT is direct call, no STDOUT
+    runner.proc.run('0 GET_RPG_PTR OFF_HP + @ 200 JS_ASSERT');
   });
 
   test('Basic Attack', () => {
-      runner.run('1 1 INIT_STATS');
-      runner.run('0 1 0 EXECUTE_SKILL');
+      runner.proc.run('1 1 INIT_STATS');
+      runner.proc.run('0 1 0 EXECUTE_SKILL');
 
       // Check HP of Enemy 1: 100 - (20 - 2) = 82
-      runner.run('1 GET_RPG_PTR OFF_HP + @ 82 JS_ASSERT');
+      runner.proc.run('1 GET_RPG_PTR OFF_HP + @ 82 JS_ASSERT');
   });
 });

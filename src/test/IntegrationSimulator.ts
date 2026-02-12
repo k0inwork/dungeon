@@ -30,6 +30,11 @@ export class IntegrationSimulator {
         const srcAddr = entry.baseAddr + (id * entry.sizeBytes);
         const destAddr = 0xD0000; // TEMP_VSO_BUFFER
 
+        if (srcAddr + entry.sizeBytes > srcMem.length) {
+            stack.push(0);
+            return;
+        }
+
         destMem.set(srcMem.subarray(srcAddr, srcAddr + entry.sizeBytes), destAddr);
         stack.push(destAddr);
     }
@@ -50,7 +55,7 @@ export class IntegrationSimulator {
                 while (offset < count) {
                     const op = data[offset];
                     const target = data[offset + 2];
-                    const packetLen = PACKET_SIZE_INTS; // Simplified: no blobs in basic tests
+                    const packetLen = PACKET_SIZE_INTS;
                     const packet = data.subarray(offset, offset + packetLen);
 
                     if (target === KernelID.BUS) {
@@ -81,9 +86,8 @@ export class IntegrationSimulator {
 
         // 3. PROCESS
         this.kernels.forEach(k => {
-            k.run("PROCESS_INBOX");
-            if (k.id === 'HIVE') k.run("RUN_HIVE_CYCLE");
-            // Add other cycles if needed
+            k.proc.run("PROCESS_INBOX");
+            if (k.id === 'HIVE') k.proc.run("RUN_HIVE_CYCLE");
         });
     }
 }

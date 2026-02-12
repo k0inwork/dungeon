@@ -1,6 +1,8 @@
 
-import WAForth from "waforth";
+import WAForthPkg from "waforth";
 import { KernelID, Opcode, PACKET_SIZE_INTS, VSO_REGISTRY } from "../types/Protocol";
+
+const WAForth = (WAForthPkg as any).default || WAForthPkg;
 
 export interface BusPacket {
   timestamp: string;
@@ -196,6 +198,7 @@ export class ForthProcess {
   run(word: string) {
     if (!this.forth || !this.isReady) return;
     try {
+      console.log(`[${this.id} RUN] ${word}`);
       this.forth.interpret(word + "\n");
       if (this.emitBuffer) {
         this.log(`[STDOUT] ${this.emitBuffer}`);

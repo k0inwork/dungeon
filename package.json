@@ -7,9 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:kernels": "vitest run src/test/GridKernel.test.ts src/test/BattleKernel.test.ts src/test/Transpiler.test.ts",
-    "test:integration": "vitest run src/test/Integration.test.ts",
-    "test": "vitest run"
+    "test:kernels": "vitest run --reporter=verbose src/test/GridKernel.test.ts src/test/BattleKernel.test.ts src/test/Transpiler.test.ts",
+    "test:integration": "vitest run --reporter=verbose src/test/Integration.test.ts",
+    "test": "vitest run --reporter=verbose"
   },
   "dependencies": {
     "@google/genai": "^1.39.0",

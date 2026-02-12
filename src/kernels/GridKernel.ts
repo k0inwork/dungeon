@@ -233,7 +233,7 @@ function move_entity(id, dx, dy) {
   // Redraw New (Draw Self)
   redraw_cell(tx, ty, ent.color, ent.char);
   
-  Bus.send(EVT_MOVED, K_PHYSICS, K_BUS, id, tx, ty);
+  Bus.send(EVT_MOVED, K_GRID, K_BUS, id, tx, ty);
 }
 
 function kill_entity(id) {
