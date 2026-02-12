@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build:main": "vite build",
+    "build:standalone": "VITE_STANDALONE=true vite build --outDir dist-standalone",
+    "build": "npm run build:main && npm run build:standalone && cp dist-standalone/index.html dist/standalone.html && rm -rf dist-standalone",
     "preview": "vite preview",
     "test:kernels": "vitest run --reporter=verbose src/test/GridKernel.test.ts src/test/BattleKernel.test.ts src/test/Transpiler.test.ts",
     "test:integration": "vitest run --reporter=verbose src/test/Integration.test.ts",
@@ -24,6 +26,7 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
+    "vite-plugin-singlefile": "^2.3.0",
     "vitest": "^4.0.18"
   }
 }
