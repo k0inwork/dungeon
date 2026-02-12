@@ -49,3 +49,23 @@ export interface MessagePacket {
 
 export const PACKET_SIZE_INTS = 6;
 export const PACKET_SIZE_BYTES = 24;
+
+export function generateForthProtocolBlock(): string {
+    let forth = `( --- AUTO-GENERATED PROTOCOL CONSTANTS --- )\n`;
+
+    forth += `( --- KERNEL IDS --- )\n`;
+    for (const [name, value] of Object.entries(KernelID)) {
+        if (isNaN(Number(name))) {
+            forth += `${value} CONSTANT K_${name}\n`;
+        }
+    }
+
+    forth += `\n( --- PROTOCOL OPCODES --- )\n`;
+    for (const [name, value] of Object.entries(Opcode)) {
+        if (isNaN(Number(name))) {
+            forth += `${value} CONSTANT ${name}\n`;
+        }
+    }
+
+    return forth;
+}

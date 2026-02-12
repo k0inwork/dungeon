@@ -87,6 +87,11 @@ export class AetherTranspiler {
           fields.forEach((f, i) => {
               const offset = i * 4;
               def.fields.set(f, offset);
+
+              if (this.globalFieldOffsets.has(f) && this.globalFieldOffsets.get(f) !== offset) {
+                  throw new Error(`Field offset collision for field '${f}' in struct '${name}'. Existing offset: ${this.globalFieldOffsets.get(f)}, new offset: ${offset}. Field names must have consistent offsets across all structs within the same kernel.`);
+              }
+
               this.globalFieldOffsets.set(f, offset);
           });
           
@@ -520,7 +525,9 @@ export class AetherTranspiler {
         break;
 
       default:
-        this.emit(`  ( UNHANDLED AST: ${node.type} )`);
+        const msg = `UNHANDLED AST: ${node.type}`;
+        this.emit(`  ( ERROR: ${msg} )`);
+        console.error(`[AetherTranspiler] ${msg}`, node);
     }
   }
 

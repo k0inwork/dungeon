@@ -9,6 +9,7 @@ const BLOCK_MEMORY = `
 20 CONSTANT MAP_HEIGHT
 HEX
 30000 CONSTANT COLLISION_MAP
+31000 CONSTANT ENTITY_MAP
 40000 CONSTANT TERRAIN_MAP
 30400 CONSTANT PLAYER_STATE
 80000 CONSTANT VRAM_BASE
@@ -24,6 +25,7 @@ const BLOCK_UTILS = `
 : TWO_OVER ( x1 x2 x3 x4 -- x1 x2 x3 x4 x1 x2 ) 3 PICK 3 PICK ;
 : CALC_VRAM_ADDR ( x y -- addr ) MAP_WIDTH * + 4 * VRAM_BASE + ;
 : CALC_COLLISION_ADDR ( x y -- addr ) MAP_WIDTH * + COLLISION_MAP + ;
+: CALC_ENTITY_ADDR ( x y -- addr ) MAP_WIDTH * + ENTITY_MAP + ;
 : CALC_TERRAIN_ADDR ( x y -- addr ) MAP_WIDTH * + 4 * TERRAIN_MAP + ;
 ( Keep DRAW_CELL in Forth for speed, but call it from AJS )
 : DRAW_CELL ( x y color char -- ) >R >R 2DUP CALC_VRAM_ADDR R> 8 LSHIFT R> OR SWAP ! 2DROP ;
@@ -70,6 +72,10 @@ function init_map() {
             let colAddr = calc_collision_addr(x, y);
             MEM8[colAddr] = 0;
 
+            // Clear Entity Map (Byte)
+            let entMapAddr = calc_entity_addr(x, y);
+            MEM8[entMapAddr] = 0;
+
             // Clear Terrain Map (Int)
             let terAddr = calc_terrain_addr(x, y);
             MEM32[terAddr] = 0;
@@ -107,22 +113,13 @@ function load_tile(x, y, color, char, type) {
 
 // --- ENTITY MANAGEMENT ---
 
-// O(N) Lookup for Entities
+// O(1) Lookup for Entities via Entity Map
 function find_entity_at(x, y) {
-  let i = 0;
-  while (i < ENTITY_COUNT) {
-    let ent = get_ent_ptr(i);
-    // Entity might be dead/cleared, check char != 0
-    if (ent.char != 0) {
-        if (ent.x == x) {
-           if (ent.y == y) {
-              return i;
-           }
-        }
-    }
-    i++;
-  }
-  return -1;
+  if (check_bounds(x, y) == 0) return -1;
+  let addr = calc_entity_addr(x, y);
+  let val = MEM8[addr];
+  if (val == 0) return -1;
+  return val - 1;
 }
 
 function spawn_entity(x, y, color, char, type) {
@@ -135,6 +132,10 @@ function spawn_entity(x, y, color, char, type) {
   ent.y = y;
   ent.x = x;
   ent.type = type;
+
+  // Update Entity Map (store ID+1)
+  let entMapAddr = calc_entity_addr(x, y);
+  MEM8[entMapAddr] = ENTITY_COUNT + 1;
 
   // Draw
   draw_cell(x, y, color, char);
@@ -166,21 +167,15 @@ function refresh_tile(x, y, skipId) {
     let color = packed >>> 8; // logical shift right
     
     // 2. Check for other entities (Layering)
-    let i = 0;
-    while (i < ENTITY_COUNT) {
-        if (i != skipId) {
-            let ent = get_ent_ptr(i);
+    let id = find_entity_at(x, y);
+    if (id != -1) {
+        if (id != skipId) {
+            let ent = get_ent_ptr(id);
             if (ent.char != 0) {
-                if (ent.x == x) {
-                    if (ent.y == y) {
-                        // Found entity on top
-                        char = ent.char;
-                        color = ent.color;
-                    }
-                }
+                char = ent.char;
+                color = ent.color;
             }
         }
-        i++;
     }
     
     redraw_cell(x, y, color, char);
@@ -218,6 +213,10 @@ function move_entity(id, dx, dy) {
   let oldColAddr = calc_collision_addr(ent.x, ent.y);
   MEM8[oldColAddr] = 0; // Clear old collision
   
+  // Clear old Entity Map entry
+  let oldEntMapAddr = calc_entity_addr(ent.x, ent.y);
+  MEM8[oldEntMapAddr] = 0;
+
   // Redraw Old Tile (Restore Terrain or other items)
   refresh_tile(ent.x, ent.y, id);
 
@@ -226,6 +225,10 @@ function move_entity(id, dx, dy) {
   
   MEM8[colAddr] = 1; // Set new collision
   
+  // Update new Entity Map entry
+  let newEntMapAddr = calc_entity_addr(tx, ty);
+  MEM8[newEntMapAddr] = id + 1;
+
   // Redraw New (Draw Self)
   redraw_cell(tx, ty, ent.color, ent.char);
   
@@ -238,6 +241,8 @@ function kill_entity(id) {
     // Clear Collision (Make tile walkable again so player can pick up loot)
     let colAddr = calc_collision_addr(ent.x, ent.y);
     MEM8[colAddr] = 0;
+
+    // Entity remains in Entity Map (as Loot)
     
     // Transform into Loot Bag
     // 36 = '$', 16766720 = Gold (0xFFD700)
@@ -250,31 +255,30 @@ function kill_entity(id) {
 }
 
 function try_pickup(playerId, x, y) {
-    // Check if there is an ITEM (Type 3) at x,y
-    let i = 0;
-    while (i < ENTITY_COUNT) {
-        let ent = get_ent_ptr(i);
-        // Ensure entity is active (char != 0)
+    // Check if there is an entity at x,y
+    let id = find_entity_at(x, y);
+    if (id != -1) {
+        let ent = get_ent_ptr(id);
         if (ent.char != 0) {
             if (ent.type == 3) { // It is loot
-                if (ent.x == x) {
-                    if (ent.y == y) {
-                        // FOUND LOOT!
-                        // Remove it visually and logically
-                        ent.char = 0; 
-                        ent.x = -1;
-                        ent.y = -1;
-                        // Redraw Floor (Restore Terrain)
-                        refresh_tile(x, y, -1);
-                        
-                        // Notify Player specifically (Point-to-Point)
-                        Bus.send(EVT_ITEM_GET, K_PHYSICS, K_PLAYER, playerId, i, 0);
-                        return;
-                    }
-                }
+                // FOUND LOOT!
+                // Remove it visually and logically
+                ent.char = 0;
+                ent.x = -1;
+                ent.y = -1;
+
+                // Clear from Entity Map
+                let entMapAddr = calc_entity_addr(x, y);
+                MEM8[entMapAddr] = 0;
+
+                // Redraw Floor (Restore Terrain)
+                refresh_tile(x, y, -1);
+
+                // Notify Player specifically (Point-to-Point)
+                Bus.send(EVT_ITEM_GET, K_PHYSICS, K_PLAYER, playerId, id, 0);
+                return;
             }
         }
-        i++;
     }
 }
 

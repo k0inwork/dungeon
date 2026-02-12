@@ -15,7 +15,7 @@ export const DebuggerConsole: React.FC = () => {
                 padding: "5px 10px", boxShadow: "0 0 10px rgba(0, 255, 0, 0.2)"
             }}
         >
-            [ >_ DEBUG ]
+            {"[ >_ DEBUG ]"}
         </button>
     );
   }
