@@ -89,6 +89,21 @@ export interface TerrainDef {
   passable: boolean;
 }
 
+export interface LevelData {
+    id: string;
+    name: string;
+    description: string;
+    map_layout: string[]; 
+    terrain_legend: TerrainDef[];
+    entities: EntityDef[];
+    entity_roster: EntityDef[];
+    platformer_config: {
+      gravity: number;
+      jump_force: number;
+      wall_color: number;
+    };
+}
+
 // --- MASTER ROOT OBJECT ---
 export interface WorldData {
   theme: {
@@ -101,19 +116,8 @@ export interface WorldData {
     origins: TaxonomyDef[];
   };
   atlas: AtlasNode[];
-  active_level: {
-    name: string;
-    description: string;
-    map_layout: string[]; 
-    terrain_legend: TerrainDef[];
-    entities: EntityDef[];
-    entity_roster: EntityDef[];
-    platformer_config: {
-      gravity: number;
-      jump_force: number;
-      wall_color: number;
-    };
-  };
+  active_level: LevelData;
+  levels?: Record<string, LevelData>;
 }
 
 class GeneratorService {
@@ -214,21 +218,25 @@ ${code}
   generateMockWorld(): WorldData {
     this.log("MOCK", "INITIATING_MOCK_PROTOCOL", "LOADING_GOLDEN_SAMPLE...");
     
-    // We still run the MapGenerator on the mock data to ensure the map layout is fresh/randomized
-    // based on the static "Golden Sample" templates
-    const mockData = JSON.parse(JSON.stringify(MOCK_WORLD_DATA)); // Deep copy
+    const mockData = JSON.parse(JSON.stringify(MOCK_WORLD_DATA));
     
-    // Ensure legend exists (it does in mock, but good practice)
-    if (!mockData.active_level.terrain_legend) mockData.active_level.terrain_legend = [];
-    
-    const mapGen = new MapGenerator(40, 20, "MOCK_SEED_" + Date.now());
-    const generatedMap = mapGen.generate(
-      mockData.active_level.entity_roster, 
-      mockData.active_level.terrain_legend
-    );
-
-    mockData.active_level.map_layout = generatedMap.layout;
-    mockData.active_level.entities = generatedMap.entities;
+    if (mockData.levels) {
+        for (const [id, level] of Object.entries(mockData.levels)) {
+            const levelData = level as LevelData;
+            // Rogue dungeon gets random generation, others use their preset layout if available
+            if (levelData.map_layout.length === 0 || id === "rogue_dungeon") {
+                const mapGen = new MapGenerator(40, 20, "MOCK_SEED_" + id + "_" + Date.now());
+                const generatedMap = mapGen.generate(
+                    levelData.entity_roster,
+                    levelData.terrain_legend
+                );
+                levelData.map_layout = generatedMap.layout;
+                levelData.entities = generatedMap.entities;
+            }
+        }
+        // Sync active_level with hub
+        mockData.active_level = mockData.levels["hub"];
+    }
     
     return mockData;
   }

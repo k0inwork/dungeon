@@ -12,6 +12,7 @@ import { GRID_KERNEL_BLOCKS } from "./src/kernels/GridKernel";
 import { HIVE_KERNEL_BLOCKS } from "./src/kernels/HiveKernel";
 import { PLAYER_KERNEL_BLOCKS } from "./src/kernels/PlayerKernel";
 import { BATTLE_KERNEL_BLOCKS } from "./src/kernels/BattleKernel";
+import { PLATFORM_KERNEL_BLOCKS } from "./src/kernels/PlatformKernel";
 import { KernelID, Opcode, PACKET_SIZE_INTS } from "./src/types/Protocol";
 
 type GameMode = "BOOT" | "GENERATING" | "GRID" | "PLATFORM";
@@ -52,7 +53,8 @@ const App = () => {
   const [log, setLog] = useState<string[]>([]);
   const [seed, setSeed] = useState("Cyberpunk Sewers");
   const [worldInfo, setWorldInfo] = useState<WorldData | null>(null);
-  
+  const [currentLevelId, setCurrentLevelId] = useState<string>("hub");
+
   // Track successful kernel loads to prevent loop execution if load failed
   const [activeKernels, setActiveKernels] = useState<Set<string>>(new Set());
 
@@ -193,10 +195,104 @@ const App = () => {
         await loadKernel("HIVE", HIVE_KERNEL_BLOCKS);
         await loadKernel("PLAYER", PLAYER_KERNEL_BLOCKS);
         await loadKernel("BATTLE", BATTLE_KERNEL_BLOCKS);
+        await loadKernel("PLATFORM", PLATFORM_KERNEL_BLOCKS);
     };
     bootSystem();
     return () => cancelAnimationFrame(requestRef.current!);
   }, []);
+
+  const loadLevel = (level: any) => {
+    const mainProc = forthService.get("GRID");
+    const hiveProc = forthService.get("HIVE");
+    const playerProc = forthService.get("PLAYER");
+
+    addLog(`Loading Level: ${level.name}...`);
+    mainProc.run("INIT_MAP");
+    hiveProc.run("INIT_HIVE");
+    playerProc.run("INIT_PLAYER");
+
+    const platProc = forthService.get("PLATFORM");
+    if (platProc.isReady) {
+        platProc.run("INIT_PLATFORMER");
+    }
+
+    level.map_layout.forEach((row: string, y: number) => {
+      if (y >= MEMORY.GRID_HEIGHT) return;
+      for (let x = 0; x < MEMORY.GRID_WIDTH; x++) {
+        const char = row[x] || ' ';
+        let color = 0x888888;
+        let type = 0;
+        let charCode = char.charCodeAt(0);
+
+        const terrain = level.terrain_legend.find((t: any) => t.symbol === char);
+        if (terrain) {
+          color = terrain.color;
+          type = terrain.passable ? 0 : 1;
+        } else if (char === '@') {
+           type = 0;
+        }
+        if (!terrain && char !== '@' && char !== ' ') {
+           type = 1;
+        }
+
+        mainProc.run(`${x} ${y} ${color} ${charCode} ${type} LOAD_TILE`);
+        if (platProc.isReady) {
+            platProc.run(`${x} ${y} ${color} ${charCode} ${type} LOAD_TILE`);
+        }
+      }
+    });
+
+    let px = 5, py = 5;
+    level.map_layout.forEach((row: string, y: number) => {
+        const x = row.indexOf('@');
+        if (x !== -1) { px = x; py = y; }
+    });
+    addLog(`Spawning Player at ${px},${py}`);
+    setPlayerPos({x: px, y: py});
+    setCursorPos({x: px, y: py});
+    mainProc.run(`${px} ${py} 65535 64 0 SPAWN_ENTITY`);
+
+    level.entities.forEach((ent: any) => {
+        const c = ent.glyph.color || 0xFF0000;
+        const ch = ent.glyph.char.charCodeAt(0);
+
+        let aiType = 1;
+        if (ent.glyph.char === '$') aiType = 3;
+        else if (ent.scripts && ent.scripts.passive && ent.scripts.passive.includes('aggressive')) aiType = 2;
+        else if (ent.id.includes("giant")) aiType = 2;
+
+        mainProc.run(`${ent.x} ${ent.y} ${c} ${ch} ${aiType} SPAWN_ENTITY`);
+    });
+
+    if (level.platformer_config) {
+        platformerRef.current.configure(level.platformer_config);
+    }
+
+    if (level.id === "platform_dungeon") {
+        switchMode("PLATFORM");
+    } else {
+        switchMode("GRID");
+    }
+  };
+
+  const handleLevelTransition = (targetLevelIdx: number) => {
+      if (!worldInfo || !worldInfo.levels) return;
+
+      const levelIds = ["hub", "rogue_dungeon", "platform_dungeon"];
+      const targetId = levelIds[targetLevelIdx];
+      const nextLevel = worldInfo.levels[targetId];
+
+      if (nextLevel) {
+          addLog(`Transitioning to ${nextLevel.name}...`);
+          setCurrentLevelId(targetId);
+          // Update active_level in worldInfo for UI components
+          setWorldInfo({
+              ...worldInfo,
+              active_level: nextLevel
+          });
+          loadLevel(nextLevel);
+      }
+  };
 
   const handleGenerate = async (e: React.MouseEvent) => {
     setMode("GENERATING");
@@ -214,73 +310,8 @@ const App = () => {
       setWorldInfo(data);
       addLog(`World Generated: ${data.theme.name}`);
       
-      const mainProc = forthService.get("GRID");
-      const hiveProc = forthService.get("HIVE");
-      const playerProc = forthService.get("PLAYER");
-      
-      addLog("Resetting Physics & AI Kernels...");
-      mainProc.run("INIT_MAP"); // Now calls AJS implementation
-      hiveProc.run("INIT_HIVE");
-      playerProc.run("INIT_PLAYER"); // New AJS Init
-
-      addLog("Injecting Map Data...");
-      const level = data.active_level;
-
-      level.map_layout.forEach((row, y) => {
-        if (y >= MEMORY.GRID_HEIGHT) return;
-        for (let x = 0; x < MEMORY.GRID_WIDTH; x++) {
-          const char = row[x] || ' ';
-          let color = 0x888888; 
-          let type = 0; // 0 = Walkable, 1 = Wall
-          let charCode = char.charCodeAt(0);
-
-          const terrain = level.terrain_legend.find(t => t.symbol === char);
-          if (terrain) {
-            color = terrain.color;
-            type = terrain.passable ? 0 : 1;
-          } else if (char === '@') {
-             type = 0;
-          }
-          if (!terrain && char !== '@' && char !== ' ') {
-             type = 1;
-          }
-
-          // LOAD_TILE is now AJS-backed, args same order
-          mainProc.run(`${x} ${y} ${color} ${charCode} ${type} LOAD_TILE`);
-        }
-      });
-      
-      let px = 5, py = 5;
-      level.map_layout.forEach((row, y) => {
-          const x = row.indexOf('@');
-          if (x !== -1) { px = x; py = y; }
-      });
-      addLog(`Spawning Player at ${px},${py}`);
-      setPlayerPos({x: px, y: py});
-      setCursorPos({x: px, y: py});
-      mainProc.run(`${px} ${py} 65535 64 0 SPAWN_ENTITY`);
-
-      level.entities.forEach(ent => {
-          const c = ent.glyph.color || 0xFF0000;
-          const ch = ent.glyph.char.charCodeAt(0);
-          
-          // Determine AI Type
-          let aiType = 1; // Default Passive
-          
-          if (ent.glyph.char === '$') {
-              aiType = 3; // ITEM/LOOT
-          } else if (ent.scripts && ent.scripts.passive && ent.scripts.passive.includes('aggressive')) {
-              aiType = 2; // Aggressive
-          } else if (ent.id.includes("giant")) {
-              aiType = 2; 
-          }
-
-          mainProc.run(`${ent.x} ${ent.y} ${c} ${ch} ${aiType} SPAWN_ENTITY`);
-      });
-
-      platformerRef.current.configure(level.platformer_config);
+      loadLevel(data.active_level);
       addLog("Simulation Ready.");
-      switchMode("GRID");
 
     } catch (e) {
       addLog(`Error: ${e}`);
@@ -306,19 +337,23 @@ const App = () => {
       if (!main.isReady || !hive.isReady || !player.isReady || !battle.isReady) return;
       if (!activeKernels.has("GRID") || !activeKernels.has("HIVE") || !activeKernels.has("PLAYER") || !activeKernels.has("BATTLE")) return;
 
+      const platform = forthService.get("PLATFORM");
+
       // 1. MESSAGE BROKER: Move Packets from Output -> Input
       const kernels = [
           { id: KernelID.PHYSICS, proc: main },
           { id: KernelID.HIVE, proc: hive },
           { id: KernelID.PLAYER, proc: player },
-          { id: KernelID.BATTLE, proc: battle }
+          { id: KernelID.BATTLE, proc: battle },
+          { id: KernelID.PLATFORM, proc: forthService.get("PLATFORM") }
       ];
 
       const inboxes: Record<number, number[]> = {
           [KernelID.PHYSICS]: [],
           [KernelID.HIVE]: [],
           [KernelID.PLAYER]: [],
-          [KernelID.BATTLE]: []
+          [KernelID.BATTLE]: [],
+          [KernelID.PLATFORM]: []
       };
 
       kernels.forEach(k => {
@@ -349,6 +384,13 @@ const App = () => {
                   forthService.logPacket(header[1], header[2], header[0], header[3], header[4], header[5]);
                   
                   const target = header[2]; 
+                  const op = header[0];
+
+                  if (target === KernelID.HOST) {
+                      if (op === Opcode.EVT_LEVEL_TRANSITION) {
+                          handleLevelTransition(header[3]);
+                      }
+                  }
                   
                   if (target === KernelID.BUS) {
                       // Broadcast (excluding sender)
@@ -384,6 +426,9 @@ const App = () => {
       player.run("PROCESS_INBOX");
       main.run("PROCESS_INBOX");
       battle.run("PROCESS_INBOX"); 
+      if (platform.isReady && activeKernels.has("PLATFORM")) {
+          platform.run("PROCESS_INBOX");
+      }
       hive.run("RUN_HIVE_CYCLE");
       main.run("RUN_ENV_CYCLE");
       
@@ -461,12 +506,18 @@ const App = () => {
        }
     } 
     else if (mode === "PLATFORM") {
-      platformerRef.current.update();
-      if (platformerRef.current.x > MEMORY.GRID_WIDTH - 3) {
-         switchMode("GRID");
+      const platProc = forthService.get("PLATFORM");
+      if (platProc && platProc.isReady && activeKernels.has("PLATFORM")) {
+          try {
+              platProc.run("RUN_PLATFORM_CYCLE");
+              const raw = platProc.getMemory() as ArrayBuffer;
+              const vramSize = MEMORY.GRID_WIDTH * MEMORY.GRID_HEIGHT * 4;
+              if (raw.byteLength >= MEMORY.VRAM_ADDR + vramSize) {
+                  const vramSlice = raw.slice(MEMORY.VRAM_ADDR, MEMORY.VRAM_ADDR + vramSize);
+                  setDisplayBuffer(vramSlice);
+              }
+          } catch (e) { console.error(e); }
       }
-      platformerRef.current.renderToBuffer(localBufferRef.current);
-      setDisplayBuffer(localBufferRef.current.buffer.slice(0));
 
       if (time - lastTickTimeRef.current > SIMULATION_TICK_RATE_MS) {
           tickSimulation();
@@ -498,9 +549,20 @@ const App = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: React.KeyboardEvent | KeyboardEvent) => {
-        if (mode !== "GRID") return;
-        
         const k = e.key;
+
+        if (mode === "PLATFORM") {
+            const platProc = forthService.get("PLATFORM");
+            if (platProc.isReady) {
+                if (k === "ArrowUp") platProc.run("CMD_JUMP");
+                if (k === "ArrowLeft") platProc.run("-1 CMD_MOVE");
+                if (k === "ArrowRight") platProc.run("1 CMD_MOVE");
+                if (k === "Escape") switchMode("GRID");
+            }
+            return;
+        }
+
+        if (mode !== "GRID") return;
         
         // --- TARGET MODE INPUT ---
         if (targetMode) {
