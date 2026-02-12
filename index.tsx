@@ -57,6 +57,10 @@ const App = () => {
   const [activeKernels, setActiveKernels] = useState<Set<string>>(new Set());
   const [gameOver, setGameOver] = useState(false);
 
+  // Persistent HUD State
+  const [playerStats, setPlayerStats] = useState({ hp: 0, maxHp: 0, gold: 0, inv: 0 });
+  const [groundItems, setGroundItems] = useState<string[]>([]);
+
   // Bus Log Sidebar State
   const [showBus, setShowBus] = useState(false);
   const [busHistory, setBusHistory] = useState<BusPacket[]>([]);
@@ -284,6 +288,9 @@ const App = () => {
       addLog("Simulation Ready.");
       switchMode("GRID");
 
+      // Initial Sync
+      setTimeout(syncKernelState, 100);
+
     } catch (e) {
       addLog(`Error: ${e}`);
       console.error(e);
@@ -384,8 +391,51 @@ const App = () => {
       main.run("RUN_ENV_CYCLE");
       // 3. Process resulting events (updates React state immediately)
       processPackets();
+
+      // 4. Second Pass for GRID: Process events like EVT_DEATH immediately
+      // This ensures color changes (gray rats) happen in the same frame as death.
+      main.run("PROCESS_INBOX");
+
+      syncKernelState();
       
       if (inspectStats) handleInspect(inspectStats.x, inspectStats.y);
+  };
+
+  const syncKernelState = () => {
+      const playerProc = forthService.get("PLAYER");
+      const gridProc = forthService.get("GRID");
+      if (!playerProc?.isReady || !gridProc?.isReady) return;
+
+      // 1. Sync Player Stats (0xC0000)
+      const pMem = new DataView(playerProc.getMemory());
+      const pBase = 0xC0000;
+      setPlayerStats({
+          hp: pMem.getInt32(pBase, true),
+          maxHp: pMem.getInt32(pBase + 4, true),
+          gold: pMem.getInt32(pBase + 8, true),
+          inv: pMem.getInt32(pBase + 12, true)
+      });
+
+      // 2. Sync Ground Items at Player Position
+      // Read current player X, Y from Grid Kernel directly for absolute accuracy
+      const gMemView = new DataView(gridProc.getMemory());
+      const px = gMemView.getInt32(0x90000 + 12, true); // Entity 0 is Player
+      const py = gMemView.getInt32(0x90000 + 8, true);
+
+      const idx = py * MEMORY.GRID_WIDTH + px;
+      const lootVal = new Uint8Array(gridProc.getMemory())[0x32000 + idx]; // LOOT_MAP
+
+      if (lootVal > 0) {
+          const lootId = lootVal - 1;
+          const char = gMemView.getInt32(0x90000 + (lootId * 20), true);
+          let name = `Item (${String.fromCharCode(char)})`;
+          if (char === 82) name = "Corpse of Big Rat";
+          if (char === 114) name = "Corpse of Rat";
+          if (char === 36) name = "Gold Coin";
+          setGroundItems([name]);
+      } else {
+          setGroundItems([]);
+      }
   };
 
   // Inspect Entity at X, Y by checking Kernel Memory directly
@@ -753,6 +803,23 @@ const App = () => {
         {viewMode === "GAME" && (mode === "GRID" || mode === "PLATFORM") && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
             
+            {/* HUD PANEL - LEFT SIDE */}
+            <div style={{
+                position: 'absolute', top: 0, left: '-220px', width: '200px',
+                background: 'rgba(0, 20, 0, 0.9)', border: '1px solid #0f0',
+                padding: '10px', fontFamily: 'monospace', fontSize: '0.8em', zIndex: 20
+            }}>
+                <div style={{ borderBottom: '1px solid #333', marginBottom: '8px', color: '#fff' }}>PLAYER HUD</div>
+                <div style={{ marginBottom: '4px' }}>HP: <span style={{ color: playerStats.hp < 30 ? 'red' : '#0f0' }}>{playerStats.hp}/{playerStats.maxHp}</span></div>
+                <div style={{ marginBottom: '4px' }}>GOLD: <span style={{ color: 'gold' }}>{playerStats.gold}</span></div>
+                <div style={{ marginBottom: '4px' }}>INV: <span style={{ color: 'cyan' }}>{playerStats.inv}/10</span></div>
+
+                <div style={{ borderBottom: '1px solid #333', marginTop: '15px', marginBottom: '8px', color: '#fff' }}>ON GROUND</div>
+                {groundItems.length > 0 ? groundItems.map((it, i) => (
+                    <div key={i} style={{ color: '#aaa' }}>{it}</div>
+                )) : <div style={{ color: '#444' }}>Empty</div>}
+            </div>
+
             {/* INSPECTOR OVERLAY */}
             {inspectStats && (
                 <div style={{
