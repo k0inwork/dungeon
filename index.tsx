@@ -225,16 +225,19 @@ const App = () => {
         let type = 0;
         let charCode = char.charCodeAt(0);
 
+        const isPortalPart = char === '[' || char === ']' || char === 'R' || char === 'P';
         const terrain = level.terrain_legend.find((t: any) => t.symbol === char);
         if (terrain) {
           color = terrain.color;
           type = terrain.passable ? 0 : 1;
-        } else if (char === '@') {
-           type = 0;
+        } else if (char === '@' || isPortalPart) {
+           type = 0; // Passable
+           if (char === '@') {
              charCode = '.'.charCodeAt(0);
              color = 0x444444;
+           }
         }
-        if (!terrain && char !== '@' && char !== ' ') {
+        if (!terrain && char !== '@' && char !== ' ' && !isPortalPart) {
            type = 1;
         }
 
@@ -342,87 +345,87 @@ const App = () => {
 
       const platform = forthService.get("PLATFORM");
 
-      // 1. MESSAGE BROKER: Move Packets from Output -> Input
       const kernels = [
-          { id: KernelID.PHYSICS, proc: main },
+          { id: KernelID.GRID, proc: main },
           { id: KernelID.HIVE, proc: hive },
           { id: KernelID.PLAYER, proc: player },
           { id: KernelID.BATTLE, proc: battle },
-          { id: KernelID.PLATFORM, proc: forthService.get("PLATFORM") }
+          { id: KernelID.PLATFORM, proc: platform }
       ];
 
-      const inboxes: Record<number, number[]> = {
-          [KernelID.PHYSICS]: [],
-          [KernelID.HIVE]: [],
-          [KernelID.PLAYER]: [],
-          [KernelID.BATTLE]: [],
-          [KernelID.PLATFORM]: []
+      const runBroker = () => {
+          const inboxes = new Map<number, number[]>();
+          inboxes.set(KernelID.GRID, []);
+          inboxes.set(KernelID.HIVE, []);
+          inboxes.set(KernelID.PLAYER, []);
+          inboxes.set(KernelID.BATTLE, []);
+          inboxes.set(KernelID.PLATFORM, []);
+
+          kernels.forEach(k => {
+              if (!k.proc.isReady) return;
+              const outMem = new Int32Array(k.proc.getMemory(), MEMORY.OUTPUT_QUEUE_ADDR, 1024);
+              const count = outMem[0];
+              
+              if (count > 0) {
+                  let offset = 1;
+                  while (offset < count + 1) {
+                      const header = outMem.subarray(offset, offset + PACKET_SIZE_INTS);
+                      const op = header[0];
+                      let packetLen = PACKET_SIZE_INTS;
+
+                      if (op === Opcode.SYS_BLOB) {
+                          const dataLen = header[3];
+                          packetLen += dataLen;
+                      }
+
+                      const packet = outMem.subarray(offset, offset + packetLen);
+                      forthService.logPacket(header[1], header[2], header[0], header[3], header[4], header[5]);
+
+                      const target = header[2];
+
+                      if (target === KernelID.HOST) {
+                          if (op === Opcode.EVT_LEVEL_TRANSITION) {
+                              handleLevelTransition(header[3]);
+                          }
+                      }
+
+                      if (target === KernelID.BUS) {
+                          for (const [key, inbox] of inboxes.entries()) {
+                              if (key !== header[1]) {
+                                  inbox.push(...packet);
+                              }
+                          }
+                      }
+                      else if (target !== KernelID.HOST) {
+                          const inbox = inboxes.get(target);
+                          if (inbox) {
+                              inbox.push(...packet);
+                          }
+                      }
+
+                      offset += packetLen;
+                  }
+                  outMem[0] = 0; // Clear Output Queue
+              }
+          });
+
+          kernels.forEach(k => {
+              if (!k.proc.isReady) return;
+              const inboxData = inboxes.get(k.id);
+              if (inboxData) {
+                  const inMem = new Int32Array(k.proc.getMemory(), MEMORY.INPUT_QUEUE_ADDR, 1024);
+                  if (inboxData.length > 0) {
+                      inMem[0] = inboxData.length;
+                      inMem.set(inboxData, 1);
+                  } else {
+                      inMem[0] = 0;
+                  }
+              }
+          });
       };
 
-      kernels.forEach(k => {
-          const outMem = new Int32Array(k.proc.getMemory(), MEMORY.OUTPUT_QUEUE_ADDR, 1024);
-          const count = outMem[0];
-          
-          if (count > 0) {
-              let offset = 1;
-              let processed = 0;
-              
-              while (offset < count + 1) {
-                  const header = outMem.subarray(offset, offset + PACKET_SIZE_INTS);
-                  const op = header[0];
-                  let packetLen = PACKET_SIZE_INTS;
-                  
-                  let payloadStr = `${header[3]}, ${header[4]}, ${header[5]}`;
-                  
-                  if (op === Opcode.SYS_BLOB) {
-                      const dataLen = header[3];
-                      packetLen += dataLen;
-                      payloadStr = `[BLOB ${dataLen} ints] ${Opcode[header[4]] || header[4]}`;
-                  }
-                  
-                  // Read Full Packet (Header + Data)
-                  const packet = outMem.subarray(offset, offset + packetLen);
-                  
-                  // LOGGING TO BUS HISTORY
-                  forthService.logPacket(header[1], header[2], header[0], header[3], header[4], header[5]);
-                  
-                  const target = header[2]; 
-
-                  if (target === KernelID.HOST) {
-                      if (op === Opcode.EVT_LEVEL_TRANSITION) {
-                          handleLevelTransition(header[3]);
-                      }
-                  }
-                  
-                  if (target === KernelID.BUS) {
-                      // Broadcast (excluding sender)
-                      Object.keys(inboxes).forEach(keyStr => {
-                          const key = Number(keyStr);
-                          if (key !== header[1]) {
-                              inboxes[key].push(...packet);
-                          }
-                      });
-                  }
-                  else if (target !== KernelID.HOST && inboxes[target]) {
-                      inboxes[target].push(...packet);
-                  }
-                  
-                  offset += packetLen;
-              }
-              outMem[0] = 0; // Clear Output Queue
-          }
-      });
-
-      kernels.forEach(k => {
-          const inboxData = inboxes[k.id];
-          const inMem = new Int32Array(k.proc.getMemory(), MEMORY.INPUT_QUEUE_ADDR, 1024);
-          if (inboxData.length > 0) {
-              inMem[0] = inboxData.length;
-              inMem.set(inboxData, 1);
-          } else {
-              inMem[0] = 0;
-          }
-      });
+      // 1. FIRST BROKER PASS
+      runBroker();
       
       // 2. RUN CYCLES (The Heartbeat)
       player.run("PROCESS_INBOX");
@@ -433,8 +436,11 @@ const App = () => {
       }
       hive.run("RUN_HIVE_CYCLE");
       main.run("RUN_ENV_CYCLE");
+
+      // 3. SECOND BROKER PASS: Deliver responses emitted during cycles
+      runBroker();
       
-      // 3. Update Inspector if active
+      // 4. Update Inspector if active
       if (inspectStats) {
           handleInspect(inspectStats.x, inspectStats.y);
       }
@@ -644,6 +650,7 @@ const App = () => {
         
         // Skill Shortcuts (1-4)
         if (['1', '2', '3', '4'].includes(k)) {
+            if (currentLevelId === "hub") return;
             const skill = PLAYER_SKILLS.find(s => s.key === k);
             if (skill) {
                 if (skill.name === "HEAL") {
@@ -705,7 +712,7 @@ const App = () => {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [mode, targetMode, cursorPos, selectedSkill, isValidTarget, playerPos]); 
+  }, [mode, targetMode, cursorPos, selectedSkill, isValidTarget, playerPos, currentLevelId]);
 
   return (
     <div style={{ backgroundColor: "#111", color: "#0f0", fontFamily: "Courier New", height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -832,30 +839,32 @@ const App = () => {
             </div>
 
             {/* ACTION BAR */}
-            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                {PLAYER_SKILLS.map(skill => (
-                    <div key={skill.id} style={{
-                        border: selectedSkill?.id === skill.id ? '2px solid #fff' : '1px solid #333',
-                        background: selectedSkill?.id === skill.id ? '#333' : '#000',
-                        padding: '5px 10px',
-                        fontSize: '0.8em',
-                        color: targetMode && selectedSkill?.id === skill.id ? (isValidTarget ? 'orange' : 'red') : '#aaa'
-                    }}>
-                        <span style={{color: '#0f0', fontWeight: 'bold'}}>[{skill.key}]</span> {skill.name} 
-                        <span style={{fontSize: '0.7em', color: '#666', marginLeft: '5px'}}>R:{skill.range}</span>
-                    </div>
-                ))}
-                
-                <button 
-                    onClick={triggerPickup}
-                    style={{
-                        background: '#002200', border: '1px solid #0f0', color: '#0f0',
-                        padding: '5px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '0.8em'
-                    }}
-                >
-                    [G] PICKUP
-                </button>
-            </div>
+            {currentLevelId !== "hub" && (
+                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                    {PLAYER_SKILLS.map(skill => (
+                        <div key={skill.id} style={{
+                            border: selectedSkill?.id === skill.id ? '2px solid #fff' : '1px solid #333',
+                            background: selectedSkill?.id === skill.id ? '#333' : '#000',
+                            padding: '5px 10px',
+                            fontSize: '0.8em',
+                            color: targetMode && selectedSkill?.id === skill.id ? (isValidTarget ? 'orange' : 'red') : '#aaa'
+                        }}>
+                            <span style={{color: '#0f0', fontWeight: 'bold'}}>[{skill.key}]</span> {skill.name}
+                            <span style={{fontSize: '0.7em', color: '#666', marginLeft: '5px'}}>R:{skill.range}</span>
+                        </div>
+                    ))}
+
+                    <button
+                        onClick={triggerPickup}
+                        style={{
+                            background: '#002200', border: '1px solid #0f0', color: '#0f0',
+                            padding: '5px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '0.8em'
+                        }}
+                    >
+                        [G] PICKUP
+                    </button>
+                </div>
+            )}
 
             <div 
                 ref={logContainerRef}
