@@ -46,7 +46,9 @@ function add_item(itemId) {
     INVENTORY[p.invCount] = itemId;
     
     p.invCount++;
-    Log("Item Added. Count:");
+    Log("Picked up Item ID:");
+    Log(itemId);
+    Log("Inv Count:");
     Log(p.invCount);
 }
 

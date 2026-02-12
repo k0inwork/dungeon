@@ -181,12 +181,18 @@ function try_pickup(playerId, x, y) {
         let ent = get_ent_ptr(id);
         if (ent.char != 0) {
             if (ent.type == 3) {
+                // Determine Item ID: 2001 for Big Rats ('R' = 82)
+                let itemId = id;
+                if (ent.char == 82) {
+                    itemId = 2001;
+                }
+
                 ent.char = 0;
                 ent.x = -1;
                 ent.y = -1;
                 ENTITY_MAP[calc_idx(x, y)] = 0;
                 refresh_tile(x, y, -1);
-                bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, id, 0);
+                bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, itemId, 0);
                 return;
             }
         }
@@ -249,7 +255,7 @@ function move_towards(id, tx, ty) {
 }
 
 function handle_events() {
-  if (M_TARGET == K_GRID || M_TARGET == 0) {
+  if (M_TARGET == K_GRID || M_TARGET == K_BUS || M_TARGET == 0) {
      if (M_OP == REQ_MOVE) { move_entity(M_P1, M_P2, M_P3); }
      if (M_OP == REQ_PATH_STEP) { move_towards(M_P1, M_P2, M_P3); }
      if (M_OP == EVT_DEATH) { kill_entity(M_P1); }
