@@ -74,10 +74,10 @@ export class AetherTranspiler {
   }
 
   static transpile(jsCode: string, kernelId: number = 0): string {
-    // Lazy-load VSO registry on first use
-    if (this.structs.size === 0) {
-        this.loadVsoRegistry();
-    }
+    // Clear local state but keep VSO definitions
+    this.structs = new Map();
+    this.globalFieldOffsets = new Map();
+    this.loadVsoRegistry();
 
     this.scopes = [];
     this.output = [];
@@ -132,6 +132,10 @@ export class AetherTranspiler {
               if (existing.fields.size !== fields.length) {
                   throw new Error(`Struct '${name}' re-defined with different number of fields. Existing: ${existing.fields.size}, New: ${fields.length}`);
               }
+              // Ensure local re-definition (from VSO) takes precedence for field offsets
+              existing.fields.forEach((offset, f) => {
+                  this.globalFieldOffsets.set(f, offset);
+              });
           } else {
               const def: StructDef = {
                   name,
@@ -173,9 +177,14 @@ export class AetherTranspiler {
       this.emit("( --- STRUCT OFFSETS --- )");
       this.structs.forEach(def => {
           this.emit(`( Struct: ${def.name} )`);
-          this.emit(`${def.size} CONSTANT SIZEOF_${def.name.toUpperCase()}`);
+          const structUpper = def.name.toUpperCase();
+          this.emit(`${def.size} CONSTANT SIZEOF_${structUpper}`);
           def.fields.forEach((offset, fieldName) => {
-              this.emit(`${offset} CONSTANT OFF_${fieldName.toUpperCase()}`);
+              const fieldUpper = fieldName.toUpperCase();
+              // Prefixed constant to avoid global collisions
+              this.emit(`${offset} CONSTANT OFF_${structUpper}_${fieldUpper}`);
+              // Fallback legacy constant (last defined struct wins if collisions exist)
+              this.emit(`${offset} CONSTANT OFF_${fieldUpper}`);
           });
       });
       this.emit("( --------------------- )");
@@ -190,9 +199,9 @@ export class AetherTranspiler {
             const name = decl.id.name.toUpperCase();
 
             // Detect Type Hints: const x = new Uint8Array(...)
-            if (decl.init && decl.init.type === "NewExpression" && decl.init.callee.name.includes("Uint8")) {
+            if (decl.init && decl.init.type === "NewExpression" && decl.init.callee.name && decl.init.callee.name.includes("Uint8")) {
                 this.varTypes.set(name, "Uint8Array");
-            } else if (decl.init && decl.init.type === "CallExpression" && decl.init.callee.name === "Uint8Array") {
+            } else if (decl.init && decl.init.type === "CallExpression" && decl.init.callee.name && decl.init.callee.name === "Uint8Array") {
                 this.varTypes.set(name, "Uint8Array");
             } else if (decl.init && decl.init.type === "NewExpression" && decl.init.callee.name === "Array") {
                 const firstArg = decl.init.arguments[0];
@@ -235,10 +244,18 @@ export class AetherTranspiler {
               const structDef = this.structs.get(structType);
               if (structDef) {
                   if (!AetherTranspiler.globalExportRegistry.has(structType)) {
+                      // Check if it's a known VSO from Protocol.ts first
+                      let typeId = AetherTranspiler.nextVsoTypeId++;
+
+                      // Actually, VSO_REGISTRY is keyed by struct name
+                      if (VSO_REGISTRY[structType]) {
+                          typeId = VSO_REGISTRY[structType].typeId;
+                      }
+
                       AetherTranspiler.globalExportRegistry.set(structType, {
                           owner: this.currentKernelId,
                           varName: upperVarName,
-                          typeId: AetherTranspiler.nextVsoTypeId++,
+                          typeId: typeId,
                           sizeBytes: structDef.size
                       });
                   }
@@ -343,7 +360,13 @@ export class AetherTranspiler {
       if (this.isStructArray(v)) {
           const structName = this.getStructType(v);
           const count = this.structArrayCounts.get(v) || 0;
-          this.emit(`CREATE ${v} ${count} SIZEOF_${structName?.toUpperCase()} * ALLOT`);
+
+          const constInit = this.globalConsts.get(v);
+          if (constInit && constInit.type === "Literal" && typeof constInit.value === "number") {
+               this.emit(`${constInit.value} CONSTANT ${v}`);
+          } else {
+               this.emit(`CREATE ${v} ${count} SIZEOF_${structName?.toUpperCase()} * ALLOT`);
+          }
 
           const entry = AetherTranspiler.globalExportRegistry.get(structName!);
           if (entry && entry.owner === this.currentKernelId && entry.varName === v) {
@@ -357,9 +380,16 @@ export class AetherTranspiler {
     // 3. Emit struct arrays that were declared as 'const'
     this.globalConsts.forEach((init, name) => {
         if (!this.isStructArray(name)) return;
+        if (this.globalVars.has(name)) return; // Already emitted
+
         const structName = this.getStructType(name);
         const count = this.structArrayCounts.get(name) || 0;
-        this.emit(`CREATE ${name} ${count} SIZEOF_${structName?.toUpperCase()} * ALLOT`);
+
+        if (init && init.type === "Literal" && typeof init.value === "number") {
+             this.emit(`${init.value} CONSTANT ${name}`);
+        } else {
+             this.emit(`CREATE ${name} ${count} SIZEOF_${structName?.toUpperCase()} * ALLOT`);
+        }
 
         const entry = AetherTranspiler.globalExportRegistry.get(structName!);
         if (entry && entry.owner === this.currentKernelId && entry.varName === name) {
@@ -559,8 +589,10 @@ export class AetherTranspiler {
         // HANDLE STRUCT ASSIGNMENT: ent.hp = 10, ent.hp += 10
         else if (node.left.type === "MemberExpression" && !node.left.computed) {
             const propName = node.left.property.name;
-            const offset = this.globalFieldOffsets.get(propName);
-            const offConst = `OFF_${propName.toUpperCase()}`;
+            const structType = this.getExpressionStructType(node.left.object);
+            const offConst = structType ? `OFF_${structType.toUpperCase()}_${propName.toUpperCase()}` : `OFF_${propName.toUpperCase()}`;
+
+            const offset = structType ? this.structs.get(structType)?.fields.get(propName) : this.globalFieldOffsets.get(propName);
             
             if (offset !== undefined) {
                  if (node.operator === "=") {
@@ -653,10 +685,14 @@ export class AetherTranspiler {
         else if (!node.computed) {
              // HANDLE STRUCT READ: ent.hp
              const propName = node.property.name;
-             const offset = this.globalFieldOffsets.get(propName);
+             const structType = this.getExpressionStructType(node.object);
+             const offConst = structType ? `OFF_${structType.toUpperCase()}_${propName.toUpperCase()}` : `OFF_${propName.toUpperCase()}`;
+
+             const offset = structType ? this.structs.get(structType)?.fields.get(propName) : this.globalFieldOffsets.get(propName);
+
              if (offset !== undefined) {
                  this.compileNode(node.object); // Ptr
-                 this.emit(`  OFF_${propName.toUpperCase()} + @`);
+                 this.emit(`  ${offConst} + @`);
              } else {
                  // Might be Math.max etc
                  const obj = node.object.name ? node.object.name.toUpperCase() : "UNKNOWN";
