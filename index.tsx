@@ -512,6 +512,11 @@ const App = () => {
         
         const k = e.key;
         
+        // Prevent default browser behavior for gameplay keys
+        if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(k)) {
+            e.preventDefault();
+        }
+
         // --- TARGET MODE INPUT ---
         if (targetMode) {
             if (k === "Escape") {
