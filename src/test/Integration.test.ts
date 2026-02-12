@@ -52,17 +52,25 @@ describe('Integration: Rat Chase', () => {
     sim.tick();
 
     // 3. Perform several ticks
-    const logPath = './integration_test.log';
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')}_${now.getHours().toString().padStart(2,'0')}-${now.getMinutes().toString().padStart(2,'0')}-${now.getSeconds().toString().padStart(2,'0')}`;
+    const artifactDir = `./test-results/run_${timestamp}`;
+    if (!fs.existsSync('./test-results')) fs.mkdirSync('./test-results');
+    fs.mkdirSync(artifactDir);
+
+    const logPath = `${artifactDir}/simulation_trace.txt`;
+    const summaryPath = `${artifactDir}/simulation_summary.json`;
+
     let logOutput = "[INTEGRATION TEST] Starting Rat Chase Simulation...\n";
+    logOutput += `Timestamp: ${now.toLocaleString()}\n`;
     logOutput += "TICK | PLAYER POS | RAT POS\n";
     logOutput += "----------------------------\n";
 
     console.log("\n" + logOutput.trim());
 
+    const trace: any[] = [];
+
     for(let i=0; i<10; i++) {
-        // We use JS_ASSERT with a dummy value to see if it fails,
-        // but actually we just want to log.
-        // Let's use a simpler way: write to memory and read memory from JS.
         const gridMem = new DataView(grid.getMemory());
 
         const getVal = (id: number, offset: number) => {
@@ -79,18 +87,37 @@ describe('Integration: Rat Chase', () => {
         console.log(line);
         logOutput += line + "\n";
 
+        trace.push({ tick: i, player: {x: px, y: py}, rat: {x: rx, y: ry} });
+
         sim.tick();
     }
 
     const gridMem = new DataView(grid.getMemory());
     const finalX = gridMem.getInt32(0x90000 + (1 * 20) + 12, true);
+    const finalY = gridMem.getInt32(0x90000 + (1 * 20) + 8, true);
 
-    const footer = "----------------------------\n" + `Simulation Ended. Final Rat X: ${finalX}\n`;
+    const footer = "----------------------------\n" + `Simulation Ended. Final Rat: ${finalX},${finalY}\n`;
     console.log(footer.trim());
     logOutput += footer;
 
+    // Save Trace TXT
     fs.writeFileSync(logPath, logOutput);
-    console.log(`Log saved to ${logPath}`);
+
+    // Save Summary JSON
+    const summary = {
+        test_name: "Rat Chase",
+        timestamp: now.toISOString(),
+        ticks: 10,
+        final_state: {
+            player: {x: 10, y: 10},
+            rat: {x: finalX, y: finalY}
+        },
+        success: finalX < 12,
+        trace
+    };
+    fs.writeFileSync(summaryPath, JSON.stringify(summary, null, 2));
+
+    console.log(`Artifacts saved to ${artifactDir}`);
 
     // Rat was at 12,10. Player at 10,10.
     // Rat should have moved closer to the player.

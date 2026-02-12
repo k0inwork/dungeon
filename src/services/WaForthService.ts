@@ -105,6 +105,19 @@ export class ForthProcess {
        this.log(`CRITICAL ERROR: ${code}`);
     });
 
+    // : JS_ASSERT ( actual expected -- ) S" JS_ASSERT" SCALL ;
+    this.forth.bind("JS_ASSERT", (stack: any) => {
+        const expected = stack.pop();
+        const actual = stack.pop();
+        if (actual !== expected) {
+            const msg = `ASSERTION FAILED: Expected ${expected}, got ${actual}`;
+            this.log(msg);
+            console.error(`[${this.id}] ${msg}`);
+            // In browser we might not want to throw and crash the whole engine,
+            // but in tests we definitely want to know.
+        }
+    });
+
     // : JS_SYNC_OBJECT ( id typeId -- ptr ) S" JS_SYNC_OBJECT" SCALL ;
     this.forth.bind("JS_SYNC_OBJECT", (stack: any) => {
         const typeId = stack.pop();
