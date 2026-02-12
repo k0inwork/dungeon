@@ -54,6 +54,15 @@ function init_stats(id, type) {
 
 // --- SKILL SCRIPTS ---
 
+function log_combat(srcId, tgtId, dmg, label) {
+    if (srcId == 0) {
+        Log("You use "); Log(label);
+        Log(" on enemy: "); Log(dmg); Log(" dmg");
+    } else {
+        Log("Enemy hits YOU for "); Log(dmg); Log(" dmg");
+    }
+}
+
 function skill_basic_attack(srcId, tgtId) {
     let src = get_rpg_ptr(srcId);
     let tgt = get_rpg_ptr(tgtId);
@@ -63,7 +72,7 @@ function skill_basic_attack(srcId, tgtId) {
     
     tgt.hp -= dmg;
     
-    Log("Basic Attack!");
+    log_combat(srcId, tgtId, dmg, "Attack");
     Bus.send(EVT_DAMAGE, K_BATTLE, K_BUS, tgtId, dmg, 0);
     
     return tgt.hp;
@@ -78,7 +87,7 @@ function skill_heavy_smash(srcId, tgtId) {
     
     tgt.hp -= dmg;
     
-    Log("HEAVY SMASH!");
+    log_combat(srcId, tgtId, dmg, "SMASH");
     Bus.send(EVT_DAMAGE, K_BATTLE, K_BUS, tgtId, dmg, 2); // Type 2 = Crit/Heavy
     
     return tgt.hp;
@@ -90,7 +99,7 @@ function skill_heal_self(srcId) {
     src.hp += amount;
     if (src.hp > src.maxHp) { src.hp = src.maxHp; }
     
-    Log("Self Heal");
+    Log("You HEAL for "); Log(amount); Log(" HP");
     Bus.send(EVT_DAMAGE, K_BATTLE, K_BUS, srcId, -amount, 4); // Negative Damage = Heal
 }
 
@@ -104,7 +113,7 @@ function skill_fireball(srcId, tgtId) {
     
     tgt.hp -= dmg;
     
-    Log("CAST FIREBALL!");
+    log_combat(srcId, tgtId, dmg, "FIREBALL");
     Bus.send(EVT_DAMAGE, K_BATTLE, K_BUS, tgtId, dmg, 1); // Type 1 = Thermal
     
     return tgt.hp;

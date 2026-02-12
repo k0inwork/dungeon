@@ -355,6 +355,10 @@ const App = () => {
                   if (op === Opcode.EVT_DEATH && header[3] === 0) {
                       setGameOver(true);
                   }
+
+                  if (op === Opcode.EVT_MOVED && header[3] === 0) {
+                      setPlayerPos({ x: header[4], y: header[5] });
+                  }
                   
                   if (target === KernelID.BUS) {
                       // Broadcast (excluding sender)
@@ -629,17 +633,6 @@ const App = () => {
                 const cmd = `0 OUT_PTR ! 101 2 1 0 ${dx} ${dy} BUS_SEND`;
                 playerProc.run(cmd);
                 tickSimulation();
-                
-                // Track player position on success (for range checks)
-                // Note: Real position is in Wasm, this is a client prediction/cache.
-                // ideally we read it from EVT_MOVED, but this is responsive enough.
-                setPlayerPos(prev => {
-                    const nx = prev.x + dx;
-                    const ny = prev.y + dy;
-                    // Simple bounds clamp for local state
-                    if (nx < 0 || nx >= MEMORY.GRID_WIDTH || ny < 0 || ny >= MEMORY.GRID_HEIGHT) return prev;
-                    return {x: nx, y: ny};
-                });
             }
         }
         
@@ -798,7 +791,7 @@ const App = () => {
                 width={MEMORY.GRID_WIDTH} 
                 height={MEMORY.GRID_HEIGHT} 
                 onGridClick={handleInspect}
-                cursor={targetMode ? cursorPos : null}
+                cursor={(targetMode && !(selectedSkill?.name === "HEAL" && cursorPos.x === playerPos.x && cursorPos.y === playerPos.y)) ? cursorPos : null}
               />
               {/* Overlay for Invalid Target */}
               {targetMode && !isValidTarget && (
