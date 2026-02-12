@@ -118,13 +118,34 @@ export class ForthProcess {
         }
     });
 
+    // : JS_REGISTER_VSO ( addr typeId sizeBytes -- ) S" JS_REGISTER_VSO" SCALL ;
+    this.forth.bind("JS_REGISTER_VSO", (stack: any) => {
+        const sizeBytes = stack.pop();
+        const typeId = stack.pop();
+        const addr = stack.pop();
+
+        // Find numerical ID of current kernel
+        const currentKernelId = Object.entries(KernelID).find(([name, val]) => val === Number(this.id) || name === this.id)?.[1];
+
+        if (currentKernelId !== undefined) {
+            this.manager.dynamicVsoRegistry.set(typeId, {
+                owner: Number(currentKernelId),
+                baseAddr: addr,
+                sizeBytes: sizeBytes
+            });
+            this.log(`VSO Registered: Type ${typeId} at ${addr} (size ${sizeBytes}) owned by ${this.id}`);
+        }
+    });
+
     // : JS_SYNC_OBJECT ( id typeId -- ptr ) S" JS_SYNC_OBJECT" SCALL ;
     this.forth.bind("JS_SYNC_OBJECT", (stack: any) => {
         const typeId = stack.pop();
         const id = stack.pop();
 
         // 1. Find Registry Entry
-        const entry = Object.values(VSO_REGISTRY).find(v => v.typeId === typeId);
+        let entry: any = Object.values(VSO_REGISTRY).find(v => v.typeId === typeId) ||
+                         this.manager.dynamicVsoRegistry.get(typeId);
+
         if (!entry) {
             this.log(`SYNC ERR: Unknown TypeID ${typeId}`);
             stack.push(0);
@@ -132,7 +153,8 @@ export class ForthProcess {
         }
 
         // 2. Locate Source Kernel
-        const srcProc = this.manager.processes.get(KernelID[entry.owner]);
+        const ownerName = typeof entry.owner === 'number' ? KernelID[entry.owner] : entry.owner;
+        const srcProc = this.manager.processes.get(ownerName);
         if (!srcProc || !srcProc.isReady) {
             this.log(`SYNC ERR: Source Kernel ${KernelID[entry.owner]} not ready`);
             stack.push(0);
@@ -244,6 +266,8 @@ export class ForthProcess {
 // The Manager Singleton
 class ForthProcessManager {
   processes: Map<string, ForthProcess> = new Map();
+  // Dynamic VSO Registry for exported AJS arrays
+  dynamicVsoRegistry: Map<number, { owner: number, baseAddr: number, sizeBytes: number }> = new Map();
   listeners: ((ids: string[]) => void)[] = [];
   
   // Message Bus History

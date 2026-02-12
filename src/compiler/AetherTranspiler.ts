@@ -43,7 +43,16 @@ export class AetherTranspiler {
   private static globalConsts: Map<string, any> = new Map();
   private static varTypes: Map<string, string> = new Map(); // Name -> "Uint8Array" | "Uint32Array" | etc
   private static structArrayCounts: Map<string, any> = new Map();
-  private static exportedArrays: Map<string, string> = new Map(); // StructName -> VarName
+  private static exportedArrays: Map<string, string> = new Map(); // StructName -> VarName (Local)
+
+  // Shared across transpile() calls for different kernels
+  private static globalExportRegistry: Map<string, { owner: number, varName: string, typeId: number, sizeBytes: number }> = new Map();
+  private static nextVsoTypeId = 1000;
+
+  static resetGlobalRegistry() {
+      this.globalExportRegistry = new Map();
+      this.nextVsoTypeId = 1000;
+  }
 
   static transpile(jsCode: string, kernelId: number = 0): string {
     this.scopes = [];
@@ -184,7 +193,21 @@ export class AetherTranspiler {
           const varName = this.exportedArrays.get(pk)!;
           const structType = this.getStructType(varName);
           if (structType) {
-              this.exportedArrays.set(structType, varName.toUpperCase());
+              const upperVarName = varName.toUpperCase();
+              this.exportedArrays.set(structType, upperVarName);
+
+              // Register in global registry for cross-kernel access
+              const structDef = this.structs.get(structType);
+              if (structDef) {
+                  if (!AetherTranspiler.globalExportRegistry.has(structType)) {
+                      AetherTranspiler.globalExportRegistry.set(structType, {
+                          owner: this.currentKernelId,
+                          varName: upperVarName,
+                          typeId: AetherTranspiler.nextVsoTypeId++,
+                          sizeBytes: structDef.size
+                      });
+                  }
+              }
           }
           this.exportedArrays.delete(pk);
       });
@@ -281,6 +304,11 @@ export class AetherTranspiler {
           const structName = this.getStructType(v);
           const count = this.structArrayCounts.get(v) || 0;
           this.emit(`CREATE ${v} ${count} SIZEOF_${structName?.toUpperCase()} * ALLOT`);
+
+          const entry = AetherTranspiler.globalExportRegistry.get(structName!);
+          if (entry && entry.owner === this.currentKernelId && entry.varName === v) {
+              this.emit(`${v} ${entry.typeId} ${entry.sizeBytes} JS_REGISTER_VSO`);
+          }
       } else {
           this.emit(`VARIABLE ${v}`);
       }
@@ -292,6 +320,11 @@ export class AetherTranspiler {
         const structName = this.getStructType(name);
         const count = this.structArrayCounts.get(name) || 0;
         this.emit(`CREATE ${name} ${count} SIZEOF_${structName?.toUpperCase()} * ALLOT`);
+
+        const entry = AetherTranspiler.globalExportRegistry.get(structName!);
+        if (entry && entry.owner === this.currentKernelId && entry.varName === name) {
+            this.emit(`${name} ${entry.typeId} ${entry.sizeBytes} JS_REGISTER_VSO`);
+        }
     });
 
     // 4. Emit Local Variables
@@ -305,6 +338,11 @@ export class AetherTranspiler {
             const structName = this.getStructType(fullName);
             const count = this.structArrayCounts.get(fullName) || 0;
             this.emit(`CREATE ${fullName} ${count} SIZEOF_${structName?.toUpperCase()} * ALLOT`);
+
+            const entry = AetherTranspiler.globalExportRegistry.get(structName!);
+            if (entry && entry.owner === this.currentKernelId && entry.varName === fullName) {
+                this.emit(`${fullName} ${entry.typeId} ${entry.sizeBytes} JS_REGISTER_VSO`);
+            }
         } else {
             this.emit(`VARIABLE ${fullName}`);
         }
@@ -597,10 +635,15 @@ export class AetherTranspiler {
             const func = funcName.toUpperCase();
 
             // --- EXPORTED STRUCT ARRAY ACCESS: NPC(id) ---
-            if (this.exportedArrays.has(funcName)) {
-                const arrayVar = this.exportedArrays.get(funcName)!;
-                this.compileNode(node.arguments[0]);
-                this.emit(`  ${arrayVar} SWAP SIZEOF_${func} * +`);
+            const globalEntry = AetherTranspiler.globalExportRegistry.get(funcName);
+            if (globalEntry) {
+                if (globalEntry.owner === this.currentKernelId) {
+                    this.compileNode(node.arguments[0]);
+                    this.emit(`  ${globalEntry.varName} SWAP SIZEOF_${func} * +`);
+                } else {
+                    this.compileNode(node.arguments[0]);
+                    this.emit(`  ${globalEntry.typeId} JS_SYNC_OBJECT`);
+                }
                 return;
             }
         }
@@ -637,6 +680,8 @@ export class AetherTranspiler {
             else if (func === "POKE") this.emit(`  !`);
             else if (func === "CPEEK") this.emit(`  C@`);
             else if (func === "CPOKE") this.emit(`  C!`);
+            else if (func === "JS_REGISTER_VSO") this.emit(`  JS_REGISTER_VSO`);
+            else if (func === "JS_SYNC_OBJECT") this.emit(`  JS_SYNC_OBJECT`);
             else if (func === "LOG") {
                 const arg0 = node.arguments[0];
                 if (arg0 && arg0.type === "Literal" && typeof arg0.value === "string") {
