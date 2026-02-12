@@ -1,5 +1,5 @@
 [INTEGRATION TEST] Starting Rat Chase Simulation...
-Timestamp: 2/12/2026, 3:29:58 PM
+Timestamp: 2/12/2026, 4:08:59 PM
 TICK | PLAYER POS | RAT POS          | EVENTS
 ------------------------------------------------------------
 0    | 10,10     | 15,10        |
