@@ -15,6 +15,7 @@ const MAX_ENTITIES = 32;
 
 const COLLISION_MAP = new Uint8Array(0x30000);
 const ENTITY_MAP    = new Uint8Array(0x31000);
+const LOOT_MAP      = new Uint8Array(0x32000);
 const TERRAIN_MAP   = new Uint32Array(0x40000);
 const VRAM          = new Uint32Array(0x80000);
 const ENTITY_TABLE  = 0x90000;
@@ -62,6 +63,7 @@ function init_map() {
             draw_cell(x, y, 0, 32);
             COLLISION_MAP[i] = 0;
             ENTITY_MAP[i] = 0;
+            LOOT_MAP[i] = 0;
             TERRAIN_MAP[i] = 0;
             x++;
         }
@@ -85,9 +87,12 @@ function load_tile(x, y, color, char, type) {
 
 function find_entity_at(x, y) {
   if (check_bounds(x, y) == 0) return -1;
-  let val = ENTITY_MAP[calc_idx(x, y)];
-  if (val == 0) return -1;
-  return val - 1;
+  let idx = calc_idx(x, y);
+  let val = ENTITY_MAP[idx];
+  if (val != 0) return val - 1;
+  val = LOOT_MAP[idx];
+  if (val != 0) return val - 1;
+  return -1;
 }
 
 function spawn_entity(x, y, color, char, type) {
@@ -101,10 +106,12 @@ function spawn_entity(x, y, color, char, type) {
   ent.type = type;
 
   let i = calc_idx(x, y);
-  ENTITY_MAP[i] = ENTITY_COUNT + 1;
   draw_cell(x, y, color, char);
   
-  if (type != 3) {
+  if (type == 3) {
+      LOOT_MAP[i] = ENTITY_COUNT + 1;
+  } else {
+      ENTITY_MAP[i] = ENTITY_COUNT + 1;
       COLLISION_MAP[i] = 1;
   }
   
@@ -167,7 +174,10 @@ function move_entity(id, dx, dy) {
 
 function kill_entity(id) {
     let ent = get_ent_ptr(id);
-    COLLISION_MAP[calc_idx(ent.x, ent.y)] = 0;
+    let i = calc_idx(ent.x, ent.y);
+    COLLISION_MAP[i] = 0;
+    ENTITY_MAP[i] = 0;
+    LOOT_MAP[i] = id + 1;
     // Keep character (e.g. 'r' or 'R'), change color to gray
     ent.color = 8947848; // 0x888888 in decimal
     ent.type = 3; // ITEM
@@ -176,25 +186,26 @@ function kill_entity(id) {
 }
 
 function try_pickup(playerId, x, y) {
-    let id = find_entity_at(x, y);
-    if (id != -1) {
+    let idx = calc_idx(x, y);
+    let val = LOOT_MAP[idx];
+    if (val != 0) {
+        let id = val - 1;
         let ent = get_ent_ptr(id);
-        if (ent.char != 0) {
-            if (ent.type == 3) {
-                // Determine Item ID: 2001 for Big Rats ('R' = 82)
-                let itemId = id;
-                if (ent.char == 82) {
-                    itemId = 2001;
-                }
-
-                ent.char = 0;
-                ent.x = -1;
-                ent.y = -1;
-                ENTITY_MAP[calc_idx(x, y)] = 0;
-                refresh_tile(x, y, -1);
-                bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, itemId, 0);
-                return;
+        if (ent.char != 0 && ent.type == 3) {
+            // Big Rat ('R' = 82) gives multiple items
+            if (ent.char == 82) {
+                bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, 2001, 0); // Tooth
+                bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, 2002, 0); // Tail
+            } else {
+                bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, id, 0);
             }
+
+            ent.char = 0;
+            ent.x = -1;
+            ent.y = -1;
+            LOOT_MAP[idx] = 0;
+            refresh_tile(x, y, -1);
+            return;
         }
     }
 }
