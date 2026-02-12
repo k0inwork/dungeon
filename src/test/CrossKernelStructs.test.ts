@@ -3,6 +3,7 @@ import { expect, test, describe, beforeAll } from 'vitest';
 import { AetherTranspiler } from '../compiler/AetherTranspiler';
 import { KernelTestRunner } from './KernelRunner';
 import { KernelID } from '../types/Protocol';
+import { STANDARD_KERNEL_FIRMWARE } from '../kernels/SharedBlocks';
 
 describe('Cross-Kernel Struct Arrays', () => {
   beforeAll(() => {
@@ -27,20 +28,14 @@ describe('Cross-Kernel Struct Arrays', () => {
       }
     `;
 
-    // Add necessary Forth declarations
-    const preamble = `
-      : JS_REGISTER_VSO ( addr typeId sizeBytes -- ) S" JS_REGISTER_VSO" SCALL ;
-      : JS_SYNC_OBJECT ( id typeId -- ptr ) S" JS_SYNC_OBJECT" SCALL ;
-    `;
-
     const forthA = AetherTranspiler.transpile(jsA, KernelID.BATTLE);
     const forthB = AetherTranspiler.transpile(jsB, KernelID.GRID);
 
     const runnerA = new KernelTestRunner('BATTLE', KernelID.BATTLE);
-    await runnerA.boot([preamble, forthA]);
+    await runnerA.boot([...STANDARD_KERNEL_FIRMWARE, forthA]);
 
     const runnerB = new KernelTestRunner('GRID', KernelID.GRID);
-    await runnerB.boot([preamble, forthB]);
+    await runnerB.boot([...STANDARD_KERNEL_FIRMWARE, forthB]);
 
     // Run init in A
     runnerA.proc.run('INIT');

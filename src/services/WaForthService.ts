@@ -133,7 +133,7 @@ export class ForthProcess {
                 baseAddr: addr,
                 sizeBytes: sizeBytes
             });
-            this.log(`VSO Registered: Type ${typeId} at ${addr} (size ${sizeBytes}) owned by ${this.id}`);
+            this.log(`[STDOUT] VSO Registered: Type ${typeId} at ${addr} (size ${sizeBytes}) owned by ${this.id}`);
         }
     });
 
@@ -147,7 +147,7 @@ export class ForthProcess {
                          this.manager.dynamicVsoRegistry.get(typeId);
 
         if (!entry) {
-            this.log(`SYNC ERR: Unknown TypeID ${typeId}`);
+            this.log(`[STDOUT] SYNC ERR: Unknown TypeID ${typeId}`);
             stack.push(0);
             return;
         }
@@ -156,7 +156,7 @@ export class ForthProcess {
         const ownerName = typeof entry.owner === 'number' ? KernelID[entry.owner] : entry.owner;
         const srcProc = this.manager.processes.get(ownerName);
         if (!srcProc || !srcProc.isReady) {
-            this.log(`SYNC ERR: Source Kernel ${KernelID[entry.owner]} not ready`);
+            this.log(`[STDOUT] SYNC ERR: Source Kernel ${ownerName} not ready`);
             stack.push(0);
             return;
         }
@@ -171,7 +171,7 @@ export class ForthProcess {
 
             // Safety Checks
             if (srcAddr + entry.sizeBytes > srcMem.length) {
-                this.log(`SYNC ERR: Source OOB at ${srcAddr}`);
+                this.log(`[STDOUT] SYNC ERR: Source OOB at ${srcAddr}`);
                 stack.push(0);
                 return;
             }
@@ -182,7 +182,7 @@ export class ForthProcess {
             // Return pointer to temp buffer
             stack.push(destAddr);
         } catch (e) {
-            this.log(`SYNC ERR: ${e}`);
+            this.log(`[STDOUT] SYNC ERR: ${e}`);
             stack.push(0);
         }
     });
