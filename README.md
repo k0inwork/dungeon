@@ -4,7 +4,11 @@
 
 # Aethelgard
 
-Aethelgard is a high-performance, neuro-symbolic roguelike engine that bridges the gap between modern web technologies and classic low-level logic execution. It uses a unique hybrid architecture where a React-based host orchestrates multiple independent logic kernels running in WebAssembly (WAForth).
+> "The Terminal is the World."
+
+Aethelgard is a high-performance, neuro-symbolic roguelike engine that bridges the gap between modern web technologies and classic low-level logic execution.
+
+The project **tends to be** an infinitely generative, logic-rich simulation where AI-driven "hallucinations" (lore, entities, and abilities) are instantly transpiled into executable low-level mechanics. **Now it is** a robust, high-performance roguelike framework utilizing a hybrid architecture of React 19 for the host environment and WAForth (WebAssembly) for its independent logic kernels.
 
 ## 🪐 Architecture: Star Topology
 
@@ -67,6 +71,13 @@ The project includes a suite of tests for kernels and integration.
 - **Logic**: [WAForth](https://github.com/remko/waforth) (WebAssembly Forth)
 - **Compiler**: [Acorn](https://github.com/acornjs/acorn) (for AJS parsing)
 - **AI**: [Google Generative AI (Gemini)](https://ai.google.dev/)
+
+## 📂 Project Structure
+- `src/`: Core source code (React components, Forth kernels, Aether transpiler).
+- `design/`: Detailed system specifications and architecture designs.
+- `doc/`: Project analysis, design bible, and roadmap documentation.
+- `imp/`: Implementation details and specific module documentation.
+- `test-results/`: Execution traces and artifacts from integration tests.
 
 ## 🔗 External Resources
 
