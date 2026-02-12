@@ -7,6 +7,7 @@ export enum KernelID {
     PLAYER = 2,
     HIVE = 3,
     BATTLE = 4,
+    PLATFORM = 5,
     BUS = 255
 }
 
@@ -24,6 +25,7 @@ export enum Opcode {
     EVT_DAMAGE = 204,   // [TargetID, Amount, Type]
     EVT_DEATH = 205,    // [TargetID, 0, 0]
     EVT_ITEM_GET = 206, // [PlayerID, ItemID, 0]
+    EVT_LEVEL_TRANSITION = 207, // [TargetLevelID, X, Y]
 
     // --- INTERACTION (300-399) ---
     CMD_INTERACT = 301, // [SourceID, TargetID, Verb]
