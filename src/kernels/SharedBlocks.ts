@@ -12,6 +12,7 @@ export const BLOCK_HOST_BINDINGS = `
 : JS_EVENT ( code -- )     S" JS_EVENT" SCALL ;
 : JS_ERR   ( code -- )     S" JS_ERR" SCALL ;
 : JS_SYNC_OBJECT ( id typeId -- ptr ) S" JS_SYNC_OBJECT" SCALL ;
+: JS_ASSERT ( actual expected -- ) S" JS_ASSERT" SCALL ;
 `;
 
 export const BLOCK_CORE_POLYFILLS = `
