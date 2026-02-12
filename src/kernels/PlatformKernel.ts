@@ -36,10 +36,10 @@ function get_collision(x, y) {
 
 function init_platformer() {
     player_x = 2 * 65536;
-    player_y = 10 * 65536;
+    player_y = 2 * 65536;
     player_vx = 0;
     player_vy = 0;
-    Log("[PLATFORM] Kernel Ready (v3)");
+    Log("[PLATFORM] Kernel Ready (v4)");
 }
 
 function load_tile(x, y, color, char, type) {
@@ -55,16 +55,24 @@ function update_physics() {
     let nx = player_x + player_vx;
     let ny = player_y + player_vy;
 
-    // Player bounding box (center-aligned for collision checks)
-    let lx = player_x / 65536;
-    let rx = (player_x + 65535) / 65536;
+    // Player bounding box with small insets to prevent corner-snagging
+    let lx = (player_x + 4000) / 65536;
+    let rx = (player_x + 61536) / 65536;
 
     // 1. Vertical Collision (check both left and right edges)
     let by_foot = (ny + 65535) / 65536;
     let by_head = ny / 65536;
+    let by_mid_travel = (player_y + (player_vy / 2) + 65535) / 65536;
 
     if (player_vy > 0) {
-        if (get_collision(lx, by_foot) || get_collision(rx, by_foot)) {
+        // Check foot AND mid-point of travel to prevent tunneling
+        if (get_collision(lx, by_foot) || get_collision(rx, by_foot) || get_collision(lx, by_mid_travel) || get_collision(rx, by_mid_travel)) {
+            // If we hit mid_travel but not by_foot, we should snap to the mid_travel platform
+            if (get_collision(lx, by_mid_travel) || get_collision(rx, by_mid_travel)) {
+                if (get_collision(lx, by_foot) == 0 && get_collision(rx, by_foot) == 0) {
+                    by_foot = by_mid_travel;
+                }
+            }
             player_vy = 0;
             player_y = (by_foot - 1) * 65536;
             ny = player_y;
@@ -72,9 +80,7 @@ function update_physics() {
             player_y = ny;
         }
     } else if (player_vy < 0) {
-        // Double check midpoint to prevent tunneling through thin lines if vy is high
-        let by_mid = (player_y + player_vy/2) / 65536;
-        if (get_collision(lx, by_head) || get_collision(rx, by_head) || get_collision(lx, by_mid)) {
+        if (get_collision(lx, by_head) || get_collision(rx, by_head) || get_collision(lx, by_mid_travel) || get_collision(rx, by_mid_travel)) {
             player_vy = 0;
             player_y = (by_head + 1) * 65536;
             ny = player_y;
@@ -85,9 +91,9 @@ function update_physics() {
         player_y = ny;
     }
 
-    // 2. Horizontal Collision
-    let h_rx = (nx + 65535) / 65536;
-    let h_lx = nx / 65536;
+    // 2. Horizontal Collision (using updated Y)
+    let h_rx = (nx + 63536) / 65536;
+    let h_lx = (nx + 2000) / 65536;
     let py = player_y / 65536;
 
     if (player_vx > 0) {
@@ -110,10 +116,12 @@ function update_physics() {
     if (player_x < 0) player_x = 0;
     if (player_y < 0) player_y = 0;
 
-    // Win condition: reach right side
-    if (player_x >= 38 * 65536) {
-        bus_send(EVT_LEVEL_TRANSITION, K_PLATFORM, K_HOST, 0, 0, 0); // Back to Hub
-        player_x = 5 * 65536; // Reset pos
+    // Win condition: reach bottom-left area after falling
+    if (player_x <= 2 * 65536) {
+        if (player_y >= 17 * 65536) {
+           bus_send(EVT_LEVEL_TRANSITION, K_PLATFORM, K_HOST, 0, 0, 0); // Back to Hub
+           player_x = 5 * 65536; // Reset pos
+        }
     }
 
     if (player_x > 39 * 65536) player_x = 39 * 65536;
