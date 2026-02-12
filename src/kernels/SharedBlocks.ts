@@ -251,6 +251,7 @@ export const BLOCK_STANDARD_INBOX = `
     + ( Add step to current_offset )
   REPEAT
   2DROP
+  0 INPUT_QUEUE ! ( Clear Count )
 ;
 `;
 

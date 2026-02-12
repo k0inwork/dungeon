@@ -308,99 +308,84 @@ const App = () => {
       if (!main.isReady || !hive.isReady || !player.isReady || !battle.isReady) return;
       if (!activeKernels.has("GRID") || !activeKernels.has("HIVE") || !activeKernels.has("PLAYER") || !activeKernels.has("BATTLE")) return;
 
-      // 1. MESSAGE BROKER: Move Packets from Output -> Input
-      const kernels = [
-          { id: KernelID.GRID, proc: main },
-          { id: KernelID.HIVE, proc: hive },
-          { id: KernelID.PLAYER, proc: player },
-          { id: KernelID.BATTLE, proc: battle }
-      ];
+      const processPackets = () => {
+          // 1. MESSAGE BROKER: Move Packets from Output -> Input
+          const kernels = [
+              { id: KernelID.GRID, proc: main },
+              { id: KernelID.HIVE, proc: hive },
+              { id: KernelID.PLAYER, proc: player },
+              { id: KernelID.BATTLE, proc: battle }
+          ];
 
-      const inboxes: Record<number, number[]> = {
-          [KernelID.GRID]: [],
-          [KernelID.HIVE]: [],
-          [KernelID.PLAYER]: [],
-          [KernelID.BATTLE]: []
+          const inboxes: Record<number, number[]> = {
+              [KernelID.GRID]: [],
+              [KernelID.HIVE]: [],
+              [KernelID.PLAYER]: [],
+              [KernelID.BATTLE]: []
+          };
+
+          kernels.forEach(k => {
+              const outMem = new Int32Array(k.proc.getMemory(), MEMORY.OUTPUT_QUEUE_ADDR, 1024);
+              const count = outMem[0];
+              
+              if (count > 0) {
+                  let offset = 1;
+                  while (offset < count + 1) {
+                      const header = outMem.subarray(offset, offset + PACKET_SIZE_INTS);
+                      const op = header[0];
+                      let packetLen = PACKET_SIZE_INTS;
+
+                      if (op === Opcode.SYS_BLOB) {
+                          const dataLen = header[3];
+                          packetLen += dataLen;
+                      }
+
+                      const packet = outMem.subarray(offset, offset + packetLen);
+                      forthService.logPacket(header[1], header[2], header[0], header[3], header[4], header[5]);
+
+                      const target = header[2];
+                      if (op === Opcode.EVT_DEATH && header[3] === 0) setGameOver(true);
+                      if (op === Opcode.EVT_MOVED && header[3] === 0) setPlayerPos({ x: header[4], y: header[5] });
+
+                      if (target === KernelID.BUS) {
+                          Object.keys(inboxes).forEach(keyStr => {
+                              const key = Number(keyStr);
+                              if (key !== header[1]) inboxes[key].push(...packet);
+                          });
+                      }
+                      else if (target !== KernelID.HOST && inboxes[target]) {
+                          inboxes[target].push(...packet);
+                      }
+                      offset += packetLen;
+                  }
+                  outMem[0] = 0; // Clear Output Queue
+              }
+          });
+
+          kernels.forEach(k => {
+              const inboxData = inboxes[k.id];
+              const inMem = new Int32Array(k.proc.getMemory(), MEMORY.INPUT_QUEUE_ADDR, 1024);
+              if (inboxData.length > 0) {
+                  const currentCount = inMem[0];
+                  inMem[0] = currentCount + inboxData.length;
+                  inMem.set(inboxData, currentCount + 1);
+              }
+          });
       };
 
-      kernels.forEach(k => {
-          const outMem = new Int32Array(k.proc.getMemory(), MEMORY.OUTPUT_QUEUE_ADDR, 1024);
-          const count = outMem[0];
-          
-          if (count > 0) {
-              let offset = 1;
-              let processed = 0;
-              
-              while (offset < count + 1) {
-                  const header = outMem.subarray(offset, offset + PACKET_SIZE_INTS);
-                  const op = header[0];
-                  let packetLen = PACKET_SIZE_INTS;
-                  
-                  let payloadStr = `${header[3]}, ${header[4]}, ${header[5]}`;
-                  
-                  if (op === Opcode.SYS_BLOB) {
-                      const dataLen = header[3];
-                      packetLen += dataLen;
-                      payloadStr = `[BLOB ${dataLen} ints] ${Opcode[header[4]] || header[4]}`;
-                  }
-                  
-                  // Read Full Packet (Header + Data)
-                  const packet = outMem.subarray(offset, offset + packetLen);
-                  
-                  // LOGGING TO BUS HISTORY
-                  forthService.logPacket(header[1], header[2], header[0], header[3], header[4], header[5]);
-                  
-                  const target = header[2]; 
-
-                  if (op === Opcode.EVT_DEATH && header[3] === 0) {
-                      setGameOver(true);
-                  }
-
-                  if (op === Opcode.EVT_MOVED && header[3] === 0) {
-                      setPlayerPos({ x: header[4], y: header[5] });
-                  }
-                  
-                  if (target === KernelID.BUS) {
-                      // Broadcast (excluding sender)
-                      Object.keys(inboxes).forEach(keyStr => {
-                          const key = Number(keyStr);
-                          if (key !== header[1]) {
-                              inboxes[key].push(...packet);
-                          }
-                      });
-                  }
-                  else if (target !== KernelID.HOST && inboxes[target]) {
-                      inboxes[target].push(...packet);
-                  }
-                  
-                  offset += packetLen;
-              }
-              outMem[0] = 0; // Clear Output Queue
-          }
-      });
-
-      kernels.forEach(k => {
-          const inboxData = inboxes[k.id];
-          const inMem = new Int32Array(k.proc.getMemory(), MEMORY.INPUT_QUEUE_ADDR, 1024);
-          if (inboxData.length > 0) {
-              inMem[0] = inboxData.length;
-              inMem.set(inboxData, 1);
-          } else {
-              inMem[0] = 0;
-          }
-      });
-      
-      // 2. RUN CYCLES (The Heartbeat)
+      // Execution sequence:
+      // 1. Process initial commands (from handleKeyDown)
+      processPackets();
+      // 2. Run Kernels
       player.run("PROCESS_INBOX");
       main.run("PROCESS_INBOX");
       battle.run("PROCESS_INBOX"); 
       hive.run("RUN_HIVE_CYCLE");
       main.run("RUN_ENV_CYCLE");
+      // 3. Process resulting events (updates React state immediately)
+      processPackets();
       
-      // 3. Update Inspector if active
-      if (inspectStats) {
-          handleInspect(inspectStats.x, inspectStats.y);
-      }
+      if (inspectStats) handleInspect(inspectStats.x, inspectStats.y);
   };
 
   // Inspect Entity at X, Y by checking Kernel Memory directly
