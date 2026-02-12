@@ -1,5 +1,6 @@
 
 import * as acorn from "acorn";
+import { KernelID, VSO_REGISTRY } from "../types/Protocol";
 
 // --- TYPES ---
 interface ASTNode {
@@ -23,6 +24,7 @@ interface StructDef {
 const KNOWN_GLOBALS = new Set([
   "ENTITY_COUNT", "HIVE_ENT_COUNT", "RNG_SEED",
   "PLAYER_HP", "PLAYER_GOLD",
+  "LAST_PLAYER_X", "LAST_PLAYER_Y",
   "M_OP", "M_SENDER", "M_TARGET", "M_P1", "M_P2", "M_P3",
   "OUT_PTR"
 ]);
@@ -35,14 +37,16 @@ export class AetherTranspiler {
   private static structs: Map<string, StructDef> = new Map();
   // Global map of ALL field names to offsets (Simplification: assumes unique fields globally or shared layout)
   private static globalFieldOffsets: Map<string, number> = new Map();
+  private static currentKernelId: number = 0;
 
-  static transpile(jsCode: string): string {
+  static transpile(jsCode: string, kernelId: number = 0): string {
     this.scopes = [];
     this.output = [];
     this.currentScope = null;
     this.loopVars = [];
     this.structs = new Map();
     this.globalFieldOffsets = new Map();
+    this.currentKernelId = kernelId;
 
     if (!jsCode || !jsCode.trim()) {
         return "";
@@ -87,6 +91,11 @@ export class AetherTranspiler {
           fields.forEach((f, i) => {
               const offset = i * 4;
               def.fields.set(f, offset);
+
+              if (this.globalFieldOffsets.has(f) && this.globalFieldOffsets.get(f) !== offset) {
+                  throw new Error(`Field offset collision for field '${f}' in struct '${name}'. Existing offset: ${this.globalFieldOffsets.get(f)}, new offset: ${offset}. Field names must have consistent offsets across all structs within the same kernel.`);
+              }
+
               this.globalFieldOffsets.set(f, offset);
           });
           
@@ -411,7 +420,23 @@ export class AetherTranspiler {
         });
 
         if (node.callee.type === "Identifier") {
-            const func = node.callee.name.toUpperCase();
+            const funcName = node.callee.name;
+            const func = funcName.toUpperCase();
+
+            // --- VIRTUAL SHARED OBJECTS (VSO) SUPPORT ---
+            if (VSO_REGISTRY[funcName]) {
+                const entry = VSO_REGISTRY[funcName];
+                // node.arguments[0] is the ID
+                if (entry.owner === this.currentKernelId) {
+                    // LOCAL ACCESS: return Base + (id * Size)
+                    this.emit(`  ${entry.sizeBytes} * ${entry.baseAddr} +`);
+                } else {
+                    // REMOTE ACCESS: call sync_object(id, typeId)
+                    this.emit(`  VSO_${func} JS_SYNC_OBJECT`);
+                }
+                return;
+            }
+
             if (func === "PEEK") this.emit(`  @`);
             else if (func === "POKE") this.emit(`  !`);
             else if (func === "CPEEK") this.emit(`  C@`);
@@ -520,7 +545,9 @@ export class AetherTranspiler {
         break;
 
       default:
-        this.emit(`  ( UNHANDLED AST: ${node.type} )`);
+        const msg = `UNHANDLED AST: ${node.type}`;
+        this.emit(`  ( ERROR: ${msg} )`);
+        console.error(`[AetherTranspiler] ${msg}`, node);
     }
   }
 

@@ -2,6 +2,7 @@
 // Aethelgard Player Kernel v2.5 (AJS HYBRID)
 import { STANDARD_KERNEL_FIRMWARE, BLOCK_STANDARD_INBOX } from "./SharedBlocks";
 import { AetherTranspiler } from "../compiler/AetherTranspiler";
+import { KernelID } from "../types/Protocol";
 
 const BLOCK_MEMORY = `
 HEX
@@ -20,7 +21,7 @@ struct PlayerState {
 }
 
 function get_player_ptr() {
-    return PLAYER_STRUCT;
+    return PlayerState(0);
 }
 
 function init_player() {
@@ -100,7 +101,7 @@ const BLOCK_INIT_HOOK = `
 export const PLAYER_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   BLOCK_MEMORY,
-  AetherTranspiler.transpile(AJS_LOGIC),
+  AetherTranspiler.transpile(AJS_LOGIC, KernelID.PLAYER),
   BLOCK_STANDARD_INBOX,
   BLOCK_INIT_HOOK
 ];

@@ -2,6 +2,7 @@
 // Aethelgard Hive AI Kernel v2.6 (AJS HYBRID)
 import { STANDARD_KERNEL_FIRMWARE, BLOCK_STANDARD_INBOX } from "./SharedBlocks";
 import { AetherTranspiler } from "../compiler/AetherTranspiler";
+import { KernelID } from "../types/Protocol";
 
 const BLOCK_MEMORY = `
 HEX
@@ -36,7 +37,7 @@ struct HiveEntity {
 }
 
 function get_hive_ptr(id) {
-    return HIVE_ENT_TABLE + (id * SIZEOF_HIVEENTITY);
+    return HiveEntity(id);
 }
 
 function update_hive_entity(id, x, y) {
@@ -88,6 +89,14 @@ function decide_action(id) {
   
   if (ent.type == 2) {
       // AGGRESSIVE (Chase Player)
+
+      // NEW: SMARTER AI using VSO (Cross-Kernel Access)
+      // Check Player Health from Battle Kernel (Remote Struct)
+      let playerStats = RpgEntity(0);
+      if (playerStats.hp < 20) {
+          Log("Target weak! Pressing attack!");
+      }
+
       // Calculate distance to Player
       let dx = abs(ent.x - LAST_PLAYER_X);
       let dy = abs(ent.y - LAST_PLAYER_Y);
@@ -96,12 +105,12 @@ function decide_action(id) {
       // AI Logic: Chase if within 10 tiles
       if (dist < 10) {
          // Request Grid to Pathfind 1 Step
-         Bus.send(REQ_PATH_STEP, K_HIVE, K_PHYSICS, id, LAST_PLAYER_X, LAST_PLAYER_Y);
+         Bus.send(REQ_PATH_STEP, K_HIVE, K_GRID, id, LAST_PLAYER_X, LAST_PLAYER_Y);
       } else {
          // Random Walk if far away
          let rdx = rand_dir_x();
          let rdy = rand_dir_y();
-         Bus.send(REQ_MOVE, K_HIVE, K_PHYSICS, id, rdx, rdy);
+         Bus.send(REQ_MOVE, K_HIVE, K_GRID, id, rdx, rdy);
       }
   } else {
       // PASSIVE (Random Walk)
@@ -111,7 +120,7 @@ function decide_action(id) {
       if (m < 50) {
          let rdx = rand_dir_x();
          let rdy = rand_dir_y();
-         Bus.send(REQ_MOVE, K_HIVE, K_PHYSICS, id, rdx, rdy);
+         Bus.send(REQ_MOVE, K_HIVE, K_GRID, id, rdx, rdy);
       }
   }
 }
@@ -175,7 +184,7 @@ const BLOCK_CYCLE = `
 export const HIVE_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   BLOCK_MEMORY,
-  AetherTranspiler.transpile(AJS_LOGIC),
+  AetherTranspiler.transpile(AJS_LOGIC, KernelID.HIVE),
   BLOCK_STANDARD_INBOX,
   BLOCK_CYCLE
 ];

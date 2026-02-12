@@ -1,0 +1,26 @@
+[INTEGRATION TEST] Starting Rat Chase Simulation...
+Timestamp: 2/12/2026, 3:29:58 PM
+TICK | PLAYER POS | RAT POS          | EVENTS
+------------------------------------------------------------
+0    | 10,10     | 15,10        |
+1    | 10,10     | 15,10        | [BUS] GRID -> BUS: EVT_SPAWN (0, 0, 0) | [BUS] GRID -> BUS: EVT_MOVED (0, 10, 10) | [BUS] GRID -> BUS: EVT_SPAWN (1, 2, 0) | [BUS] GRID -> BUS: EVT_MOVED (1, 15, 10)
+2    | 10,10     | 14,10        | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10)
+3    | 10,10     | 13,10        | [BUS] GRID -> BUS: EVT_MOVED (1, 14, 10) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10)
+4    | 10,10     | 12,10        | [BUS] GRID -> BUS: EVT_MOVED (1, 13, 10) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10)
+5    | 10,10     | 11,10        | [BUS] GRID -> BUS: EVT_MOVED (1, 12, 10) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10)
+6    | 10,10     | 11,10        | [BUS] GRID -> BUS: EVT_MOVED (1, 11, 10) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10)
+7    | 10,10     | 11,10        | [BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10)
+8    | 10,10     | 11,10        | [BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10)
+9    | 10,10     | 11,10        | [BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)
+10   | 10,10     | 11,10        | [BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)
+11   | 10,10     | 11,10        | [BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)
+12   | 10,10     | 11,10        | [BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)
+13   | 10,10     | 11,10        | [BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)
+14   | 10,10     | 11,10        | [BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)
+15   | 10,10     | 11,10        | [BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)
+16   | 10,10     | 11,10        | [BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)
+17   | 10,10     | 11,10        | [BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)
+18   | 10,10     | 11,10        | [BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)
+19   | 10,10     | 11,10        | [BUS] GRID -> BUS: EVT_COLLIDE (1, 0, 1) | [BUS] HIVE -> BUS: CMD_ATTACK (1, 0, 0) | [BUS] HIVE -> GRID: REQ_PATH_STEP (1, 10, 10) | [BUS] BATTLE -> BUS: EVT_DAMAGE (0, 8, 0)
+----------------------------
+Simulation Ended. Final Rat: 11,10

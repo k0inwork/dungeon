@@ -1,6 +1,8 @@
 
-import WAForth from "waforth";
-import { KernelID, Opcode, PACKET_SIZE_INTS } from "../types/Protocol";
+import WAForthPkg from "waforth";
+import { KernelID, Opcode, PACKET_SIZE_INTS, VSO_REGISTRY } from "../types/Protocol";
+
+const WAForth = (WAForthPkg as any).default || WAForthPkg;
 
 export interface BusPacket {
   timestamp: string;
@@ -102,6 +104,66 @@ export class ForthProcess {
        const code = stack.pop();
        this.log(`CRITICAL ERROR: ${code}`);
     });
+
+    // : JS_ASSERT ( actual expected -- ) S" JS_ASSERT" SCALL ;
+    this.forth.bind("JS_ASSERT", (stack: any) => {
+        const expected = stack.pop();
+        const actual = stack.pop();
+        if (actual !== expected) {
+            const msg = `ASSERTION FAILED: Expected ${expected}, got ${actual}`;
+            this.log(msg);
+            console.error(`[${this.id}] ${msg}`);
+            // In browser we might not want to throw and crash the whole engine,
+            // but in tests we definitely want to know.
+        }
+    });
+
+    // : JS_SYNC_OBJECT ( id typeId -- ptr ) S" JS_SYNC_OBJECT" SCALL ;
+    this.forth.bind("JS_SYNC_OBJECT", (stack: any) => {
+        const typeId = stack.pop();
+        const id = stack.pop();
+
+        // 1. Find Registry Entry
+        const entry = Object.values(VSO_REGISTRY).find(v => v.typeId === typeId);
+        if (!entry) {
+            this.log(`SYNC ERR: Unknown TypeID ${typeId}`);
+            stack.push(0);
+            return;
+        }
+
+        // 2. Locate Source Kernel
+        const srcProc = this.manager.processes.get(KernelID[entry.owner]);
+        if (!srcProc || !srcProc.isReady) {
+            this.log(`SYNC ERR: Source Kernel ${KernelID[entry.owner]} not ready`);
+            stack.push(0);
+            return;
+        }
+
+        // 3. Perform DMA (Host Copy)
+        try {
+            const srcMem = new Uint8Array(srcProc.getMemory());
+            const destMem = new Uint8Array(this.getMemory());
+
+            const srcAddr = entry.baseAddr + (id * entry.sizeBytes);
+            const destAddr = 0xD0000; // TEMP_VSO_BUFFER
+
+            // Safety Checks
+            if (srcAddr + entry.sizeBytes > srcMem.length) {
+                this.log(`SYNC ERR: Source OOB at ${srcAddr}`);
+                stack.push(0);
+                return;
+            }
+
+            // Copy bytes
+            destMem.set(srcMem.subarray(srcAddr, srcAddr + entry.sizeBytes), destAddr);
+
+            // Return pointer to temp buffer
+            stack.push(destAddr);
+        } catch (e) {
+            this.log(`SYNC ERR: ${e}`);
+            stack.push(0);
+        }
+    });
   }
 
   private readString(addr: number, len: number): string {
@@ -149,6 +211,7 @@ export class ForthProcess {
   run(word: string) {
     if (!this.forth || !this.isReady) return;
     try {
+      console.log(`[${this.id} RUN] ${word}`);
       this.forth.interpret(word + "\n");
       if (this.emitBuffer) {
         this.log(`[STDOUT] ${this.emitBuffer}`);

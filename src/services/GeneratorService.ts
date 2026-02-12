@@ -122,7 +122,19 @@ class GeneratorService {
   private logIdCounter = 0;
 
   constructor() {
-    this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
+    // Vite uses import.meta.env for environment variables
+    // @ts-ignore
+    const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+    if (apiKey) {
+      this.ai = new GoogleGenAI(apiKey);
+    } else {
+      // Mock AI if no key provided to allow boot
+      this.ai = {
+        models: {
+          generateContent: async () => { throw new Error("AI API Key Missing"); }
+        }
+      } as any;
+    }
   }
 
   private log(phase: string, prompt: string, response: string) {
