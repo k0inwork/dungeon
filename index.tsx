@@ -308,14 +308,14 @@ const App = () => {
 
       // 1. MESSAGE BROKER: Move Packets from Output -> Input
       const kernels = [
-          { id: KernelID.PHYSICS, proc: main },
+          { id: KernelID.GRID, proc: main },
           { id: KernelID.HIVE, proc: hive },
           { id: KernelID.PLAYER, proc: player },
           { id: KernelID.BATTLE, proc: battle }
       ];
 
       const inboxes: Record<number, number[]> = {
-          [KernelID.PHYSICS]: [],
+          [KernelID.GRID]: [],
           [KernelID.HIVE]: [],
           [KernelID.PLAYER]: [],
           [KernelID.BATTLE]: []
@@ -516,9 +516,10 @@ const App = () => {
                 const skill = PLAYER_SKILLS.find(s => s.key === k);
                 if (skill) {
                     setSelectedSkill(skill);
-                    // Re-evaluate range immediately for current cursor pos
-                    const dist = Math.abs(cursorPos.x - playerPos.x) + Math.abs(cursorPos.y - playerPos.y);
-                    setIsValidTarget(dist <= skill.range);
+                    // Reset cursor to player when switching skills for better UX
+                    setCursorPos({...playerPos});
+                    // Only HEAL is valid on self (ID 0)
+                    setIsValidTarget(skill.name === "HEAL");
                     addLog(`[TARGETING] Switched to ${skill.name} (Range: ${skill.range})`);
                 }
                 return;
@@ -536,21 +537,36 @@ const App = () => {
             if (cx >= MEMORY.GRID_WIDTH) cx = MEMORY.GRID_WIDTH - 1;
             if (cy >= MEMORY.GRID_HEIGHT) cy = MEMORY.GRID_HEIGHT - 1;
             
-            setCursorPos({x: cx, y: cy});
-            
-            // Range Check
+            // Range Check & Block movement outside range
             if (selectedSkill) {
                 const dist = Math.abs(cx - playerPos.x) + Math.abs(cy - playerPos.y);
-                setIsValidTarget(dist <= selectedSkill.range);
+                if (dist <= selectedSkill.range) {
+                    setCursorPos({x: cx, y: cy});
+
+                    // Validate target: Attack skills cannot target self (ID 0)
+                    if (selectedSkill.name !== "HEAL" && cx === playerPos.x && cy === playerPos.y) {
+                        setIsValidTarget(false);
+                    } else {
+                        setIsValidTarget(true);
+                    }
+                }
+            } else {
+                setCursorPos({x: cx, y: cy});
             }
 
             if (k === "Enter" && selectedSkill) {
                 if (!isValidTarget) {
-                    addLog("TARGET OUT OF RANGE!");
+                    addLog("INVALID TARGET OR OUT OF RANGE!");
                     return;
                 }
-                const targetId = getEntityAt(cx, cy);
+                const targetId = getEntityAt(cursorPos.x, cursorPos.y);
                 if (targetId !== -1) {
+                    // Final safety: Cannot attack self
+                    if (selectedSkill.name !== "HEAL" && targetId === 0) {
+                        addLog("CANNOT ATTACK SELF!");
+                        return;
+                    }
+
                     addLog(`Executing ${selectedSkill.name} on ID ${targetId}`);
                     const playerProc = forthService.get("PLAYER");
                     if (playerProc && playerProc.isReady) {
@@ -582,22 +598,18 @@ const App = () => {
         if (['1', '2', '3', '4'].includes(k)) {
             const skill = PLAYER_SKILLS.find(s => s.key === k);
             if (skill) {
+                // All skills now use Targeting Mode for consistency
+                setSelectedSkill(skill);
+                setTargetMode(true);
+                setCursorPos({...playerPos}); // Reset cursor to player
+
+                // Only HEAL is valid on self (ID 0)
+                setIsValidTarget(skill.name === "HEAL");
+
+                // Special log for HEAL
                 if (skill.name === "HEAL") {
-                    // Instant Self Cast
-                    const playerProc = forthService.get("PLAYER");
-                    if (playerProc && playerProc.isReady) {
-                        // Target = 0 (Self)
-                        const cmd = `0 OUT_PTR ! 303 2 255 0 0 ${skill.id} BUS_SEND`;
-                        playerProc.run(cmd);
-                        tickSimulation();
-                        addLog("Casting Self Heal...");
-                    }
+                    addLog(`[TARGETING] Select target for HEAL (Self). Press ENTER.`);
                 } else {
-                    // Requires Targeting
-                    setSelectedSkill(skill);
-                    setTargetMode(true);
-                    setCursorPos({...playerPos}); // Reset cursor to player
-                    setIsValidTarget(true); // Range 0 is valid at start
                     addLog(`[TARGETING] Select target for ${skill.name} (Range: ${skill.range})...`);
                 }
             }
@@ -754,7 +766,7 @@ const App = () => {
                 width={MEMORY.GRID_WIDTH} 
                 height={MEMORY.GRID_HEIGHT} 
                 onGridClick={handleInspect}
-                cursor={targetMode ? cursorPos : isValidTarget ? null : {x: -1, y: -1}} // Hide default cursor if not target mode, or logic handled inside
+                cursor={targetMode ? cursorPos : null}
               />
               {/* Overlay for Invalid Target */}
               {targetMode && !isValidTarget && (
@@ -762,7 +774,9 @@ const App = () => {
                       position: 'absolute', left: 0, right: 0, textAlign: 'center', 
                       color: 'red', fontWeight: 'bold', background: 'rgba(0,0,0,0.5)', pointerEvents: 'none'
                   }}>
-                      OUT OF RANGE
+                      {Math.abs(cursorPos.x - playerPos.x) + Math.abs(cursorPos.y - playerPos.y) > (selectedSkill?.range || 0)
+                        ? "OUT OF RANGE"
+                        : "INVALID TARGET"}
                   </div>
               )}
             </div>
