@@ -124,6 +124,10 @@ function skill_fireball(srcId, tgtId) {
 function execute_skill(srcId, tgtId, skillId) {
     let remainingHp = 100;
     
+    // Check if attacker is valid
+    let src = get_rpg_ptr(srcId);
+    if (src.state == 1) return;
+
     // Check if target is valid
     let tgt = get_rpg_ptr(tgtId);
     if (tgt.state == 1) {

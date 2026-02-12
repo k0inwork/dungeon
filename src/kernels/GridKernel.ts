@@ -133,7 +133,7 @@ function refresh_tile(x, y, skipId) {
 
 function move_entity(id, dx, dy) {
   let ent = get_ent_ptr(id);
-  if (ent.char == 0) return;
+  if (ent.char == 0 || ent.type == 3) return;
 
   let tx = ent.x + dx;
   let ty = ent.y + dy;
