@@ -2,6 +2,7 @@
 // Aethelgard Battle Kernel v1.3 (AJS HYBRID)
 import { STANDARD_KERNEL_FIRMWARE, BLOCK_STANDARD_INBOX } from "./SharedBlocks";
 import { AetherTranspiler } from "../compiler/AetherTranspiler";
+import { KernelID } from "../types/Protocol";
 
 // RPG Stats Memory
 const BLOCK_MEMORY = `
@@ -28,7 +29,7 @@ struct RpgEntity {
 }
 
 function get_rpg_ptr(id) {
-    return RPG_TABLE + (id * RPG_SIZE);
+    return RpgEntity(id);
 }
 
 function init_stats(id, type) {
@@ -165,7 +166,7 @@ function handle_events() {
 export const BATTLE_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   BLOCK_MEMORY,
-  AetherTranspiler.transpile(AJS_LOGIC),
+  AetherTranspiler.transpile(AJS_LOGIC, KernelID.BATTLE),
   BLOCK_STANDARD_INBOX
 ];
 

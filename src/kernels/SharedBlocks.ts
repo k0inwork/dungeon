@@ -11,6 +11,7 @@ export const BLOCK_HOST_BINDINGS = `
 : JS_LOG   ( addr len -- ) S" JS_LOG" SCALL ;
 : JS_EVENT ( code -- )     S" JS_EVENT" SCALL ;
 : JS_ERR   ( code -- )     S" JS_ERR" SCALL ;
+: JS_SYNC_OBJECT ( id typeId -- ptr ) S" JS_SYNC_OBJECT" SCALL ;
 `;
 
 export const BLOCK_CORE_POLYFILLS = `
@@ -66,6 +67,7 @@ HEX
 10400 CONSTANT OUTPUT_QUEUE
 70000 CONSTANT STR_BUF_START
 7FFFF CONSTANT STR_BUF_END
+D0000 CONSTANT TEMP_VSO_BUFFER
 DECIMAL
 
 ${generateForthProtocolBlock()}

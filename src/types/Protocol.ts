@@ -3,7 +3,7 @@
 
 export enum KernelID {
     HOST = 0,
-    PHYSICS = 1,
+    GRID = 1,
     PLAYER = 2,
     HIVE = 3,
     BATTLE = 4,
@@ -50,6 +50,46 @@ export interface MessagePacket {
 export const PACKET_SIZE_INTS = 6;
 export const PACKET_SIZE_BYTES = 24;
 
+// --- VIRTUAL SHARED OBJECTS (VSO) REGISTRY ---
+export interface VsoStructDef {
+    typeId: number;
+    owner: KernelID;
+    baseAddr: number;
+    sizeBytes: number;
+    fields: string[];
+}
+
+export const VSO_REGISTRY: Record<string, VsoStructDef> = {
+    "GridEntity": {
+        typeId: 1,
+        owner: KernelID.GRID,
+        baseAddr: 0x90000,
+        sizeBytes: 20,
+        fields: ["char", "color", "y", "x", "type"]
+    },
+    "HiveEntity": {
+        typeId: 2,
+        owner: KernelID.HIVE,
+        baseAddr: 0x90000,
+        sizeBytes: 12,
+        fields: ["x", "y", "type"]
+    },
+    "RpgEntity": {
+        typeId: 3,
+        owner: KernelID.BATTLE,
+        baseAddr: 0xA0000,
+        sizeBytes: 32,
+        fields: ["hp", "maxHp", "atk", "def", "level", "exp", "state", "targetId"]
+    },
+    "PlayerState": {
+        typeId: 4,
+        owner: KernelID.PLAYER,
+        baseAddr: 0xC0000,
+        sizeBytes: 56,
+        fields: ["hp", "maxHp", "gold", "invCount", "inv0", "inv1", "inv2", "inv3", "inv4", "inv5", "inv6", "inv7", "inv8", "inv9"]
+    }
+};
+
 export function generateForthProtocolBlock(): string {
     let forth = `( --- AUTO-GENERATED PROTOCOL CONSTANTS --- )\n`;
 
@@ -65,6 +105,11 @@ export function generateForthProtocolBlock(): string {
         if (isNaN(Number(name))) {
             forth += `${value} CONSTANT ${name}\n`;
         }
+    }
+
+    forth += `\n( --- VSO TYPE IDS --- )\n`;
+    for (const [name, def] of Object.entries(VSO_REGISTRY)) {
+        forth += `${def.typeId} CONSTANT VSO_${name.toUpperCase()}\n`;
     }
 
     return forth;

@@ -2,6 +2,7 @@
 // Aethelgard Grid Physics Kernel v5.0 (FULL AJS MIGRATION)
 import { STANDARD_KERNEL_FIRMWARE, BLOCK_STANDARD_INBOX } from "./SharedBlocks";
 import { AetherTranspiler } from "../compiler/AetherTranspiler";
+import { KernelID } from "../types/Protocol";
 
 // 1. GRID CONSTANTS (FORTH)
 const BLOCK_MEMORY = `
@@ -46,7 +47,7 @@ struct GridEntity {
 // Global ENTITY_TABLE is base
 
 function get_ent_ptr(id) {
-    return ENTITY_TABLE + (id * SIZEOF_GRIDENTITY);
+    return GridEntity(id);
 }
 
 function check_bounds(x, y) {
@@ -148,10 +149,10 @@ function spawn_entity(x, y, color, char, type) {
   
   // Notify Bus (Battle Kernel listens to init stats)
   // Payload: ID, AI_TYPE, 0
-  Bus.send(EVT_SPAWN, K_PHYSICS, K_BUS, ENTITY_COUNT, type, 0);
+  Bus.send(EVT_SPAWN, K_GRID, K_BUS, ENTITY_COUNT, type, 0);
   
   // Notify Hive Kernel (Position update so it knows entity exists)
-  Bus.send(EVT_MOVED, K_PHYSICS, K_BUS, ENTITY_COUNT, x, y);
+  Bus.send(EVT_MOVED, K_GRID, K_BUS, ENTITY_COUNT, x, y);
   
   ENTITY_COUNT++;
 }
@@ -201,10 +202,10 @@ function move_entity(id, dx, dy) {
       
       if (obs == -1) {
          // Wall Hit
-         Bus.send(EVT_COLLIDE, K_PHYSICS, K_BUS, id, 0, 0);
+         Bus.send(EVT_COLLIDE, K_GRID, K_BUS, id, 0, 0);
       } else {
          // Entity Hit (obs = Entity ID)
-         Bus.send(EVT_COLLIDE, K_PHYSICS, K_BUS, id, obs, 1);
+         Bus.send(EVT_COLLIDE, K_GRID, K_BUS, id, obs, 1);
       }
       return;
   }
@@ -275,7 +276,7 @@ function try_pickup(playerId, x, y) {
                 refresh_tile(x, y, -1);
 
                 // Notify Player specifically (Point-to-Point)
-                Bus.send(EVT_ITEM_GET, K_PHYSICS, K_PLAYER, playerId, id, 0);
+                Bus.send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, id, 0);
                 return;
             }
         }
@@ -389,7 +390,7 @@ function move_towards(id, tx, ty) {
 }
 
 function handle_events() {
-  if (M_TARGET == K_PHYSICS || M_TARGET == 0) {
+  if (M_TARGET == K_GRID || M_TARGET == 0) {
      if (M_OP == REQ_MOVE) {
         move_entity(M_P1, M_P2, M_P3);
      }
@@ -424,7 +425,7 @@ export const GRID_KERNEL_BLOCKS = [
   BLOCK_MEMORY,
   BLOCK_UTILS,
   // BLOCK_MAP_DATA removed - migrated to AJS
-  AetherTranspiler.transpile(AJS_LOGIC),
+  AetherTranspiler.transpile(AJS_LOGIC, KernelID.GRID),
   BLOCK_STANDARD_INBOX,
   BLOCK_ENV
 ];

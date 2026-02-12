@@ -1,5 +1,6 @@
 
 import * as acorn from "acorn";
+import { KernelID, VSO_REGISTRY } from "../types/Protocol";
 
 // --- TYPES ---
 interface ASTNode {
@@ -35,14 +36,16 @@ export class AetherTranspiler {
   private static structs: Map<string, StructDef> = new Map();
   // Global map of ALL field names to offsets (Simplification: assumes unique fields globally or shared layout)
   private static globalFieldOffsets: Map<string, number> = new Map();
+  private static currentKernelId: number = 0;
 
-  static transpile(jsCode: string): string {
+  static transpile(jsCode: string, kernelId: number = 0): string {
     this.scopes = [];
     this.output = [];
     this.currentScope = null;
     this.loopVars = [];
     this.structs = new Map();
     this.globalFieldOffsets = new Map();
+    this.currentKernelId = kernelId;
 
     if (!jsCode || !jsCode.trim()) {
         return "";
@@ -416,7 +419,23 @@ export class AetherTranspiler {
         });
 
         if (node.callee.type === "Identifier") {
-            const func = node.callee.name.toUpperCase();
+            const funcName = node.callee.name;
+            const func = funcName.toUpperCase();
+
+            // --- VIRTUAL SHARED OBJECTS (VSO) SUPPORT ---
+            if (VSO_REGISTRY[funcName]) {
+                const entry = VSO_REGISTRY[funcName];
+                // node.arguments[0] is the ID
+                if (entry.owner === this.currentKernelId) {
+                    // LOCAL ACCESS: return Base + (id * Size)
+                    this.emit(`  ${entry.sizeBytes} * ${entry.baseAddr} +`);
+                } else {
+                    // REMOTE ACCESS: call sync_object(id, typeId)
+                    this.emit(`  VSO_${func} JS_SYNC_OBJECT`);
+                }
+                return;
+            }
+
             if (func === "PEEK") this.emit(`  @`);
             else if (func === "POKE") this.emit(`  !`);
             else if (func === "CPEEK") this.emit(`  C@`);
