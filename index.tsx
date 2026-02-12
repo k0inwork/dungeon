@@ -95,6 +95,7 @@ const App = () => {
           // Filter for gameplay relevant info
           // We want [PLAYER], [BATTLE], or anything mentioning "Attack/Damage/Die"
           const isGameplay = msg.includes("PLAYER") || msg.includes("BATTLE") || msg.includes("HIVE") || 
+                             msg.includes("GRID") || msg.includes("PLATFORM") ||
                              msg.includes("Attack") || msg.includes("Hits") || msg.includes("Die") || msg.includes("Loot");
                              
           if (isGameplay) {
@@ -230,6 +231,8 @@ const App = () => {
           type = terrain.passable ? 0 : 1;
         } else if (char === '@') {
            type = 0;
+             charCode = '.'.charCodeAt(0);
+             color = 0x444444;
         }
         if (!terrain && char !== '@' && char !== ' ') {
            type = 1;
@@ -384,7 +387,6 @@ const App = () => {
                   forthService.logPacket(header[1], header[2], header[0], header[3], header[4], header[5]);
                   
                   const target = header[2]; 
-                  const op = header[0];
 
                   if (target === KernelID.HOST) {
                       if (op === Opcode.EVT_LEVEL_TRANSITION) {
