@@ -1,0 +1,177 @@
+
+// Aethelgard Battle Kernel v1.3 (AJS HYBRID)
+import { STANDARD_KERNEL_FIRMWARE, BLOCK_STANDARD_INBOX } from "./SharedBlocks";
+import { AetherTranspiler } from "../compiler/AetherTranspiler";
+
+// RPG Stats Memory
+const BLOCK_MEMORY = `
+HEX
+A0000 CONSTANT RPG_TABLE
+DECIMAL
+32 CONSTANT MAX_ENTITIES
+32 CONSTANT RPG_SIZE
+VARIABLE ENTITY_COUNT
+0 ENTITY_COUNT !
+`;
+
+// AJS Logic using the new Struct system
+const AJS_LOGIC = `
+struct RpgEntity {
+    hp,
+    maxHp,
+    atk,
+    def,
+    level,
+    exp,
+    state,
+    targetId
+}
+
+function get_rpg_ptr(id) {
+    return RPG_TABLE + (id * RPG_SIZE);
+}
+
+function init_stats(id, type) {
+    let e = get_rpg_ptr(id);
+    
+    // Default Stats
+    e.maxHp = 100;
+    e.hp = 100;
+    e.atk = 10;
+    e.def = 2;
+    e.level = 1;
+    e.state = 0; // 0=Alive
+    
+    if (id == 0) {
+        // Player Buff
+        e.maxHp = 200;
+        e.hp = 200;
+        e.atk = 20; 
+    }
+    
+    Log("Stats Init for ID:");
+    Log(id);
+}
+
+// --- SKILL SCRIPTS ---
+
+function skill_basic_attack(srcId, tgtId) {
+    let src = get_rpg_ptr(srcId);
+    let tgt = get_rpg_ptr(tgtId);
+    
+    let dmg = src.atk - tgt.def;
+    if (dmg < 1) { dmg = 1; }
+    
+    tgt.hp -= dmg;
+    
+    Log("Basic Attack!");
+    Bus.send(EVT_DAMAGE, K_BATTLE, K_BUS, tgtId, dmg, 0);
+    
+    return tgt.hp;
+}
+
+function skill_heavy_smash(srcId, tgtId) {
+    let src = get_rpg_ptr(srcId);
+    let tgt = get_rpg_ptr(tgtId);
+    
+    // 2.0x Damage, Ignores Defense
+    let dmg = src.atk * 2;
+    
+    tgt.hp -= dmg;
+    
+    Log("HEAVY SMASH!");
+    Bus.send(EVT_DAMAGE, K_BATTLE, K_BUS, tgtId, dmg, 2); // Type 2 = Crit/Heavy
+    
+    return tgt.hp;
+}
+
+function skill_heal_self(srcId) {
+    let src = get_rpg_ptr(srcId);
+    let amount = 20;
+    src.hp += amount;
+    if (src.hp > src.maxHp) { src.hp = src.maxHp; }
+    
+    Log("Self Heal");
+    Bus.send(EVT_DAMAGE, K_BATTLE, K_BUS, srcId, -amount, 4); // Negative Damage = Heal
+}
+
+function skill_fireball(srcId, tgtId) {
+    let src = get_rpg_ptr(srcId);
+    let tgt = get_rpg_ptr(tgtId);
+    
+    // Ranged Magic Attack
+    // Ignores standard DEF, but we'll use a flat damage for now.
+    let dmg = 40;
+    
+    tgt.hp -= dmg;
+    
+    Log("CAST FIREBALL!");
+    Bus.send(EVT_DAMAGE, K_BATTLE, K_BUS, tgtId, dmg, 1); // Type 1 = Thermal
+    
+    return tgt.hp;
+}
+
+// --- MAIN DISPATCHER ---
+
+function execute_skill(srcId, tgtId, skillId) {
+    let remainingHp = 100;
+    
+    // Check if target is valid
+    let tgt = get_rpg_ptr(tgtId);
+    if (tgt.state == 1) {
+        Log("Target already dead.");
+        return;
+    }
+    
+    // Simple Dispatch Table
+    if (skillId == 0) {
+        remainingHp = skill_basic_attack(srcId, tgtId);
+    }
+    if (skillId == 1) {
+        remainingHp = skill_heavy_smash(srcId, tgtId);
+    }
+    if (skillId == 2) {
+        skill_heal_self(srcId);
+    }
+    if (skillId == 3) {
+        remainingHp = skill_fireball(srcId, tgtId);
+    }
+    
+    // Check Death (Common Logic)
+    if (remainingHp <= 0) {
+        if (tgt.state == 0) { // Only die once
+            tgt.state = 1; // Dead
+            Bus.send(EVT_DEATH, K_BATTLE, K_BUS, tgtId, 0, 0);
+            Log("Entity Died:");
+            Log(tgtId);
+            if (tgtId == 0) Log("GAME OVER");
+        }
+    }
+}
+
+function handle_events() {
+    if (M_OP == EVT_SPAWN) {
+        // M_P1 = ID, M_P2 = Type
+        init_stats(M_P1, M_P2);
+    }
+    
+    if (M_OP == CMD_ATTACK) {
+        // M_P1 = Attacker, M_P2 = Target, M_P3 = SkillID
+        execute_skill(M_P1, M_P2, M_P3);
+    }
+}
+`;
+
+export const BATTLE_KERNEL_BLOCKS = [
+  ...STANDARD_KERNEL_FIRMWARE,
+  BLOCK_MEMORY,
+  AetherTranspiler.transpile(AJS_LOGIC),
+  BLOCK_STANDARD_INBOX
+];
+
+export const BATTLE_AJS_SOURCE = AJS_LOGIC;
+export const BATTLE_FORTH_SOURCE = [
+    BLOCK_MEMORY,
+    "( %%%_AJS_INJECTION_%%% )",
+    BLOCK_STANDARD_INBOX
+].join("\n");
