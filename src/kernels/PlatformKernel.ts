@@ -20,9 +20,9 @@ let player_y = 10 * 65536;
 let player_vx = 0;
 let player_vy = 0;
 
-let gravity = 4000;
-let jump_force = -100000;
-let move_speed = 40000;
+let gravity = 5000;
+let jump_force = -75000;
+let move_speed = 20000;
 
 function calc_idx(x, y) { return (y * MAP_WIDTH + x); }
 
@@ -39,7 +39,7 @@ function init_platformer() {
     player_y = 10 * 65536;
     player_vx = 0;
     player_vy = 0;
-    Log("[PLATFORM] Kernel Ready (v2)");
+    Log("[PLATFORM] Kernel Ready (v3)");
 }
 
 function load_tile(x, y, color, char, type) {
@@ -50,18 +50,21 @@ function load_tile(x, y, color, char, type) {
 
 function update_physics() {
     player_vy = player_vy + gravity;
-    player_vx = (player_vx * 8) / 10; // More friction for better control
+    player_vx = (player_vx * 8) / 10; // friction
 
     let nx = player_x + player_vx;
     let ny = player_y + player_vy;
 
-    // 1. Vertical Collision
-    let bx = player_x / 65536;
+    // Player bounding box (center-aligned for collision checks)
+    let lx = player_x / 65536;
+    let rx = (player_x + 65535) / 65536;
+
+    // 1. Vertical Collision (check both left and right edges)
     let by_foot = (ny + 65535) / 65536;
     let by_head = ny / 65536;
 
     if (player_vy > 0) {
-        if (get_collision(bx, by_foot)) {
+        if (get_collision(lx, by_foot) || get_collision(rx, by_foot)) {
             player_vy = 0;
             player_y = (by_foot - 1) * 65536;
             ny = player_y;
@@ -69,7 +72,9 @@ function update_physics() {
             player_y = ny;
         }
     } else if (player_vy < 0) {
-        if (get_collision(bx, by_head)) {
+        // Double check midpoint to prevent tunneling through thin lines if vy is high
+        let by_mid = (player_y + player_vy/2) / 65536;
+        if (get_collision(lx, by_head) || get_collision(rx, by_head) || get_collision(lx, by_mid)) {
             player_vy = 0;
             player_y = (by_head + 1) * 65536;
             ny = player_y;
@@ -81,21 +86,21 @@ function update_physics() {
     }
 
     // 2. Horizontal Collision
-    let rx = (nx + 65535) / 65536;
-    let lx = nx / 65536;
+    let h_rx = (nx + 65535) / 65536;
+    let h_lx = nx / 65536;
     let py = player_y / 65536;
 
     if (player_vx > 0) {
-        if (get_collision(rx, py)) {
+        if (get_collision(h_rx, py)) {
             player_vx = 0;
-            player_x = (rx - 1) * 65536;
+            player_x = (h_rx - 1) * 65536;
         } else {
             player_x = nx;
         }
     } else if (player_vx < 0) {
-        if (get_collision(lx, py)) {
+        if (get_collision(h_lx, py)) {
             player_vx = 0;
-            player_x = (lx + 1) * 65536;
+            player_x = (h_lx + 1) * 65536;
         } else {
             player_x = nx;
         }
@@ -108,8 +113,7 @@ function update_physics() {
     // Win condition: reach right side
     if (player_x >= 38 * 65536) {
         bus_send(EVT_LEVEL_TRANSITION, K_PLATFORM, K_HOST, 0, 0, 0); // Back to Hub
-        // Reset pos to prevent multiple triggers
-        player_x = 5 * 65536;
+        player_x = 5 * 65536; // Reset pos
     }
 
     if (player_x > 39 * 65536) player_x = 39 * 65536;
