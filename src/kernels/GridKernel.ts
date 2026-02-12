@@ -168,11 +168,11 @@ function move_entity(id, dx, dy) {
 function kill_entity(id) {
     let ent = get_ent_ptr(id);
     COLLISION_MAP[calc_idx(ent.x, ent.y)] = 0;
-    ent.char = 36;
-    ent.color = 16766720; 
-    ent.type = 3;
+    // Keep character (e.g. 'r' or 'R'), change color to gray
+    ent.color = 8947848; // 0x888888 in decimal
+    ent.type = 3; // ITEM
     redraw_cell(ent.x, ent.y, ent.color, ent.char);
-    Log("[GRID] Entity Dropped Loot");
+    Log("[GRID] Entity Died (Corpse)");
 }
 
 function try_pickup(playerId, x, y) {
