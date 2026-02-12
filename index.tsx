@@ -55,6 +55,7 @@ const App = () => {
   
   // Track successful kernel loads to prevent loop execution if load failed
   const [activeKernels, setActiveKernels] = useState<Set<string>>(new Set());
+  const [gameOver, setGameOver] = useState(false);
 
   // Bus Log Sidebar State
   const [showBus, setShowBus] = useState(false);
@@ -240,6 +241,7 @@ const App = () => {
             type = terrain.passable ? 0 : 1;
           } else if (char === '@') {
              type = 0;
+             charCode = 32; // Use Space for terrain at spawn point
           }
           if (!terrain && char !== '@' && char !== ' ') {
              type = 1;
@@ -349,6 +351,10 @@ const App = () => {
                   forthService.logPacket(header[1], header[2], header[0], header[3], header[4], header[5]);
                   
                   const target = header[2]; 
+
+                  if (op === Opcode.EVT_DEATH && header[3] === 0) {
+                      setGameOver(true);
+                  }
                   
                   if (target === KernelID.BUS) {
                       // Broadcast (excluding sender)
@@ -730,6 +736,32 @@ const App = () => {
 
         {/* VIEW MODES */}
         {viewMode === "ARCHITECT" && worldInfo && <ArchitectView data={worldInfo} />}
+
+        {/* GAME OVER OVERLAY */}
+        {gameOver && (
+            <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: 'rgba(50, 0, 0, 0.8)',
+                display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
+                zIndex: 10000, color: 'white', textShadow: '2px 2px 4px #000'
+            }}>
+                <h1 style={{ fontSize: '4em', margin: 0 }}>GAME OVER</h1>
+                <button
+                    onClick={() => {
+                        setGameOver(false);
+                        setMode("BOOT");
+                        setLog([]);
+                    }}
+                    style={{
+                        marginTop: '20px', padding: '15px 30px', fontSize: '1.5em',
+                        backgroundColor: 'red', color: 'white', border: 'none', cursor: 'pointer',
+                        boxShadow: '0 0 10px rgba(255,0,0,0.5)'
+                    }}
+                >
+                    RESTART SIMULATION
+                </button>
+            </div>
+        )}
 
         {viewMode === "GAME" && (mode === "GRID" || mode === "PLATFORM") && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>

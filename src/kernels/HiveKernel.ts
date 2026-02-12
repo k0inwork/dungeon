@@ -34,6 +34,17 @@ struct HiveEntity {
     type
 }
 
+struct RpgEntity {
+    hp,
+    maxHp,
+    atk,
+    def,
+    level,
+    exp,
+    state,
+    targetId
+}
+
 function get_hive_ptr(id) {
     return HiveEntity(id);
 }
