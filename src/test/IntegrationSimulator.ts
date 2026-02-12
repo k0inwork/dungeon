@@ -5,6 +5,7 @@ import { MEMORY } from "../constants/Memory";
 
 export class IntegrationSimulator {
     kernels: Map<number, KernelTestRunner> = new Map();
+    busLog: string[] = [];
 
     addKernel(id: number, name: string, runner: KernelTestRunner) {
         this.kernels.set(id, runner);
@@ -57,6 +58,12 @@ export class IntegrationSimulator {
                     const target = data[offset + 2];
                     const packetLen = PACKET_SIZE_INTS;
                     const packet = data.subarray(offset, offset + packetLen);
+
+                    // Logging for Trace
+                    const opName = Opcode[op] || op;
+                    const senderName = KernelID[id] || id;
+                    const targetName = KernelID[target] || target;
+                    this.busLog.push(`[BUS] ${senderName} -> ${targetName}: ${opName} (${data[offset+3]}, ${data[offset+4]}, ${data[offset+5]})`);
 
                     if (target === KernelID.BUS) {
                         Object.keys(inboxes).forEach(tid => {

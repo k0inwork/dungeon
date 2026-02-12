@@ -39,19 +39,13 @@ describe('Integration: Rat Chase', () => {
     // 1. Spawn Player at 10,10
     grid.run('10 10 65535 64 0 SPAWN_ENTITY');
 
-    // 2. Spawn Aggressive Rat at 12,10 (Distance 2)
+    // 2. Spawn Aggressive Rat at 15,10 (Distance 5)
     // type 2 = Aggressive
-    grid.run('12 10 16711680 114 2 SPAWN_ENTITY');
+    grid.run('15 10 16711680 114 2 SPAWN_ENTITY');
 
     console.log(`Entities spawned. Grid Entity Count: ${grid.run('ENTITY_COUNT @ .N')}`);
 
-    // Initial Ticks to sync spawn events
-    // We need at least 2 ticks for: GRID sends -> SIM routes -> HIVE processes
-    sim.tick();
-    sim.tick();
-    sim.tick();
-
-    // 3. Perform several ticks
+    // 3. Perform ticks
     const now = new Date();
     const timestamp = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,'0')}-${now.getDate().toString().padStart(2,'0')}_${now.getHours().toString().padStart(2,'0')}-${now.getMinutes().toString().padStart(2,'0')}-${now.getSeconds().toString().padStart(2,'0')}`;
     const artifactDir = `./test-results/run_${timestamp}`;
@@ -63,14 +57,14 @@ describe('Integration: Rat Chase', () => {
 
     let logOutput = "[INTEGRATION TEST] Starting Rat Chase Simulation...\n";
     logOutput += `Timestamp: ${now.toLocaleString()}\n`;
-    logOutput += "TICK | PLAYER POS | RAT POS\n";
-    logOutput += "----------------------------\n";
+    logOutput += "TICK | PLAYER POS | RAT POS          | EVENTS\n";
+    logOutput += "------------------------------------------------------------\n";
 
     console.log("\n" + logOutput.trim());
 
     const trace: any[] = [];
 
-    for(let i=0; i<10; i++) {
+    for(let i=0; i<20; i++) {
         const gridMem = new DataView(grid.getMemory());
 
         const getVal = (id: number, offset: number) => {
@@ -83,11 +77,14 @@ describe('Integration: Rat Chase', () => {
         const rx = getVal(1, 12);
         const ry = getVal(1, 8);
 
-        const line = `${i.toString().padEnd(4)} | ${px},${py.toString().padEnd(2)}     | ${rx},${ry}`;
+        const events = sim.busLog.join(" | ");
+        sim.busLog = []; // Clear for next tick
+
+        const line = `${i.toString().padEnd(4)} | ${px},${py.toString().padEnd(2)}     | ${rx.toString().padEnd(2)},${ry.toString().padEnd(2)}        | ${events}`;
         console.log(line);
         logOutput += line + "\n";
 
-        trace.push({ tick: i, player: {x: px, y: py}, rat: {x: rx, y: ry} });
+        trace.push({ tick: i, player: {x: px, y: py}, rat: {x: rx, y: ry}, events });
 
         sim.tick();
     }
@@ -119,8 +116,8 @@ describe('Integration: Rat Chase', () => {
 
     console.log(`Artifacts saved to ${artifactDir}`);
 
-    // Rat was at 12,10. Player at 10,10.
+    // Rat was at 15,10. Player at 10,10.
     // Rat should have moved closer to the player.
-    expect(finalX).toBeLessThan(12);
+    expect(finalX).toBeLessThan(15);
   });
 });
