@@ -408,24 +408,22 @@ const App = () => {
   const getEntityAt = (x: number, y: number): number => {
       if (!activeKernels.has("GRID")) return -1;
       const gridProc = forthService.get("GRID");
-      const gridMem = new DataView(gridProc.getMemory());
-      const ENTITY_TABLE_ADDR = 0x90000; 
-      const MAX_ENTITIES = 32;
-      const GRID_ENT_SIZE = 20; 
-      
-      for (let i = 0; i < MAX_ENTITIES; i++) {
-          const base = ENTITY_TABLE_ADDR + (i * GRID_ENT_SIZE);
-          const entChar = gridMem.getInt32(base, true); 
-          if (entChar === 0) continue; 
-          
-          const entY = gridMem.getInt32(base + 8, true);
-          const entX = gridMem.getInt32(base + 12, true);
-          
-          if (entX === x && entY === y) {
-              return i;
-          }
-      }
-      return -1;
+      const gridMem = new Uint8Array(gridProc.getMemory());
+      const ENTITY_MAP_ADDR = 0x31000;
+      const idx = y * MEMORY.GRID_WIDTH + x;
+      const val = gridMem[ENTITY_MAP_ADDR + idx];
+      return val === 0 ? -1 : val - 1;
+  };
+
+  const isWallAt = (x: number, y: number): boolean => {
+      if (!activeKernels.has("GRID")) return false;
+      const gridProc = forthService.get("GRID");
+      const gridMem = new Uint8Array(gridProc.getMemory());
+      const COLLISION_MAP_ADDR = 0x30000;
+      const ENTITY_MAP_ADDR = 0x31000;
+      const idx = y * MEMORY.GRID_WIDTH + x;
+      // Wall if collision is 1 but no entity is there
+      return gridMem[COLLISION_MAP_ADDR + idx] === 1 && gridMem[ENTITY_MAP_ADDR + idx] === 0;
   };
 
   const handleInspect = (x: number, y: number) => {
@@ -552,6 +550,12 @@ const App = () => {
             if (cx >= MEMORY.GRID_WIDTH) cx = MEMORY.GRID_WIDTH - 1;
             if (cy >= MEMORY.GRID_HEIGHT) cy = MEMORY.GRID_HEIGHT - 1;
             
+            // Wall Check: Block cursor from entering walls
+            if (isWallAt(cx, cy)) {
+                cx = cursorPos.x;
+                cy = cursorPos.y;
+            }
+
             // Range Check & Block movement outside range
             if (selectedSkill) {
                 const dist = Math.abs(cx - playerPos.x) + Math.abs(cy - playerPos.y);
