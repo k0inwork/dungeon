@@ -2,29 +2,32 @@
 import { expect, test, describe, beforeAll } from 'vitest';
 import { AetherTranspiler } from '../compiler/AetherTranspiler';
 import { KernelTestRunner } from './KernelRunner';
+import { IntegrationSimulator } from './IntegrationSimulator';
 import { KernelID } from '../types/Protocol';
 import { STANDARD_KERNEL_FIRMWARE } from '../kernels/SharedBlocks';
 
-describe('Cross-Kernel Struct Arrays', () => {
+describe('NPC VSO Access', () => {
   beforeAll(() => {
     AetherTranspiler.reset();
   });
 
-  test('Kernel A exports, Kernel B consumes', async () => {
+  test('Generic struct XXX(id) access works for dynamically exported VSOs', async () => {
+    const sim = new IntegrationSimulator();
+
     const jsA = `
-      struct TestNPC { hp, power }
-      let npcs = new Array(TestNPC, 10);
-      export npcs;
+      struct MyData { val1, val2 }
+      let data_array = new Array(MyData, 10, 0x80000);
+      export data_array;
       function init() {
-        TestNPC(0).hp = 100;
-        TestNPC(1).hp = 50;
+        MyData(0).val1 = 123;
+        MyData(1).val1 = 456;
       }
     `;
 
     const jsB = `
-      function check(id) {
-        let n = TestNPC(id);
-        return n.hp;
+      function get_val(id) {
+        let d = MyData(id);
+        return d.val1;
       }
     `;
 
@@ -33,21 +36,18 @@ describe('Cross-Kernel Struct Arrays', () => {
 
     const runnerA = new KernelTestRunner('TEST1', KernelID.TEST1);
     await runnerA.boot([...STANDARD_KERNEL_FIRMWARE, forthA]);
+    sim.addKernel(KernelID.TEST1, 'TEST1', runnerA);
 
     const runnerB = new KernelTestRunner('TEST2', KernelID.TEST2);
     await runnerB.boot([...STANDARD_KERNEL_FIRMWARE, forthB]);
+    sim.addKernel(KernelID.TEST2, 'TEST2', runnerB);
 
-    // Run init in A
     runnerA.proc.run('INIT');
 
-    // Check in B
-    runnerB.proc.forth.interpret('0 CHECK\n');
-    const hp0 = runnerB.proc.forth.pop();
+    runnerB.proc.forth.interpret('0 GET_VAL\n');
+    expect(runnerB.proc.forth.pop()).toBe(123);
 
-    runnerB.proc.forth.interpret('1 CHECK\n');
-    const hp1 = runnerB.proc.forth.pop();
-
-    expect(hp0).toBe(100);
-    expect(hp1).toBe(50);
+    runnerB.proc.forth.interpret('1 GET_VAL\n');
+    expect(runnerB.proc.forth.pop()).toBe(456);
   });
 });

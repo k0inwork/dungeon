@@ -8,6 +8,12 @@ export enum KernelID {
     HIVE = 3,
     BATTLE = 4,
     PLATFORM = 5,
+
+    // Dynamic/Test Kernels (10-20)
+    TEST1 = 10,
+    TEST2 = 11,
+    TEST3 = 12,
+
     BUS = 255
 }
 
@@ -66,8 +72,8 @@ export const VSO_REGISTRY: Record<string, VsoStructDef> = {
         typeId: 1,
         owner: KernelID.GRID,
         baseAddr: 0x90000,
-        sizeBytes: 20,
-        fields: ["char", "color", "y", "x", "type"]
+        sizeBytes: 24,
+        fields: ["char", "color", "y", "x", "type", "itemId"]
     },
     "HiveEntity": {
         typeId: 2,
@@ -80,8 +86,15 @@ export const VSO_REGISTRY: Record<string, VsoStructDef> = {
         typeId: 3,
         owner: KernelID.BATTLE,
         baseAddr: 0xA0000,
-        sizeBytes: 32,
-        fields: ["hp", "maxHp", "atk", "def", "level", "exp", "state", "targetId"]
+        sizeBytes: 36,
+        fields: ["hp", "maxHp", "atk", "def", "level", "exp", "state", "targetId", "invItem"]
+    },
+    "NPC": {
+        typeId: 3,
+        owner: KernelID.BATTLE,
+        baseAddr: 0xA0000,
+        sizeBytes: 36,
+        fields: ["hp", "maxHp", "atk", "def", "level", "exp", "state", "targetId", "invItem"]
     },
     "PlayerState": {
         typeId: 4,

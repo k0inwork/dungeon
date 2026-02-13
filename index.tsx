@@ -25,6 +25,7 @@ interface EntityStats {
     atk: number;
     def: number;
     state: number;
+    invItem: number;
     x: number;
     y: number;
 }
@@ -216,6 +217,8 @@ const App = () => {
     const platProc = forthService.get("PLATFORM");
     if (platProc.isReady) {
         platProc.run("INIT_PLATFORMER");
+        const levelIdx = ["hub", "rogue_dungeon", "platform_dungeon", "platform_dungeon_2"].indexOf(level.id);
+        platProc.run(`${levelIdx} SET_LEVEL`);
     }
 
     level.map_layout.forEach((row: string, y: number) => {
@@ -285,7 +288,7 @@ const App = () => {
   const handleLevelTransition = (targetLevelIdx: number) => {
       if (!worldInfo || !worldInfo.levels) return;
 
-      const levelIds = ["hub", "rogue_dungeon", "platform_dungeon"];
+      const levelIds = ["hub", "rogue_dungeon", "platform_dungeon", "platform_dungeon_2"];
       const targetId = levelIds[targetLevelIdx];
       const nextLevel = worldInfo.levels[targetId];
 
@@ -336,31 +339,26 @@ const App = () => {
   };
 
   const tickSimulation = () => {
-      const main = forthService.get("GRID");
-      const hive = forthService.get("HIVE");
-      const player = forthService.get("PLAYER");
-      const battle = forthService.get("BATTLE");
+      const kernels: { id: number, proc: any }[] = [];
 
-      if (!main.isReady || !hive.isReady || !player.isReady || !battle.isReady) return;
-      if (!activeKernels.has("GRID") || !activeKernels.has("HIVE") || !activeKernels.has("PLAYER") || !activeKernels.has("BATTLE")) return;
+      forthService.processes.forEach((proc, name) => {
+          if (proc.isReady) {
+              const numericId = KernelID[name as keyof typeof KernelID];
+              if (numericId !== undefined) {
+                  kernels.push({ id: numericId, proc });
+              }
+          }
+      });
 
-      const platform = forthService.get("PLATFORM");
-
-      const kernels = [
-          { id: KernelID.GRID, proc: main },
-          { id: KernelID.HIVE, proc: hive },
-          { id: KernelID.PLAYER, proc: player },
-          { id: KernelID.BATTLE, proc: battle },
-          { id: KernelID.PLATFORM, proc: platform }
-      ];
+      if (kernels.length === 0) return;
 
       const runBroker = () => {
           const inboxes = new Map<number, number[]>();
-          inboxes.set(KernelID.GRID, []);
-          inboxes.set(KernelID.HIVE, []);
-          inboxes.set(KernelID.PLAYER, []);
-          inboxes.set(KernelID.BATTLE, []);
-          inboxes.set(KernelID.PLATFORM, []);
+
+          // Initialize inboxes for all known kernels + BUS
+          Object.values(KernelID).forEach(v => {
+              if (typeof v === 'number') inboxes.set(v, []);
+          });
 
           kernels.forEach(k => {
               if (!k.proc.isReady) return;
@@ -429,14 +427,16 @@ const App = () => {
       runBroker();
       
       // 2. RUN CYCLES (The Heartbeat)
-      player.run("PROCESS_INBOX");
-      main.run("PROCESS_INBOX");
-      battle.run("PROCESS_INBOX"); 
-      if (platform.isReady && activeKernels.has("PLATFORM")) {
-          platform.run("PROCESS_INBOX");
-      }
-      hive.run("RUN_HIVE_CYCLE");
-      main.run("RUN_ENV_CYCLE");
+      kernels.forEach(k => {
+          k.proc.run("PROCESS_INBOX");
+
+          // Specialized cycles if defined
+          if (k.proc.isWordDefined("RUN_HIVE_CYCLE")) k.proc.run("RUN_HIVE_CYCLE");
+          if (k.proc.isWordDefined("RUN_ENV_CYCLE")) k.proc.run("RUN_ENV_CYCLE");
+          if (k.proc.isWordDefined("RUN_BATTLE_CYCLE")) k.proc.run("RUN_BATTLE_CYCLE");
+          if (k.proc.isWordDefined("RUN_PLAYER_CYCLE")) k.proc.run("RUN_PLAYER_CYCLE");
+          if (k.proc.isWordDefined("RUN_GENERIC_CYCLE")) k.proc.run("RUN_GENERIC_CYCLE");
+      });
 
       // 3. SECOND BROKER PASS: Deliver responses emitted during cycles
       runBroker();
@@ -479,7 +479,7 @@ const App = () => {
           const battleProc = forthService.get("BATTLE");
           const battleMem = new DataView(battleProc.getMemory());
           const RPG_TABLE_ADDR = 0xA0000; 
-          const RPG_ENT_SIZE = 32; 
+          const RPG_ENT_SIZE = 36;
           const base = RPG_TABLE_ADDR + (foundId * RPG_ENT_SIZE);
           
           const hp = battleMem.getInt32(base, true);
@@ -487,11 +487,12 @@ const App = () => {
           const atk = battleMem.getInt32(base + 8, true);
           const def = battleMem.getInt32(base + 12, true);
           const state = battleMem.getInt32(base + 24, true);
+          const invItem = battleMem.getInt32(base + 32, true);
 
           setInspectStats({
               id: foundId,
               x, y,
-              hp, maxHp, atk, def, state
+              hp, maxHp, atk, def, state, invItem
           });
       } else {
           setInspectStats(null);
@@ -827,6 +828,7 @@ const App = () => {
                     <div>ATK: {inspectStats.atk}</div>
                     <div>DEF: {inspectStats.def}</div>
                     <div>STATE: {inspectStats.state === 1 ? "DEAD" : "ALIVE"}</div>
+                    <div>INV: <span style={{color:"yellow"}}>{inspectStats.invItem || "NONE"}</span></div>
                     <button onClick={() => setInspectStats(null)} style={{marginTop: "10px", width: "100%", background: "#222", color: "#fff", border: "1px solid #555", cursor: "pointer"}}>CLOSE</button>
                 </div>
             )}

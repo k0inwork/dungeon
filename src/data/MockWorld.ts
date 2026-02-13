@@ -94,6 +94,45 @@ const PLATFORM_LEVEL: LevelData = {
     }
 };
 
+const PLATFORM_LEVEL_2: LevelData = {
+    id: "platform_dungeon_2",
+    name: "The High Spire",
+    description: "Even more dangerous jumps.",
+    map_layout: [
+        "########################################",
+        "#......................................#",
+        "#......................................#",
+        "#######................................#",
+        "#......................................#",
+        "#......................................#",
+        "#...........#######....................#",
+        "#......................................#",
+        "#......................................#",
+        "#...........................#######....#",
+        "#......................................#",
+        "#......................................#",
+        "#######................................#",
+        "#......................................#",
+        "#......................................#",
+        "#...........#######....................#",
+        "#......................................#",
+        "#......................................#",
+        "#......................................#",
+        "########################################"
+    ],
+    terrain_legend: [
+      { symbol: ".", name: "Air", type: "FLOOR", color: 0x111111, passable: true, description: "Empty space." },
+      { symbol: "#", name: "Grated Platform", type: "WALL", color: 0x55AAFF, passable: false, description: "Blue steel." }
+    ],
+    entities: [],
+    entity_roster: [],
+    platformer_config: {
+      gravity: 0.6,
+      jump_force: -1.5,
+      wall_color: 0x55AAFF
+    }
+};
+
 export const MOCK_WORLD_DATA: WorldData = {
   theme: {
     name: "Aethelgard Underworld",
@@ -125,12 +164,14 @@ export const MOCK_WORLD_DATA: WorldData = {
   atlas: [
     { id: "hub", name: "The Neon-Hub", biome: "HUB", difficulty: 0, connections: ["rogue_dungeon", "platform_dungeon"] },
     { id: "rogue_dungeon", name: "The Deep Sewers", biome: "SEWER", difficulty: 1, connections: ["hub"] },
-    { id: "platform_dungeon", name: "The Vertical Shaft", biome: "SHAFT", difficulty: 1, connections: ["hub"] }
+    { id: "platform_dungeon", name: "The Vertical Shaft", biome: "SHAFT", difficulty: 1, connections: ["hub", "platform_dungeon_2"] },
+    { id: "platform_dungeon_2", name: "The High Spire", biome: "SHAFT", difficulty: 2, connections: ["platform_dungeon"] }
   ],
   levels: {
       "hub": HUB_LEVEL,
       "rogue_dungeon": ROGUE_LEVEL,
-      "platform_dungeon": PLATFORM_LEVEL
+      "platform_dungeon": PLATFORM_LEVEL,
+      "platform_dungeon_2": PLATFORM_LEVEL_2
   },
   active_level: HUB_LEVEL
 };
