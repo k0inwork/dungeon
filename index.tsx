@@ -57,6 +57,11 @@ const App = () => {
 
   // Track successful kernel loads to prevent loop execution if load failed
   const [activeKernels, setActiveKernels] = useState<Set<string>>(new Set());
+  const [gameOver, setGameOver] = useState(false);
+
+  // Persistent HUD State
+  const [playerStats, setPlayerStats] = useState({ hp: 0, maxHp: 0, gold: 0, inv: 0 });
+  const [groundItems, setGroundItems] = useState<string[]>([]);
 
   // Bus Log Sidebar State
   const [showBus, setShowBus] = useState(false);
@@ -317,8 +322,77 @@ const App = () => {
       setWorldInfo(data);
       addLog(`World Generated: ${data.theme.name}`);
       
+      const mainProc = forthService.get("GRID");
+      const hiveProc = forthService.get("HIVE");
+      const playerProc = forthService.get("PLAYER");
+      
+      addLog("Resetting Physics & AI Kernels...");
+      mainProc.run("INIT_MAP"); // Now calls AJS implementation
+      hiveProc.run("INIT_HIVE");
+      playerProc.run("INIT_PLAYER"); // New AJS Init
+
+      addLog("Injecting Map Data...");
+      const level = data.active_level;
+
+      level.map_layout.forEach((row, y) => {
+        if (y >= MEMORY.GRID_HEIGHT) return;
+        for (let x = 0; x < MEMORY.GRID_WIDTH; x++) {
+          const char = row[x] || ' ';
+          let color = 0x888888; 
+          let type = 0; // 0 = Walkable, 1 = Wall
+          let charCode = char.charCodeAt(0);
+
+          const terrain = level.terrain_legend.find(t => t.symbol === char);
+          if (terrain) {
+            color = terrain.color;
+            type = terrain.passable ? 0 : 1;
+          } else if (char === '@') {
+             type = 0;
+             charCode = 32; // Use Space for terrain at spawn point
+          }
+          if (!terrain && char !== '@' && char !== ' ') {
+             type = 1;
+          }
+
+          // LOAD_TILE is now AJS-backed, args same order
+          mainProc.run(`${x} ${y} ${color} ${charCode} ${type} LOAD_TILE`);
+        }
+      });
+      
+      let px = 5, py = 5;
+      level.map_layout.forEach((row, y) => {
+          const x = row.indexOf('@');
+          if (x !== -1) { px = x; py = y; }
+      });
+      addLog(`Spawning Player at ${px},${py}`);
+      setPlayerPos({x: px, y: py});
+      setCursorPos({x: px, y: py});
+      mainProc.run(`${px} ${py} 65535 64 0 SPAWN_ENTITY`);
+
+      level.entities.forEach(ent => {
+          const c = ent.glyph.color || 0xFF0000;
+          const ch = ent.glyph.char.charCodeAt(0);
+          
+          // Determine AI Type
+          let aiType = 1; // Default Passive
+          
+          if (ent.glyph.char === '$') {
+              aiType = 3; // ITEM/LOOT
+          } else if (ent.scripts && ent.scripts.passive && ent.scripts.passive.includes('aggressive')) {
+              aiType = 2; // Aggressive
+          } else if (ent.id.includes("giant")) {
+              aiType = 2; 
+          }
+
+          mainProc.run(`${ent.x} ${ent.y} ${c} ${ch} ${aiType} SPAWN_ENTITY`);
+      });
+
+      platformerRef.current.configure(level.platformer_config);
       loadLevel(data.active_level);
       addLog("Simulation Ready.");
+
+      // Initial Sync
+      setTimeout(syncKernelState, 100);
 
     } catch (e) {
       addLog(`Error: ${e}`);
@@ -344,6 +418,23 @@ const App = () => {
       if (!main.isReady || !hive.isReady || !player.isReady || !battle.isReady) return;
       if (!activeKernels.has("GRID") || !activeKernels.has("HIVE") || !activeKernels.has("PLAYER") || !activeKernels.has("BATTLE")) return;
 
+      const processPackets = () => {
+          // 1. MESSAGE BROKER: Move Packets from Output -> Input
+          const kernels = [
+              { id: KernelID.GRID, proc: main },
+              { id: KernelID.HIVE, proc: hive },
+              { id: KernelID.PLAYER, proc: player },
+              { id: KernelID.BATTLE, proc: battle }
+          ];
+
+          const inboxes: Record<number, number[]> = {
+              [KernelID.GRID]: [],
+              [KernelID.HIVE]: [],
+              [KernelID.PLAYER]: [],
+              [KernelID.BATTLE]: []
+          };
+
+          kernels.forEach(k => {
       const platform = forthService.get("PLATFORM");
 
       const kernels = [
@@ -383,6 +474,39 @@ const App = () => {
                       forthService.logPacket(header[1], header[2], header[0], header[3], header[4], header[5]);
 
                       const target = header[2];
+                      if (op === Opcode.EVT_DEATH && header[3] === 0) setGameOver(true);
+                      if (op === Opcode.EVT_MOVED && header[3] === 0) setPlayerPos({ x: header[4], y: header[5] });
+
+                      if (target === KernelID.BUS) {
+                          Object.keys(inboxes).forEach(keyStr => {
+                              const key = Number(keyStr);
+                              if (key !== header[1]) inboxes[key].push(...packet);
+                          });
+                      }
+                      else if (target !== KernelID.HOST && inboxes[target]) {
+                          inboxes[target].push(...packet);
+                      }
+                      offset += packetLen;
+                  }
+                  outMem[0] = 0; // Clear Output Queue
+              }
+          });
+
+          kernels.forEach(k => {
+              const inboxData = inboxes[k.id];
+              const inMem = new Int32Array(k.proc.getMemory(), MEMORY.INPUT_QUEUE_ADDR, 1024);
+              if (inboxData.length > 0) {
+                  const currentCount = inMem[0];
+                  inMem[0] = currentCount + inboxData.length;
+                  inMem.set(inboxData, currentCount + 1);
+              }
+          });
+      };
+
+      // Execution sequence:
+      // 1. Process initial commands (from handleKeyDown)
+      processPackets();
+      // 2. Run Kernels
 
                       if (target === KernelID.HOST) {
                           if (op === Opcode.EVT_LEVEL_TRANSITION) {
@@ -437,6 +561,52 @@ const App = () => {
       }
       hive.run("RUN_HIVE_CYCLE");
       main.run("RUN_ENV_CYCLE");
+      // 3. Process resulting events (updates React state immediately)
+      processPackets();
+
+      // 4. Second Pass for GRID: Process events like EVT_DEATH immediately
+      // This ensures color changes (gray rats) happen in the same frame as death.
+      main.run("PROCESS_INBOX");
+
+      syncKernelState();
+      
+      if (inspectStats) handleInspect(inspectStats.x, inspectStats.y);
+  };
+
+  const syncKernelState = () => {
+      const playerProc = forthService.get("PLAYER");
+      const gridProc = forthService.get("GRID");
+      if (!playerProc?.isReady || !gridProc?.isReady) return;
+
+      // 1. Sync Player Stats (0xC0000)
+      const pMem = new DataView(playerProc.getMemory());
+      const pBase = 0xC0000;
+      setPlayerStats({
+          hp: pMem.getInt32(pBase, true),
+          maxHp: pMem.getInt32(pBase + 4, true),
+          gold: pMem.getInt32(pBase + 8, true),
+          inv: pMem.getInt32(pBase + 12, true)
+      });
+
+      // 2. Sync Ground Items at Player Position
+      // Read current player X, Y from Grid Kernel directly for absolute accuracy
+      const gMemView = new DataView(gridProc.getMemory());
+      const px = gMemView.getInt32(0x90000 + 12, true); // Entity 0 is Player
+      const py = gMemView.getInt32(0x90000 + 8, true);
+
+      const idx = py * MEMORY.GRID_WIDTH + px;
+      const lootVal = new Uint8Array(gridProc.getMemory())[0x32000 + idx]; // LOOT_MAP
+
+      if (lootVal > 0) {
+          const lootId = lootVal - 1;
+          const char = gMemView.getInt32(0x90000 + (lootId * 20), true);
+          let name = `Item (${String.fromCharCode(char)})`;
+          if (char === 82) name = "Corpse of Big Rat";
+          if (char === 114) name = "Corpse of Rat";
+          if (char === 36) name = "Gold Coin";
+          setGroundItems([name]);
+      } else {
+          setGroundItems([]);
 
       // 3. SECOND BROKER PASS: Deliver responses emitted during cycles
       runBroker();
@@ -452,24 +622,22 @@ const App = () => {
   const getEntityAt = (x: number, y: number): number => {
       if (!activeKernels.has("GRID")) return -1;
       const gridProc = forthService.get("GRID");
-      const gridMem = new DataView(gridProc.getMemory());
-      const ENTITY_TABLE_ADDR = 0x90000; 
-      const MAX_ENTITIES = 32;
-      const GRID_ENT_SIZE = 20; 
-      
-      for (let i = 0; i < MAX_ENTITIES; i++) {
-          const base = ENTITY_TABLE_ADDR + (i * GRID_ENT_SIZE);
-          const entChar = gridMem.getInt32(base, true); 
-          if (entChar === 0) continue; 
-          
-          const entY = gridMem.getInt32(base + 8, true);
-          const entX = gridMem.getInt32(base + 12, true);
-          
-          if (entX === x && entY === y) {
-              return i;
-          }
-      }
-      return -1;
+      const gridMem = new Uint8Array(gridProc.getMemory());
+      const ENTITY_MAP_ADDR = 0x31000;
+      const idx = y * MEMORY.GRID_WIDTH + x;
+      const val = gridMem[ENTITY_MAP_ADDR + idx];
+      return val === 0 ? -1 : val - 1;
+  };
+
+  const isWallAt = (x: number, y: number): boolean => {
+      if (!activeKernels.has("GRID")) return false;
+      const gridProc = forthService.get("GRID");
+      const gridMem = new Uint8Array(gridProc.getMemory());
+      const COLLISION_MAP_ADDR = 0x30000;
+      const ENTITY_MAP_ADDR = 0x31000;
+      const idx = y * MEMORY.GRID_WIDTH + x;
+      // Wall if collision is 1 but no entity is there
+      return gridMem[COLLISION_MAP_ADDR + idx] === 1 && gridMem[ENTITY_MAP_ADDR + idx] === 0;
   };
 
   const handleInspect = (x: number, y: number) => {
@@ -575,6 +743,11 @@ const App = () => {
 
         if (mode !== "GRID") return;
         
+        // Prevent default browser behavior for gameplay keys
+        if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(k)) {
+            e.preventDefault();
+        }
+
         // --- TARGET MODE INPUT ---
         if (targetMode) {
             if (k === "Escape") {
@@ -589,9 +762,10 @@ const App = () => {
                 const skill = PLAYER_SKILLS.find(s => s.key === k);
                 if (skill) {
                     setSelectedSkill(skill);
-                    // Re-evaluate range immediately for current cursor pos
-                    const dist = Math.abs(cursorPos.x - playerPos.x) + Math.abs(cursorPos.y - playerPos.y);
-                    setIsValidTarget(dist <= skill.range);
+                    // Reset cursor to player when switching skills for better UX
+                    setCursorPos({...playerPos});
+                    // Only HEAL is valid on self (ID 0)
+                    setIsValidTarget(skill.name === "HEAL");
                     addLog(`[TARGETING] Switched to ${skill.name} (Range: ${skill.range})`);
                 }
                 return;
@@ -609,21 +783,42 @@ const App = () => {
             if (cx >= MEMORY.GRID_WIDTH) cx = MEMORY.GRID_WIDTH - 1;
             if (cy >= MEMORY.GRID_HEIGHT) cy = MEMORY.GRID_HEIGHT - 1;
             
-            setCursorPos({x: cx, y: cy});
-            
-            // Range Check
+            // Wall Check: Block cursor from entering walls
+            if (isWallAt(cx, cy)) {
+                cx = cursorPos.x;
+                cy = cursorPos.y;
+            }
+
+            // Range Check & Block movement outside range
             if (selectedSkill) {
                 const dist = Math.abs(cx - playerPos.x) + Math.abs(cy - playerPos.y);
-                setIsValidTarget(dist <= selectedSkill.range);
+                if (dist <= selectedSkill.range) {
+                    setCursorPos({x: cx, y: cy});
+
+                    // Validate target: Attack skills cannot target self (ID 0)
+                    if (selectedSkill.name !== "HEAL" && cx === playerPos.x && cy === playerPos.y) {
+                        setIsValidTarget(false);
+                    } else {
+                        setIsValidTarget(true);
+                    }
+                }
+            } else {
+                setCursorPos({x: cx, y: cy});
             }
 
             if (k === "Enter" && selectedSkill) {
                 if (!isValidTarget) {
-                    addLog("TARGET OUT OF RANGE!");
+                    addLog("INVALID TARGET OR OUT OF RANGE!");
                     return;
                 }
-                const targetId = getEntityAt(cx, cy);
+                const targetId = getEntityAt(cursorPos.x, cursorPos.y);
                 if (targetId !== -1) {
+                    // Final safety: Cannot attack self
+                    if (selectedSkill.name !== "HEAL" && targetId === 0) {
+                        addLog("CANNOT ATTACK SELF!");
+                        return;
+                    }
+
                     addLog(`Executing ${selectedSkill.name} on ID ${targetId}`);
                     const playerProc = forthService.get("PLAYER");
                     if (playerProc && playerProc.isReady) {
@@ -656,22 +851,18 @@ const App = () => {
             if (currentLevelId === "hub") return;
             const skill = PLAYER_SKILLS.find(s => s.key === k);
             if (skill) {
+                // All skills now use Targeting Mode for consistency
+                setSelectedSkill(skill);
+                setTargetMode(true);
+                setCursorPos({...playerPos}); // Reset cursor to player
+
+                // Only HEAL is valid on self (ID 0)
+                setIsValidTarget(skill.name === "HEAL");
+
+                // Special log for HEAL
                 if (skill.name === "HEAL") {
-                    // Instant Self Cast
-                    const playerProc = forthService.get("PLAYER");
-                    if (playerProc && playerProc.isReady) {
-                        // Target = 0 (Self)
-                        const cmd = `0 OUT_PTR ! 303 2 255 0 0 ${skill.id} BUS_SEND`;
-                        playerProc.run(cmd);
-                        tickSimulation();
-                        addLog("Casting Self Heal...");
-                    }
+                    addLog(`[TARGETING] Select target for HEAL (Self). Press ENTER.`);
                 } else {
-                    // Requires Targeting
-                    setSelectedSkill(skill);
-                    setTargetMode(true);
-                    setCursorPos({...playerPos}); // Reset cursor to player
-                    setIsValidTarget(true); // Range 0 is valid at start
                     addLog(`[TARGETING] Select target for ${skill.name} (Range: ${skill.range})...`);
                 }
             }
@@ -685,17 +876,6 @@ const App = () => {
                 const cmd = `0 OUT_PTR ! 101 2 1 0 ${dx} ${dy} BUS_SEND`;
                 playerProc.run(cmd);
                 tickSimulation();
-                
-                // Track player position on success (for range checks)
-                // Note: Real position is in Wasm, this is a client prediction/cache.
-                // ideally we read it from EVT_MOVED, but this is responsive enough.
-                setPlayerPos(prev => {
-                    const nx = prev.x + dx;
-                    const ny = prev.y + dy;
-                    // Simple bounds clamp for local state
-                    if (nx < 0 || nx >= MEMORY.GRID_WIDTH || ny < 0 || ny >= MEMORY.GRID_HEIGHT) return prev;
-                    return {x: nx, y: ny};
-                });
             }
         }
         
@@ -802,9 +982,52 @@ const App = () => {
         {/* VIEW MODES */}
         {viewMode === "ARCHITECT" && worldInfo && <ArchitectView data={worldInfo} />}
 
+        {/* GAME OVER OVERLAY */}
+        {gameOver && (
+            <div style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: 'rgba(50, 0, 0, 0.8)',
+                display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
+                zIndex: 10000, color: 'white', textShadow: '2px 2px 4px #000'
+            }}>
+                <h1 style={{ fontSize: '4em', margin: 0 }}>GAME OVER</h1>
+                <button
+                    onClick={() => {
+                        setGameOver(false);
+                        setMode("BOOT");
+                        setLog([]);
+                    }}
+                    style={{
+                        marginTop: '20px', padding: '15px 30px', fontSize: '1.5em',
+                        backgroundColor: 'red', color: 'white', border: 'none', cursor: 'pointer',
+                        boxShadow: '0 0 10px rgba(255,0,0,0.5)'
+                    }}
+                >
+                    RESTART SIMULATION
+                </button>
+            </div>
+        )}
+
         {viewMode === "GAME" && (mode === "GRID" || mode === "PLATFORM") && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
             
+            {/* HUD PANEL - LEFT SIDE */}
+            <div style={{
+                position: 'absolute', top: 0, left: '-220px', width: '200px',
+                background: 'rgba(0, 20, 0, 0.9)', border: '1px solid #0f0',
+                padding: '10px', fontFamily: 'monospace', fontSize: '0.8em', zIndex: 20
+            }}>
+                <div style={{ borderBottom: '1px solid #333', marginBottom: '8px', color: '#fff' }}>PLAYER HUD</div>
+                <div style={{ marginBottom: '4px' }}>HP: <span style={{ color: playerStats.hp < 30 ? 'red' : '#0f0' }}>{playerStats.hp}/{playerStats.maxHp}</span></div>
+                <div style={{ marginBottom: '4px' }}>GOLD: <span style={{ color: 'gold' }}>{playerStats.gold}</span></div>
+                <div style={{ marginBottom: '4px' }}>INV: <span style={{ color: 'cyan' }}>{playerStats.inv}/10</span></div>
+
+                <div style={{ borderBottom: '1px solid #333', marginTop: '15px', marginBottom: '8px', color: '#fff' }}>ON GROUND</div>
+                {groundItems.length > 0 ? groundItems.map((it, i) => (
+                    <div key={i} style={{ color: '#aaa' }}>{it}</div>
+                )) : <div style={{ color: '#444' }}>Empty</div>}
+            </div>
+
             {/* INSPECTOR OVERLAY */}
             {inspectStats && (
                 <div style={{
@@ -837,7 +1060,7 @@ const App = () => {
                 width={MEMORY.GRID_WIDTH} 
                 height={MEMORY.GRID_HEIGHT} 
                 onGridClick={handleInspect}
-                cursor={targetMode ? cursorPos : isValidTarget ? null : {x: -1, y: -1}} // Hide default cursor if not target mode, or logic handled inside
+                cursor={(targetMode && !(selectedSkill?.name === "HEAL" && cursorPos.x === playerPos.x && cursorPos.y === playerPos.y)) ? cursorPos : null}
               />
               {/* Overlay for Invalid Target */}
               {targetMode && !isValidTarget && (
@@ -845,7 +1068,9 @@ const App = () => {
                       position: 'absolute', left: 0, right: 0, textAlign: 'center', 
                       color: 'red', fontWeight: 'bold', background: 'rgba(0,0,0,0.5)', pointerEvents: 'none'
                   }}>
-                      OUT OF RANGE
+                      {Math.abs(cursorPos.x - playerPos.x) + Math.abs(cursorPos.y - playerPos.y) > (selectedSkill?.range || 0)
+                        ? "OUT OF RANGE"
+                        : "INVALID TARGET"}
                   </div>
               )}
             </div>

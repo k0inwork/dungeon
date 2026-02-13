@@ -15,6 +15,7 @@ const MAX_ENTITIES = 32;
 
 const COLLISION_MAP = new Uint8Array(0x30000);
 const ENTITY_MAP    = new Uint8Array(0x31000);
+const LOOT_MAP      = new Uint8Array(0x32000);
 const TERRAIN_MAP   = new Uint32Array(0x40000);
 const VRAM          = new Uint32Array(0x80000);
 
@@ -64,6 +65,7 @@ function init_map() {
             draw_cell(x, y, 0, 32);
             COLLISION_MAP[i] = 0;
             ENTITY_MAP[i] = 0;
+            LOOT_MAP[i] = 0;
             TERRAIN_MAP[i] = 0;
             x++;
         }
@@ -87,9 +89,12 @@ function load_tile(x, y, color, char, type) {
 
 function find_entity_at(x, y) {
   if (check_bounds(x, y) == 0) return -1;
-  let val = ENTITY_MAP[calc_idx(x, y)];
-  if (val == 0) return -1;
-  return val - 1;
+  let idx = calc_idx(x, y);
+  let val = ENTITY_MAP[idx];
+  if (val != 0) return val - 1;
+  val = LOOT_MAP[idx];
+  if (val != 0) return val - 1;
+  return -1;
 }
 
 function spawn_entity(x, y, color, char, type) {
@@ -103,10 +108,12 @@ function spawn_entity(x, y, color, char, type) {
   ent.type = type;
 
   let i = calc_idx(x, y);
-  ENTITY_MAP[i] = ENTITY_COUNT + 1;
   draw_cell(x, y, color, char);
   
-  if (type != 3) {
+  if (type == 3) {
+      LOOT_MAP[i] = ENTITY_COUNT + 1;
+  } else {
+      ENTITY_MAP[i] = ENTITY_COUNT + 1;
       COLLISION_MAP[i] = 1;
   }
   
@@ -135,7 +142,7 @@ function refresh_tile(x, y, skipId) {
 
 function move_entity(id, dx, dy) {
   let ent = get_ent_ptr(id);
-  if (ent.char == 0) return;
+  if (ent.char == 0 || ent.type == 3) return;
 
   let tx = ent.x + dx;
   let ty = ent.y + dy;
@@ -182,30 +189,69 @@ function move_entity(id, dx, dy) {
   bus_send(EVT_MOVED, K_GRID, K_BUS, id, tx, ty);
 }
 
-function kill_entity(id) {
+function kill_entity(id, itemId) {
     let ent = get_ent_ptr(id);
-    COLLISION_MAP[calc_idx(ent.x, ent.y)] = 0;
-    ent.char = 36;
-    ent.color = 16766720; 
-    ent.type = 3;
-    redraw_cell(ent.x, ent.y, ent.color, ent.char);
-    Log("[GRID] Entity Dropped Loot");
+    let ex = ent.x;
+    let ey = ent.y;
+    let i = calc_idx(ex, ey);
+
+    COLLISION_MAP[i] = 0;
+    ENTITY_MAP[i] = 0;
+    LOOT_MAP[i] = id + 1;
+    // Keep character (e.g. 'r' or 'R'), change color to gray
+    ent.color = 8947848; // 0x888888 in decimal
+    ent.type = 3; // ITEM
+    redraw_cell(ex, ey, ent.color, ent.char);
+    Log("[GRID] Entity Died (Corpse)");
+
+    // Pop Item if present
+    if (itemId != 0) {
+        // Try to spawn Gold Coin ($ = 36, Color Gold = 16766720)
+        // at an adjacent passable tile
+        let found = 0;
+        let tx = ex + 1; let ty = ey;
+        if (check_bounds(tx, ty) && COLLISION_MAP[calc_idx(tx, ty)] == 0) { found = 1; }
+        else {
+            tx = ex - 1; ty = ey;
+            if (check_bounds(tx, ty) && COLLISION_MAP[calc_idx(tx, ty)] == 0) { found = 1; }
+            else {
+                tx = ex; ty = ey + 1;
+                if (check_bounds(tx, ty) && COLLISION_MAP[calc_idx(tx, ty)] == 0) { found = 1; }
+                else {
+                    tx = ex; ty = ey - 1;
+                    if (check_bounds(tx, ty) && COLLISION_MAP[calc_idx(tx, ty)] == 0) { found = 1; }
+                }
+            }
+        }
+
+        if (found) {
+            spawn_entity(tx, ty, 16766720, 36, 3);
+            Log("[GRID] Item Popped on Ground!");
+        }
+    }
 }
 
 function try_pickup(playerId, x, y) {
-    let id = find_entity_at(x, y);
-    if (id != -1) {
+    let idx = calc_idx(x, y);
+    let val = LOOT_MAP[idx];
+    if (val != 0) {
+        let id = val - 1;
         let ent = get_ent_ptr(id);
-        if (ent.char != 0) {
-            if (ent.type == 3) {
-                ent.char = 0;
-                ent.x = -1;
-                ent.y = -1;
-                ENTITY_MAP[calc_idx(x, y)] = 0;
-                refresh_tile(x, y, -1);
+        if (ent.char != 0 && ent.type == 3) {
+            // Big Rat ('R' = 82) gives multiple items
+            if (ent.char == 82) {
+                bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, 2001, 0); // Tooth
+                bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, 2002, 0); // Tail
+            } else {
                 bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, id, 0);
-                return;
             }
+
+            ent.char = 0;
+            ent.x = -1;
+            ent.y = -1;
+            LOOT_MAP[idx] = 0;
+            refresh_tile(x, y, -1);
+            return;
         }
     }
 }
@@ -266,10 +312,10 @@ function move_towards(id, tx, ty) {
 }
 
 function handle_events() {
-  if (M_TARGET == K_GRID || M_TARGET == 0) {
+  if (M_TARGET == K_GRID || M_TARGET == K_BUS || M_TARGET == 0) {
      if (M_OP == REQ_MOVE) { move_entity(M_P1, M_P2, M_P3); }
      if (M_OP == REQ_PATH_STEP) { move_towards(M_P1, M_P2, M_P3); }
-     if (M_OP == EVT_DEATH) { kill_entity(M_P1); }
+     if (M_OP == EVT_DEATH) { kill_entity(M_P1, M_P2); }
      if (M_OP == CMD_PICKUP) { try_pickup(M_P1, M_P2, M_P3); }
   }
 }

@@ -95,6 +95,7 @@ function process_inbox() {
             offset += 6;
         }
     }
+    IN_COUNT[0] = 0;
 }
 `;
 
