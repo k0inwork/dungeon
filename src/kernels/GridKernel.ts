@@ -156,6 +156,10 @@ function move_entity(id, dx, dy) {
           bus_send(EVT_LEVEL_TRANSITION, K_GRID, K_HOST, 2, 0, 0);
           return;
       }
+      if (char == 72) { // 'H'
+          bus_send(EVT_LEVEL_TRANSITION, K_GRID, K_HOST, 0, 0, 0);
+          return;
+      }
   }
 
   let col = COLLISION_MAP[ti];

@@ -249,11 +249,21 @@ export class ForthProcess {
   }
 
   isWordDefined(wordName: string): boolean {
-    if (!this.forth) return false;
+    if (!this.forth || !this.isReady) return false;
+    let output = "";
+    const oldEmit = this.forth.onEmit;
+    this.forth.onEmit = (c: any) => {
+        output += typeof c === 'string' ? c : String.fromCharCode(c);
+    };
     try {
-        this.forth.interpret(`' ${wordName} DROP`);
+        this.forth.interpret(`' ${wordName} DROP\n`);
+        this.forth.onEmit = oldEmit;
+        this.emitBuffer = "";
+        if (output.includes("undefined word")) return false;
         return true;
     } catch (e) {
+        this.forth.onEmit = oldEmit;
+        this.emitBuffer = "";
         return false;
     }
   }
@@ -337,4 +347,4 @@ class ForthProcessManager {
   }
 }
 
-export const forthService = new ForthProcessManager();
+export const forthService = new ForthProcessManager(); (window as any).forthService = forthService;

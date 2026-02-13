@@ -38,7 +38,8 @@ const ROGUE_LEVEL: LevelData = {
     terrain_legend: [
       { symbol: ".", name: "Concrete", type: "FLOOR", color: 0x444444, passable: true, description: "Wet floor." },
       { symbol: "#", name: "Rusted Wall", type: "WALL", color: 0x885555, passable: false, description: "Iron and rust." },
-      { symbol: "~", name: "Sludge", type: "LIQUID", color: 0x00FF00, passable: true, description: "Toxic waste." }
+      { symbol: "~", name: "Sludge", type: "LIQUID", color: 0x00FF00, passable: true, description: "Toxic waste." },
+      { symbol: "H", name: "Hub Portal", type: "GATE", color: 0x00FFFF, passable: true, description: "Back to safety." }
     ],
     entities: [],
     entity_roster: [
@@ -83,7 +84,8 @@ const PLATFORM_LEVEL: LevelData = {
     ],
     terrain_legend: [
       { symbol: ".", name: "Air", type: "FLOOR", color: 0x111111, passable: true, description: "Empty space." },
-      { symbol: "#", name: "Grated Platform", type: "WALL", color: 0xAAAAAA, passable: false, description: "Solid metal." }
+      { symbol: "#", name: "Grated Platform", type: "WALL", color: 0xAAAAAA, passable: false, description: "Solid metal." },
+      { symbol: "E", name: "Exit", type: "GATE", color: 0xFFFF00, passable: true, description: "To the next sector." }
     ],
     entities: [],
     entity_roster: [],
@@ -117,12 +119,13 @@ const PLATFORM_LEVEL_2: LevelData = {
         "#...........#######....................#",
         "#......................................#",
         "#......................................#",
-        "#......................................#",
+        "#E.....................................#",
         "########################################"
     ],
     terrain_legend: [
       { symbol: ".", name: "Air", type: "FLOOR", color: 0x111111, passable: true, description: "Empty space." },
-      { symbol: "#", name: "Grated Platform", type: "WALL", color: 0x55AAFF, passable: false, description: "Blue steel." }
+      { symbol: "#", name: "Grated Platform", type: "WALL", color: 0x55AAFF, passable: false, description: "Blue steel." },
+      { symbol: "H", name: "Exit to Hub", type: "GATE", color: 0xFFFF00, passable: true, description: "Back to safety." }
     ],
     entities: [],
     entity_roster: [],

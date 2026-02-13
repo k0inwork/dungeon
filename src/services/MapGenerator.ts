@@ -140,6 +140,23 @@ export class MapGenerator {
       }
     }
 
+    // 5C. Place EXIT Portal (H) if it exists in legend
+    const exitPortalDef = terrainLegend.find(t => t.symbol === "H");
+    if (exitPortalDef) {
+        // Find a spot far from player
+        let bestSpot = floors[0];
+        let maxDist = -1;
+        for (const spot of floors) {
+            const dist = Math.abs(spot.x - playerStart.x) + Math.abs(spot.y - playerStart.y);
+            if (dist > maxDist && !occupied.has(`${spot.x},${spot.y}`)) {
+                maxDist = dist;
+                bestSpot = spot;
+            }
+        }
+        grid[bestSpot.y][bestSpot.x] = 2; // Special marker for exit
+        occupied.add(`${bestSpot.x},${bestSpot.y}`);
+    }
+
     // 6. Convert to ASCII
     // Get symbols from legend
     const wallDef = terrainLegend.find(t => t.type === "WALL") || { symbol: '#' };
@@ -151,6 +168,8 @@ export class MapGenerator {
       for(let x=0; x<this.width; x++) {
         if (x === playerStart.x && y === playerStart.y) {
           line += "@";
+        } else if (grid[y][x] === 2) {
+          line += "H";
         } else {
           line += grid[y][x] === 1 ? wallDef.symbol : floorDef.symbol;
         }

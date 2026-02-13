@@ -278,7 +278,7 @@ const App = () => {
         platformerRef.current.configure(level.platformer_config);
     }
 
-    if (level.id === "platform_dungeon") {
+    if (level.id === "platform_dungeon" || level.id === "platform_dungeon_2") {
         switchMode("PLATFORM");
     } else {
         switchMode("GRID");
