@@ -44,9 +44,11 @@ export class AetherTranspiler {
   private static varTypes: Map<string, string> = new Map(); // Name -> "Uint8Array" | "Uint32Array" | etc
   private static structArrayCounts: Map<string, any> = new Map();
   private static exportedArrays: Map<string, string> = new Map(); // StructName -> VarName (Local)
+  private static localStructs: Set<string> = new Set();
+  private static functionReturnTypes: Map<string, string> = new Map();
 
   // Shared across transpile() calls for different kernels
-  private static globalExportRegistry: Map<string, { owner: number, varName: string, typeId: number, sizeBytes: number }> = new Map();
+  private static globalExportRegistry: Map<string, { owner: number, varName: string, typeId: number, sizeBytes: number, fields: Map<string, number> }> = new Map();
   private static nextVsoTypeId = 1000;
 
   static reset() {
@@ -71,6 +73,20 @@ export class AetherTranspiler {
           });
           this.structs.set(name, structDef);
       }
+
+      // Also load from global export registry for dynamic cross-kernel structs
+      this.globalExportRegistry.forEach((def, name) => {
+          if (!this.structs.has(name)) {
+              const structDef: StructDef = {
+                  name,
+                  fields: def.fields,
+                  size: def.sizeBytes
+              };
+              this.structs.set(name, structDef);
+              // Do NOT populate globalFieldOffsets from remote exports
+              // to avoid collisions. Use prefixed offsets.
+          }
+      });
   }
 
   static transpile(jsCode: string, kernelId: number = 0): string {
@@ -90,6 +106,8 @@ export class AetherTranspiler {
     this.varTypes = new Map();
     this.structArrayCounts = new Map();
     this.exportedArrays = new Map();
+    this.localStructs = new Set();
+    this.functionReturnTypes = new Map();
 
     if (!jsCode || !jsCode.trim()) {
         return "";
@@ -126,6 +144,8 @@ export class AetherTranspiler {
           const fieldsStr = match[2];
           const fields = fieldsStr.split(',').map(s => s.trim()).filter(s => s);
           
+          this.localStructs.add(name);
+
           const existing = this.structs.get(name);
           if (existing) {
               // Verify consistency (Simplified: just check field count for now)
@@ -183,8 +203,12 @@ export class AetherTranspiler {
               const fieldUpper = fieldName.toUpperCase();
               // Prefixed constant to avoid global collisions
               this.emit(`${offset} CONSTANT OFF_${structUpper}_${fieldUpper}`);
-              // Fallback legacy constant (last defined struct wins if collisions exist)
-              this.emit(`${offset} CONSTANT OFF_${fieldUpper}`);
+
+              // Only emit fallback legacy constant for structs defined in the local kernel
+              // to avoid collisions between VSO structs (e.g. GridEntity.x vs HiveEntity.x)
+              if (this.localStructs.has(def.name)) {
+                  this.emit(`${offset} CONSTANT OFF_${fieldUpper}`);
+              }
           });
       });
       this.emit("( --------------------- )");
@@ -256,7 +280,8 @@ export class AetherTranspiler {
                           owner: this.currentKernelId,
                           varName: upperVarName,
                           typeId: typeId,
-                          sizeBytes: structDef.size
+                          sizeBytes: structDef.size,
+                          fields: structDef.fields
                       });
                   }
               }
@@ -278,11 +303,38 @@ export class AetherTranspiler {
       
       this.findVariables(node.body, scope);
       this.scopes.push(scope);
+
+      // Infer Return Type
+      const returnType = this.findReturnType(node.body);
+      if (returnType) {
+          this.functionReturnTypes.set(funcName, returnType);
+      }
     }
     
     if (node.body && Array.isArray(node.body)) {
       node.body.forEach((child: any) => this.analyzeScopes(child));
     }
+  }
+
+  private static findReturnType(node: ASTNode): string | null {
+      if (!node) return null;
+      if (node.type === "ReturnStatement") {
+          return this.inferType(node.argument);
+      }
+      if (Array.isArray(node)) {
+          for (const n of node) {
+              const t = this.findReturnType(n);
+              if (t) return t.startsWith("struct ") ? t.substring(7) : t;
+          }
+      }
+      if (typeof node === 'object') {
+          for (const key of Object.keys(node)) {
+              if (key === "type") continue;
+              const t = this.findReturnType(node[key]);
+              if (t) return t.startsWith("struct ") ? t.substring(7) : t;
+          }
+      }
+      return null;
   }
 
   private static findVariables(node: ASTNode, scope: Scope) {
@@ -924,8 +976,10 @@ export class AetherTranspiler {
       if (node.type === "CallExpression") {
           if (node.callee.type === "Identifier") {
               const funcName = node.callee.name;
+              const upName = funcName.toUpperCase();
               if (this.structs.has(funcName)) return funcName;
               if (this.exportedArrays.has(funcName)) return funcName;
+              if (this.functionReturnTypes.has(upName)) return this.functionReturnTypes.get(upName)!;
           }
       }
       return null;
