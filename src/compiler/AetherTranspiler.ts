@@ -12,6 +12,7 @@ interface Scope {
   functionName: string;
   variables: Set<string>;
   args: string[];
+  varInits: Map<string, any>;
 }
 
 interface StructDef {
@@ -41,18 +42,72 @@ export class AetherTranspiler {
   private static globalVars: Set<string> = new Set();
   private static globalConsts: Map<string, any> = new Map();
   private static varTypes: Map<string, string> = new Map(); // Name -> "Uint8Array" | "Uint32Array" | etc
+  private static structArrayCounts: Map<string, any> = new Map();
+  private static exportedArrays: Map<string, string> = new Map(); // StructName -> VarName (Local)
+  private static localStructs: Set<string> = new Set();
+  private static functionReturnTypes: Map<string, string> = new Map();
+
+  // Shared across transpile() calls for different kernels
+  private static globalExportRegistry: Map<string, { owner: number, varName: string, typeId: number, sizeBytes: number, fields: Map<string, number> }> = new Map();
+  private static nextVsoTypeId = 1000;
+
+  static reset() {
+      this.structs = new Map();
+      this.globalFieldOffsets = new Map();
+      this.globalExportRegistry = new Map();
+      this.nextVsoTypeId = 1000;
+      this.loadVsoRegistry();
+  }
+
+  static loadVsoRegistry() {
+      for (const [name, def] of Object.entries(VSO_REGISTRY)) {
+          const structDef: StructDef = {
+              name,
+              fields: new Map(),
+              size: def.sizeBytes
+          };
+          def.fields.forEach((f, i) => {
+              const offset = i * 4;
+              structDef.fields.set(f, offset);
+              this.globalFieldOffsets.set(f, offset);
+          });
+          this.structs.set(name, structDef);
+      }
+
+      // Also load from global export registry for dynamic cross-kernel structs
+      this.globalExportRegistry.forEach((def, name) => {
+          if (!this.structs.has(name)) {
+              const structDef: StructDef = {
+                  name,
+                  fields: def.fields,
+                  size: def.sizeBytes
+              };
+              this.structs.set(name, structDef);
+              // Do NOT populate globalFieldOffsets from remote exports
+              // to avoid collisions. Use prefixed offsets.
+          }
+      });
+  }
 
   static transpile(jsCode: string, kernelId: number = 0): string {
+    // Clear local state but keep VSO definitions
+    this.structs = new Map();
+    this.globalFieldOffsets = new Map();
+    this.loadVsoRegistry();
+
     this.scopes = [];
     this.output = [];
     this.currentScope = null;
     this.loopVars = [];
-    this.structs = new Map();
-    this.globalFieldOffsets = new Map();
+    // this.structs and this.globalFieldOffsets are persistent
     this.currentKernelId = kernelId;
     this.globalVars = new Set();
     this.globalConsts = new Map();
     this.varTypes = new Map();
+    this.structArrayCounts = new Map();
+    this.exportedArrays = new Map();
+    this.localStructs = new Set();
+    this.functionReturnTypes = new Map();
 
     if (!jsCode || !jsCode.trim()) {
         return "";
@@ -77,9 +132,10 @@ export class AetherTranspiler {
 
   private static extractStructs(code: string): string {
       const structRegex = /struct\s+(\w+)\s*\{\s*([^}]+)\s*\}/g;
+      const exportRegex = /export\s+(\w+);?/g;
       let match;
       
-      // We remove the structs from JS code so Acorn handles the rest, 
+      // We remove the structs and exports from JS code so Acorn handles the rest,
       // but we parse them to build offsets.
       let cleanCode = code;
 
@@ -88,28 +144,51 @@ export class AetherTranspiler {
           const fieldsStr = match[2];
           const fields = fieldsStr.split(',').map(s => s.trim()).filter(s => s);
           
-          const def: StructDef = {
-              name,
-              fields: new Map(),
-              size: fields.length * 4
-          };
+          this.localStructs.add(name);
 
-          fields.forEach((f, i) => {
-              const offset = i * 4;
-              def.fields.set(f, offset);
-
-              if (this.globalFieldOffsets.has(f) && this.globalFieldOffsets.get(f) !== offset) {
-                  throw new Error(`Field offset collision for field '${f}' in struct '${name}'. Existing offset: ${this.globalFieldOffsets.get(f)}, new offset: ${offset}. Field names must have consistent offsets across all structs within the same kernel.`);
+          const existing = this.structs.get(name);
+          if (existing) {
+              // Verify consistency (Simplified: just check field count for now)
+              if (existing.fields.size !== fields.length) {
+                  throw new Error(`Struct '${name}' re-defined with different number of fields. Existing: ${existing.fields.size}, New: ${fields.length}`);
               }
+              // Ensure local re-definition (from VSO) takes precedence for field offsets
+              existing.fields.forEach((offset, f) => {
+                  this.globalFieldOffsets.set(f, offset);
+              });
+          } else {
+              const def: StructDef = {
+                  name,
+                  fields: new Map(),
+                  size: fields.length * 4
+              };
 
-              this.globalFieldOffsets.set(f, offset);
-          });
-          
-          this.structs.set(name, def);
+              fields.forEach((f, i) => {
+                  const offset = i * 4;
+                  def.fields.set(f, offset);
+
+                  if (this.globalFieldOffsets.has(f) && this.globalFieldOffsets.get(f) !== offset) {
+                      throw new Error(`Field offset collision for field '${f}' in struct '${name}'. Existing offset: ${this.globalFieldOffsets.get(f)}, new offset: ${offset}. Field names must have consistent offsets across all structs within the same kernel.`);
+                  }
+
+                  this.globalFieldOffsets.set(f, offset);
+              });
+
+              this.structs.set(name, def);
+          }
           
           // Remove from source code to avoid parse error
           cleanCode = cleanCode.replace(match[0], "");
       }
+
+      // Handle exports
+      while ((match = exportRegex.exec(code)) !== null) {
+          const varName = match[1];
+          // We don't know the type yet, so we'll resolve it in analyzeScopes
+          this.exportedArrays.set("__PENDING_" + varName, varName);
+          cleanCode = cleanCode.replace(match[0], "");
+      }
+
       return cleanCode;
   }
 
@@ -118,9 +197,18 @@ export class AetherTranspiler {
       this.emit("( --- STRUCT OFFSETS --- )");
       this.structs.forEach(def => {
           this.emit(`( Struct: ${def.name} )`);
-          this.emit(`${def.size} CONSTANT SIZEOF_${def.name.toUpperCase()}`);
+          const structUpper = def.name.toUpperCase();
+          this.emit(`${def.size} CONSTANT SIZEOF_${structUpper}`);
           def.fields.forEach((offset, fieldName) => {
-              this.emit(`${offset} CONSTANT OFF_${fieldName.toUpperCase()}`);
+              const fieldUpper = fieldName.toUpperCase();
+              // Prefixed constant to avoid global collisions
+              this.emit(`${offset} CONSTANT OFF_${structUpper}_${fieldUpper}`);
+
+              // Only emit fallback legacy constant for structs defined in the local kernel
+              // to avoid collisions between VSO structs (e.g. GridEntity.x vs HiveEntity.x)
+              if (this.localStructs.has(def.name)) {
+                  this.emit(`${offset} CONSTANT OFF_${fieldUpper}`);
+              }
           });
       });
       this.emit("( --------------------- )");
@@ -135,10 +223,27 @@ export class AetherTranspiler {
             const name = decl.id.name.toUpperCase();
 
             // Detect Type Hints: const x = new Uint8Array(...)
-            if (decl.init && decl.init.type === "NewExpression" && decl.init.callee.name.includes("Uint8")) {
+            if (decl.init && decl.init.type === "NewExpression" && decl.init.callee.name && decl.init.callee.name.includes("Uint8")) {
                 this.varTypes.set(name, "Uint8Array");
-            } else if (decl.init && decl.init.type === "CallExpression" && decl.init.callee.name === "Uint8Array") {
+            } else if (decl.init && decl.init.type === "CallExpression" && decl.init.callee.name && decl.init.callee.name === "Uint8Array") {
                 this.varTypes.set(name, "Uint8Array");
+            } else if (decl.init && decl.init.type === "NewExpression" && decl.init.callee.name === "Array") {
+                const firstArg = decl.init.arguments[0];
+                const secondArg = decl.init.arguments[1];
+                const thirdArg = decl.init.arguments[2];
+                if (firstArg && firstArg.type === "Identifier" && this.structs.has(firstArg.name)) {
+                    this.varTypes.set(name, `struct ${firstArg.name}`);
+                    if (secondArg) {
+                        if (secondArg.type === "Literal") {
+                            this.structArrayCounts.set(name, secondArg.value);
+                        } else if (secondArg.type === "Identifier") {
+                            this.structArrayCounts.set(name, secondArg.name.toUpperCase());
+                        }
+                    }
+                    if (thirdArg && thirdArg.type === "Literal") {
+                        this.globalConsts.set(name, thirdArg);
+                    }
+                }
             }
 
             if (n.kind === "const") {
@@ -149,6 +254,40 @@ export class AetherTranspiler {
           });
         }
       });
+
+      // Resolve pending exports
+      const pending = Array.from(this.exportedArrays.keys()).filter(k => k.startsWith("__PENDING_"));
+      pending.forEach(pk => {
+          const varName = this.exportedArrays.get(pk)!;
+          const structType = this.getStructType(varName);
+          if (structType) {
+              const upperVarName = varName.toUpperCase();
+              this.exportedArrays.set(structType, upperVarName);
+
+              // Register in global registry for cross-kernel access
+              const structDef = this.structs.get(structType);
+              if (structDef) {
+                  if (!AetherTranspiler.globalExportRegistry.has(structType)) {
+                      // Check if it's a known VSO from Protocol.ts first
+                      let typeId = AetherTranspiler.nextVsoTypeId++;
+
+                      // Actually, VSO_REGISTRY is keyed by struct name
+                      if (VSO_REGISTRY[structType]) {
+                          typeId = VSO_REGISTRY[structType].typeId;
+                      }
+
+                      AetherTranspiler.globalExportRegistry.set(structType, {
+                          owner: this.currentKernelId,
+                          varName: upperVarName,
+                          typeId: typeId,
+                          sizeBytes: structDef.size,
+                          fields: structDef.fields
+                      });
+                  }
+              }
+          }
+          this.exportedArrays.delete(pk);
+      });
     }
 
     if (node.type === "FunctionDeclaration") {
@@ -158,16 +297,44 @@ export class AetherTranspiler {
       const scope: Scope = {
         functionName: funcName,
         variables: new Set(),
-        args: args
+        args: args,
+        varInits: new Map()
       };
       
       this.findVariables(node.body, scope);
       this.scopes.push(scope);
+
+      // Infer Return Type
+      const returnType = this.findReturnType(node.body);
+      if (returnType) {
+          this.functionReturnTypes.set(funcName, returnType);
+      }
     }
     
     if (node.body && Array.isArray(node.body)) {
       node.body.forEach((child: any) => this.analyzeScopes(child));
     }
+  }
+
+  private static findReturnType(node: ASTNode): string | null {
+      if (!node) return null;
+      if (node.type === "ReturnStatement") {
+          return this.inferType(node.argument);
+      }
+      if (Array.isArray(node)) {
+          for (const n of node) {
+              const t = this.findReturnType(n);
+              if (t) return t.startsWith("struct ") ? t.substring(7) : t;
+          }
+      }
+      if (typeof node === 'object') {
+          for (const key of Object.keys(node)) {
+              if (key === "type") continue;
+              const t = this.findReturnType(node[key]);
+              if (t) return t.startsWith("struct ") ? t.substring(7) : t;
+          }
+      }
+      return null;
   }
 
   private static findVariables(node: ASTNode, scope: Scope) {
@@ -179,9 +346,29 @@ export class AetherTranspiler {
         scope.variables.add(name);
 
         if (decl.init) {
+            const fullName = `LV_${scope.functionName}_${name}`;
             if ((decl.init.type === "NewExpression" || decl.init.type === "CallExpression") &&
                 decl.init.callee.name && decl.init.callee.name.includes("Uint8")) {
-                this.varTypes.set(`LV_${scope.functionName}_${name}`, "Uint8Array");
+                this.varTypes.set(fullName, "Uint8Array");
+            } else if (decl.init.type === "NewExpression" && decl.init.callee.name === "Array") {
+                const firstArg = decl.init.arguments[0];
+                const secondArg = decl.init.arguments[1];
+                const thirdArg = decl.init.arguments[2];
+                if (firstArg && firstArg.type === "Identifier" && this.structs.has(firstArg.name)) {
+                    this.varTypes.set(fullName, `struct ${firstArg.name}`);
+                    if (secondArg) {
+                        if (secondArg.type === "Literal") {
+                            this.structArrayCounts.set(fullName, secondArg.value);
+                        } else if (secondArg.type === "Identifier") {
+                            this.structArrayCounts.set(fullName, secondArg.name.toUpperCase());
+                        }
+                    }
+                    if (thirdArg && thirdArg.type === "Literal") {
+                        // Local constant-addressed array (rare but supported)
+                        this.globalConsts.set(fullName, thirdArg);
+                    }
+                    scope.varInits.set(name, decl.init);
+                }
             }
         }
       });
@@ -202,8 +389,10 @@ export class AetherTranspiler {
   private static emitGlobals() {
     this.emit("( --- AETHER AUTO-GLOBALS --- )");
 
-    // Top-Level Constants
+    // 1. Emit simple constants first
     this.globalConsts.forEach((init, name) => {
+      if (this.isStructArray(name)) return;
+
       let val = 0;
       if (init) {
           if (init.type === "Literal") {
@@ -218,17 +407,67 @@ export class AetherTranspiler {
       this.emit(`${val} CONSTANT ${name}`);
     });
 
-    // Top-Level Variables
+    // 2. Emit Top-Level Variables (including struct arrays)
     this.globalVars.forEach(v => {
-      this.emit(`VARIABLE ${v}`);
+      if (this.isStructArray(v)) {
+          const structName = this.getStructType(v);
+          const count = this.structArrayCounts.get(v) || 0;
+
+          const constInit = this.globalConsts.get(v);
+          if (constInit && constInit.type === "Literal" && typeof constInit.value === "number") {
+               this.emit(`${constInit.value} CONSTANT ${v}`);
+          } else {
+               this.emit(`CREATE ${v} ${count} SIZEOF_${structName?.toUpperCase()} * ALLOT`);
+          }
+
+          const entry = AetherTranspiler.globalExportRegistry.get(structName!);
+          if (entry && entry.owner === this.currentKernelId && entry.varName === v) {
+              this.emit(`${v} ${entry.typeId} ${entry.sizeBytes} JS_REGISTER_VSO`);
+          }
+      } else {
+          this.emit(`VARIABLE ${v}`);
+      }
     });
 
+    // 3. Emit struct arrays that were declared as 'const'
+    this.globalConsts.forEach((init, name) => {
+        if (!this.isStructArray(name)) return;
+        if (this.globalVars.has(name)) return; // Already emitted
+
+        const structName = this.getStructType(name);
+        const count = this.structArrayCounts.get(name) || 0;
+
+        if (init && init.type === "Literal" && typeof init.value === "number") {
+             this.emit(`${init.value} CONSTANT ${name}`);
+        } else {
+             this.emit(`CREATE ${name} ${count} SIZEOF_${structName?.toUpperCase()} * ALLOT`);
+        }
+
+        const entry = AetherTranspiler.globalExportRegistry.get(structName!);
+        if (entry && entry.owner === this.currentKernelId && entry.varName === name) {
+            this.emit(`${name} ${entry.typeId} ${entry.sizeBytes} JS_REGISTER_VSO`);
+        }
+    });
+
+    // 4. Emit Local Variables
     this.scopes.forEach(scope => {
       scope.args.forEach(arg => {
         this.emit(`VARIABLE LV_${scope.functionName}_${arg}`);
       });
       scope.variables.forEach(v => {
-        this.emit(`VARIABLE LV_${scope.functionName}_${v}`);
+        const fullName = `LV_${scope.functionName}_${v}`;
+        if (this.isStructArray(fullName)) {
+            const structName = this.getStructType(fullName);
+            const count = this.structArrayCounts.get(fullName) || 0;
+            this.emit(`CREATE ${fullName} ${count} SIZEOF_${structName?.toUpperCase()} * ALLOT`);
+
+            const entry = AetherTranspiler.globalExportRegistry.get(structName!);
+            if (entry && entry.owner === this.currentKernelId && entry.varName === fullName) {
+                this.emit(`${fullName} ${entry.typeId} ${entry.sizeBytes} JS_REGISTER_VSO`);
+            }
+        } else {
+            this.emit(`VARIABLE ${fullName}`);
+        }
       });
     });
     this.emit("( ------------------------- )");
@@ -272,8 +511,17 @@ export class AetherTranspiler {
                if (this.globalConsts.has(varName)) {
                    return;
                }
+               // If it's a struct array, it's already handled by CREATE ... ALLOT in emitGlobals
+               if (this.isStructArray(decl.id.name)) {
+                   return;
+               }
                this.compileNode(decl.init);
                this.emit(`  ${varName} !`);
+
+               const rhsType = this.inferType(decl.init);
+               if (rhsType) {
+                   this.varTypes.set(varName, rhsType);
+               }
            }
         });
         break;
@@ -369,6 +617,11 @@ export class AetherTranspiler {
             if (node.operator === "=") {
                 this.compileNode(node.right); // Value
                 this.emit(`  ${varName} !`); // Store
+
+                const rhsType = this.inferType(node.right);
+                if (rhsType) {
+                    this.varTypes.set(varName, rhsType);
+                }
             } else if (node.operator === "+=") {
                 this.compileNode(node.right);
                 this.emit(`  ${varName} +!`);
@@ -388,8 +641,10 @@ export class AetherTranspiler {
         // HANDLE STRUCT ASSIGNMENT: ent.hp = 10, ent.hp += 10
         else if (node.left.type === "MemberExpression" && !node.left.computed) {
             const propName = node.left.property.name;
-            const offset = this.globalFieldOffsets.get(propName);
-            const offConst = `OFF_${propName.toUpperCase()}`;
+            const structType = this.getExpressionStructType(node.left.object);
+            const offConst = structType ? `OFF_${structType.toUpperCase()}_${propName.toUpperCase()}` : `OFF_${propName.toUpperCase()}`;
+
+            const offset = structType ? this.structs.get(structType)?.fields.get(propName) : this.globalFieldOffsets.get(propName);
             
             if (offset !== undefined) {
                  if (node.operator === "=") {
@@ -427,14 +682,20 @@ export class AetherTranspiler {
             this.compileNode(node.left.object); // Pushes Base Address
             this.compileNode(node.left.property); // Pushes Index
             
-            const isByte = node.left.object.name && this.isByteType(node.left.object.name);
+            const isByte = node.left.object.type === "Identifier" && this.isByteType(node.left.object.name);
+            const structType = this.getExpressionStructType(node.left.object);
 
             if (node.operator === "=") {
                 if (isByte) this.emit(`  + C!`);
+                else if (structType) {
+                    this.emit(`  SIZEOF_${structType.toUpperCase()} * + !`);
+                }
                 else this.emit(`  CELLS + !`);
             } else if (node.operator === "+=") {
                 if (isByte) {
                     this.emit(`  + DUP C@ ROT + SWAP C!`); // Complex because no C+! in standard forth usually
+                } else if (structType) {
+                    this.emit(`  SIZEOF_${structType.toUpperCase()} * + +!`);
                 } else {
                     this.emit(`  CELLS + +!`);
                 }
@@ -463,9 +724,12 @@ export class AetherTranspiler {
             // HANDLE ARRAY READ: arr[i]
             this.compileNode(node.object); // Base Address
             this.compileNode(node.property); // Index
-            const isByte = node.object.name && this.isByteType(node.object.name);
+            const isByte = node.object.type === "Identifier" && this.isByteType(node.object.name);
+            const structType = this.getExpressionStructType(node.object);
             if (isByte) {
                 this.emit(`  + C@`);
+            } else if (structType) {
+                this.emit(`  SIZEOF_${structType.toUpperCase()} * +`); // Just return pointer for struct arrays
             } else {
                 this.emit(`  CELLS + @`);
             }
@@ -473,10 +737,14 @@ export class AetherTranspiler {
         else if (!node.computed) {
              // HANDLE STRUCT READ: ent.hp
              const propName = node.property.name;
-             const offset = this.globalFieldOffsets.get(propName);
+             const structType = this.getExpressionStructType(node.object);
+             const offConst = structType ? `OFF_${structType.toUpperCase()}_${propName.toUpperCase()}` : `OFF_${propName.toUpperCase()}`;
+
+             const offset = structType ? this.structs.get(structType)?.fields.get(propName) : this.globalFieldOffsets.get(propName);
+
              if (offset !== undefined) {
                  this.compileNode(node.object); // Ptr
-                 this.emit(`  OFF_${propName.toUpperCase()} + @`);
+                 this.emit(`  ${offConst} + @`);
              } else {
                  // Might be Math.max etc
                  const obj = node.object.name ? node.object.name.toUpperCase() : "UNKNOWN";
@@ -490,6 +758,24 @@ export class AetherTranspiler {
         break;
 
       case "CallExpression":
+        if (node.callee.type === "Identifier") {
+            const funcName = node.callee.name;
+            const func = funcName.toUpperCase();
+
+            // --- EXPORTED STRUCT ARRAY ACCESS: NPC(id) ---
+            const globalEntry = AetherTranspiler.globalExportRegistry.get(funcName);
+            if (globalEntry) {
+                if (globalEntry.owner === this.currentKernelId) {
+                    this.compileNode(node.arguments[0]);
+                    this.emit(`  ${globalEntry.varName} SWAP SIZEOF_${func} * +`);
+                } else {
+                    this.compileNode(node.arguments[0]);
+                    this.emit(`  ${globalEntry.typeId} JS_SYNC_OBJECT`);
+                }
+                return;
+            }
+        }
+
         node.arguments.forEach((arg: any) => {
             this.compileNode(arg);
         });
@@ -522,6 +808,8 @@ export class AetherTranspiler {
             else if (func === "POKE") this.emit(`  !`);
             else if (func === "CPEEK") this.emit(`  C@`);
             else if (func === "CPOKE") this.emit(`  C!`);
+            else if (func === "JS_REGISTER_VSO") this.emit(`  JS_REGISTER_VSO`);
+            else if (func === "JS_SYNC_OBJECT") this.emit(`  JS_SYNC_OBJECT`);
             else if (func === "LOG") {
                 const arg0 = node.arguments[0];
                 if (arg0 && arg0.type === "Literal" && typeof arg0.value === "string") {
@@ -585,13 +873,21 @@ export class AetherTranspiler {
         // 2. Local Variable or Argument
         if (this.currentScope && (this.currentScope.args.includes(upName) || this.currentScope.variables.has(upName))) {
              const varName = this.resolveVar(node.name);
-             this.emit(`  ${varName} @`);
+             if (this.isStructArray(node.name)) {
+                 this.emit(`  ${varName}`);
+             } else {
+                 this.emit(`  ${varName} @`);
+             }
              return;
         }
 
         // 3. Top-Level Variable (Automatic Dereference)
         if (this.globalVars.has(upName)) {
-            this.emit(`  ${upName} @`);
+            if (this.isStructArray(node.name)) {
+                this.emit(`  ${upName}`);
+            } else {
+                this.emit(`  ${upName} @`);
+            }
             return;
         }
 
@@ -651,6 +947,49 @@ export class AetherTranspiler {
   private static isByteType(name: string): boolean {
       const resolved = this.resolveVar(name);
       return this.varTypes.get(resolved) === "Uint8Array";
+  }
+
+  private static getStructType(name: string): string | null {
+      const resolved = this.resolveVar(name);
+      const type = this.varTypes.get(resolved);
+      if (type && type.startsWith("struct ")) {
+          return type.substring(7);
+      }
+      return null;
+  }
+
+  private static isStructArray(name: string): boolean {
+      const resolved = this.resolveVar(name);
+      return this.structArrayCounts.has(resolved);
+  }
+
+  private static getExpressionStructType(node: ASTNode): string | null {
+      if (!node) return null;
+      if (node.type === "Identifier") {
+          return this.getStructType(node.name);
+      }
+      if (node.type === "MemberExpression") {
+          if (node.computed) {
+              return this.getExpressionStructType(node.object);
+          }
+      }
+      if (node.type === "CallExpression") {
+          if (node.callee.type === "Identifier") {
+              const funcName = node.callee.name;
+              const upName = funcName.toUpperCase();
+              if (this.structs.has(funcName)) return funcName;
+              if (this.exportedArrays.has(funcName)) return funcName;
+              if (this.functionReturnTypes.has(upName)) return this.functionReturnTypes.get(upName)!;
+          }
+      }
+      return null;
+  }
+
+  private static inferType(node: ASTNode): string | null {
+    if (!node) return null;
+    const structType = this.getExpressionStructType(node);
+    if (structType) return `struct ${structType}`;
+    return null;
   }
 
   private static resolveVar(name: string): string {

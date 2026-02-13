@@ -9,7 +9,6 @@ const AJS_LOGIC = `
 ${STANDARD_AJS_PREAMBLE}
 
 // 1. MEMORY
-const PLAYER_STRUCT = 0xC0000;
 const INV_BASE = 0xC0010; // PLAYER_STRUCT + 16
 const INVENTORY = new Uint32Array(INV_BASE);
 
@@ -22,6 +21,9 @@ struct PlayerState {
     inv0, inv1, inv2, inv3, inv4,
     inv5, inv6, inv7, inv8, inv9
 }
+
+let player_state = new Array(PlayerState, 1, 0xC0000);
+export player_state;
 
 function get_player_ptr() {
     return PlayerState(0);

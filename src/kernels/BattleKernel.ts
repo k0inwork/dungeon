@@ -9,7 +9,6 @@ const AJS_LOGIC = `
 ${STANDARD_AJS_PREAMBLE}
 
 // 1. RPG Stats Memory
-const RPG_TABLE = 0xA0000;
 const MAX_ENTITIES = 32;
 const RPG_SIZE = 36;
 let ENTITY_COUNT = 0;
@@ -26,6 +25,9 @@ struct RpgEntity {
     targetId,
     invItem
 }
+
+let rpg_table = new Array(RpgEntity, MAX_ENTITIES, 0xA0000);
+export rpg_table;
 
 function get_rpg_ptr(id) {
     return RpgEntity(id);

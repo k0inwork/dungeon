@@ -18,7 +18,6 @@ const ENTITY_MAP    = new Uint8Array(0x31000);
 const LOOT_MAP      = new Uint8Array(0x32000);
 const TERRAIN_MAP   = new Uint32Array(0x40000);
 const VRAM          = new Uint32Array(0x80000);
-const ENTITY_TABLE  = 0x90000;
 
 let ENTITY_COUNT = 0;
 
@@ -41,6 +40,9 @@ struct GridEntity {
     x,
     type
 }
+
+let entities = new Array(GridEntity, MAX_ENTITIES, 0x90000);
+export entities;
 
 function get_ent_ptr(id) {
     return GridEntity(id);
@@ -147,6 +149,21 @@ function move_entity(id, dx, dy) {
   if (check_bounds(tx, ty) == 0) return;
 
   let ti = calc_idx(tx, ty);
+
+  // LEVEL TRANSITION CHECK (For Player, ID 0)
+  if (id == 0) {
+      let packed = TERRAIN_MAP[ti];
+      let char = packed & 255;
+      if (char == 82) { // 'R'
+          bus_send(EVT_LEVEL_TRANSITION, K_GRID, K_HOST, 1, 0, 0);
+          return;
+      }
+      if (char == 80) { // 'P'
+          bus_send(EVT_LEVEL_TRANSITION, K_GRID, K_HOST, 2, 0, 0);
+          return;
+      }
+  }
+
   let col = COLLISION_MAP[ti];
   if (col != 0) {
       let obs = find_entity_at(tx, ty);

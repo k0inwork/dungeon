@@ -12,6 +12,7 @@ import { GRID_KERNEL_BLOCKS } from "./src/kernels/GridKernel";
 import { HIVE_KERNEL_BLOCKS } from "./src/kernels/HiveKernel";
 import { PLAYER_KERNEL_BLOCKS } from "./src/kernels/PlayerKernel";
 import { BATTLE_KERNEL_BLOCKS } from "./src/kernels/BattleKernel";
+import { PLATFORM_KERNEL_BLOCKS } from "./src/kernels/PlatformKernel";
 import { KernelID, Opcode, PACKET_SIZE_INTS } from "./src/types/Protocol";
 
 type GameMode = "BOOT" | "GENERATING" | "GRID" | "PLATFORM";
@@ -52,7 +53,8 @@ const App = () => {
   const [log, setLog] = useState<string[]>([]);
   const [seed, setSeed] = useState("Cyberpunk Sewers");
   const [worldInfo, setWorldInfo] = useState<WorldData | null>(null);
-  
+  const [currentLevelId, setCurrentLevelId] = useState<string>("hub");
+
   // Track successful kernel loads to prevent loop execution if load failed
   const [activeKernels, setActiveKernels] = useState<Set<string>>(new Set());
   const [gameOver, setGameOver] = useState(false);
@@ -75,6 +77,7 @@ const App = () => {
   const [isValidTarget, setIsValidTarget] = useState(true);
 
   const platformerRef = useRef(new PlatformerPhysics());
+  const keysDownRef = useRef<Set<string>>(new Set());
   const requestRef = useRef<number>(0);
   const lastTickTimeRef = useRef<number>(0);
 
@@ -98,6 +101,7 @@ const App = () => {
           // Filter for gameplay relevant info
           // We want [PLAYER], [BATTLE], or anything mentioning "Attack/Damage/Die"
           const isGameplay = msg.includes("PLAYER") || msg.includes("BATTLE") || msg.includes("HIVE") || 
+                             msg.includes("GRID") || msg.includes("PLATFORM") ||
                              msg.includes("Attack") || msg.includes("Hits") || msg.includes("Die") || msg.includes("Loot");
                              
           if (isGameplay) {
@@ -198,10 +202,109 @@ const App = () => {
         await loadKernel("HIVE", HIVE_KERNEL_BLOCKS);
         await loadKernel("PLAYER", PLAYER_KERNEL_BLOCKS);
         await loadKernel("BATTLE", BATTLE_KERNEL_BLOCKS);
+        await loadKernel("PLATFORM", PLATFORM_KERNEL_BLOCKS);
     };
     bootSystem();
     return () => cancelAnimationFrame(requestRef.current!);
   }, []);
+
+  const loadLevel = (level: any) => {
+    const mainProc = forthService.get("GRID");
+    const hiveProc = forthService.get("HIVE");
+    const playerProc = forthService.get("PLAYER");
+
+    addLog(`Loading Level: ${level.name}...`);
+    mainProc.run("INIT_MAP");
+    hiveProc.run("INIT_HIVE");
+    playerProc.run("INIT_PLAYER");
+
+    const platProc = forthService.get("PLATFORM");
+    if (platProc.isReady) {
+        platProc.run("INIT_PLATFORMER");
+    }
+
+    level.map_layout.forEach((row: string, y: number) => {
+      if (y >= MEMORY.GRID_HEIGHT) return;
+      for (let x = 0; x < MEMORY.GRID_WIDTH; x++) {
+        const char = row[x] || ' ';
+        let color = 0x888888;
+        let type = 0;
+        let charCode = char.charCodeAt(0);
+
+        const isPortalPart = char === '[' || char === ']' || char === 'R' || char === 'P';
+        const terrain = level.terrain_legend.find((t: any) => t.symbol === char);
+        if (terrain) {
+          color = terrain.color;
+          type = terrain.passable ? 0 : 1;
+        } else if (char === '@' || isPortalPart) {
+           type = 0; // Passable
+           if (char === '@') {
+             charCode = '.'.charCodeAt(0);
+             color = 0x444444;
+           }
+        }
+        if (!terrain && char !== '@' && char !== ' ' && !isPortalPart) {
+           type = 1;
+        }
+
+        mainProc.run(`${x} ${y} ${color} ${charCode} ${type} LOAD_TILE`);
+        if (platProc.isReady) {
+            platProc.run(`${x} ${y} ${color} ${charCode} ${type} LOAD_TILE`);
+        }
+      }
+    });
+
+    let px = 5, py = 5;
+    level.map_layout.forEach((row: string, y: number) => {
+        const x = row.indexOf('@');
+        if (x !== -1) { px = x; py = y; }
+    });
+    addLog(`Spawning Player at ${px},${py}`);
+    setPlayerPos({x: px, y: py});
+    setCursorPos({x: px, y: py});
+    mainProc.run(`${px} ${py} 65535 64 0 SPAWN_ENTITY`);
+
+    level.entities.forEach((ent: any) => {
+        const c = ent.glyph.color || 0xFF0000;
+        const ch = ent.glyph.char.charCodeAt(0);
+
+        let aiType = 1;
+        if (ent.glyph.char === '$') aiType = 3;
+        else if (ent.scripts && ent.scripts.passive && ent.scripts.passive.includes('aggressive')) aiType = 2;
+        else if (ent.id.includes("giant")) aiType = 2;
+
+        mainProc.run(`${ent.x} ${ent.y} ${c} ${ch} ${aiType} SPAWN_ENTITY`);
+    });
+
+    if (level.platformer_config) {
+        platformerRef.current.configure(level.platformer_config);
+    }
+
+    if (level.id === "platform_dungeon") {
+        switchMode("PLATFORM");
+    } else {
+        switchMode("GRID");
+    }
+  };
+
+  const handleLevelTransition = (targetLevelIdx: number) => {
+      if (!worldInfo || !worldInfo.levels) return;
+
+      const levelIds = ["hub", "rogue_dungeon", "platform_dungeon"];
+      const targetId = levelIds[targetLevelIdx];
+      const nextLevel = worldInfo.levels[targetId];
+
+      if (nextLevel) {
+          addLog(`Transitioning to ${nextLevel.name}...`);
+          setCurrentLevelId(targetId);
+          // Update active_level in worldInfo for UI components
+          setWorldInfo({
+              ...worldInfo,
+              active_level: nextLevel
+          });
+          loadLevel(nextLevel);
+      }
+  };
 
   const handleGenerate = async (e: React.MouseEvent) => {
     setMode("GENERATING");
@@ -285,8 +388,8 @@ const App = () => {
       });
 
       platformerRef.current.configure(level.platformer_config);
+      loadLevel(data.active_level);
       addLog("Simulation Ready.");
-      switchMode("GRID");
 
       // Initial Sync
       setTimeout(syncKernelState, 100);
@@ -332,6 +435,26 @@ const App = () => {
           };
 
           kernels.forEach(k => {
+      const platform = forthService.get("PLATFORM");
+
+      const kernels = [
+          { id: KernelID.GRID, proc: main },
+          { id: KernelID.HIVE, proc: hive },
+          { id: KernelID.PLAYER, proc: player },
+          { id: KernelID.BATTLE, proc: battle },
+          { id: KernelID.PLATFORM, proc: platform }
+      ];
+
+      const runBroker = () => {
+          const inboxes = new Map<number, number[]>();
+          inboxes.set(KernelID.GRID, []);
+          inboxes.set(KernelID.HIVE, []);
+          inboxes.set(KernelID.PLAYER, []);
+          inboxes.set(KernelID.BATTLE, []);
+          inboxes.set(KernelID.PLATFORM, []);
+
+          kernels.forEach(k => {
+              if (!k.proc.isReady) return;
               const outMem = new Int32Array(k.proc.getMemory(), MEMORY.OUTPUT_QUEUE_ADDR, 1024);
               const count = outMem[0];
               
@@ -384,9 +507,58 @@ const App = () => {
       // 1. Process initial commands (from handleKeyDown)
       processPackets();
       // 2. Run Kernels
+
+                      if (target === KernelID.HOST) {
+                          if (op === Opcode.EVT_LEVEL_TRANSITION) {
+                              handleLevelTransition(header[3]);
+                          }
+                      }
+
+                      if (target === KernelID.BUS) {
+                          for (const [key, inbox] of inboxes.entries()) {
+                              if (key !== header[1]) {
+                                  inbox.push(...packet);
+                              }
+                          }
+                      }
+                      else if (target !== KernelID.HOST) {
+                          const inbox = inboxes.get(target);
+                          if (inbox) {
+                              inbox.push(...packet);
+                          }
+                      }
+
+                      offset += packetLen;
+                  }
+                  outMem[0] = 0; // Clear Output Queue
+              }
+          });
+
+          kernels.forEach(k => {
+              if (!k.proc.isReady) return;
+              const inboxData = inboxes.get(k.id);
+              if (inboxData) {
+                  const inMem = new Int32Array(k.proc.getMemory(), MEMORY.INPUT_QUEUE_ADDR, 1024);
+                  if (inboxData.length > 0) {
+                      inMem[0] = inboxData.length;
+                      inMem.set(inboxData, 1);
+                  } else {
+                      inMem[0] = 0;
+                  }
+              }
+          });
+      };
+
+      // 1. FIRST BROKER PASS
+      runBroker();
+      
+      // 2. RUN CYCLES (The Heartbeat)
       player.run("PROCESS_INBOX");
       main.run("PROCESS_INBOX");
       battle.run("PROCESS_INBOX"); 
+      if (platform.isReady && activeKernels.has("PLATFORM")) {
+          platform.run("PROCESS_INBOX");
+      }
       hive.run("RUN_HIVE_CYCLE");
       main.run("RUN_ENV_CYCLE");
       // 3. Process resulting events (updates React state immediately)
@@ -435,6 +607,13 @@ const App = () => {
           setGroundItems([name]);
       } else {
           setGroundItems([]);
+
+      // 3. SECOND BROKER PASS: Deliver responses emitted during cycles
+      runBroker();
+      
+      // 4. Update Inspector if active
+      if (inspectStats) {
+          handleInspect(inspectStats.x, inspectStats.y);
       }
   };
 
@@ -504,12 +683,21 @@ const App = () => {
        }
     } 
     else if (mode === "PLATFORM") {
-      platformerRef.current.update();
-      if (platformerRef.current.x > MEMORY.GRID_WIDTH - 3) {
-         switchMode("GRID");
+      const platProc = forthService.get("PLATFORM");
+      if (platProc && platProc.isReady && activeKernels.has("PLATFORM")) {
+          if (keysDownRef.current.has("ArrowLeft")) platProc.run("-1 CMD_MOVE");
+          if (keysDownRef.current.has("ArrowRight")) platProc.run("1 CMD_MOVE");
+
+          try {
+              platProc.run("RUN_PLATFORM_CYCLE");
+              const raw = platProc.getMemory() as ArrayBuffer;
+              const vramSize = MEMORY.GRID_WIDTH * MEMORY.GRID_HEIGHT * 4;
+              if (raw.byteLength >= MEMORY.VRAM_ADDR + vramSize) {
+                  const vramSlice = raw.slice(MEMORY.VRAM_ADDR, MEMORY.VRAM_ADDR + vramSize);
+                  setDisplayBuffer(vramSlice);
+              }
+          } catch (e) { console.error(e); }
       }
-      platformerRef.current.renderToBuffer(localBufferRef.current);
-      setDisplayBuffer(localBufferRef.current.buffer.slice(0));
 
       if (time - lastTickTimeRef.current > SIMULATION_TICK_RATE_MS) {
           tickSimulation();
@@ -541,9 +729,19 @@ const App = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: React.KeyboardEvent | KeyboardEvent) => {
-        if (mode !== "GRID") return;
-        
         const k = e.key;
+        keysDownRef.current.add(k);
+
+        if (mode === "PLATFORM") {
+            const platProc = forthService.get("PLATFORM");
+            if (platProc.isReady) {
+                if (k === "ArrowUp") platProc.run("CMD_JUMP");
+                if (k === "Escape") switchMode("GRID");
+            }
+            return;
+        }
+
+        if (mode !== "GRID") return;
         
         // Prevent default browser behavior for gameplay keys
         if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(k)) {
@@ -650,6 +848,7 @@ const App = () => {
         
         // Skill Shortcuts (1-4)
         if (['1', '2', '3', '4'].includes(k)) {
+            if (currentLevelId === "hub") return;
             const skill = PLAYER_SKILLS.find(s => s.key === k);
             if (skill) {
                 // All skills now use Targeting Mode for consistency
@@ -694,9 +893,18 @@ const App = () => {
             triggerPickup();
         }
     };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+        keysDownRef.current.delete(e.key);
+    };
+
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [mode, targetMode, cursorPos, selectedSkill, isValidTarget, playerPos]); 
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+        window.removeEventListener("keydown", handleKeyDown);
+        window.removeEventListener("keyup", handleKeyUp);
+    };
+  }, [mode, targetMode, cursorPos, selectedSkill, isValidTarget, playerPos, currentLevelId]);
 
   return (
     <div style={{ backgroundColor: "#111", color: "#0f0", fontFamily: "Courier New", height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -868,30 +1076,32 @@ const App = () => {
             </div>
 
             {/* ACTION BAR */}
-            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                {PLAYER_SKILLS.map(skill => (
-                    <div key={skill.id} style={{
-                        border: selectedSkill?.id === skill.id ? '2px solid #fff' : '1px solid #333',
-                        background: selectedSkill?.id === skill.id ? '#333' : '#000',
-                        padding: '5px 10px',
-                        fontSize: '0.8em',
-                        color: targetMode && selectedSkill?.id === skill.id ? (isValidTarget ? 'orange' : 'red') : '#aaa'
-                    }}>
-                        <span style={{color: '#0f0', fontWeight: 'bold'}}>[{skill.key}]</span> {skill.name} 
-                        <span style={{fontSize: '0.7em', color: '#666', marginLeft: '5px'}}>R:{skill.range}</span>
-                    </div>
-                ))}
-                
-                <button 
-                    onClick={triggerPickup}
-                    style={{
-                        background: '#002200', border: '1px solid #0f0', color: '#0f0',
-                        padding: '5px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '0.8em'
-                    }}
-                >
-                    [G] PICKUP
-                </button>
-            </div>
+            {currentLevelId !== "hub" && (
+                <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                    {PLAYER_SKILLS.map(skill => (
+                        <div key={skill.id} style={{
+                            border: selectedSkill?.id === skill.id ? '2px solid #fff' : '1px solid #333',
+                            background: selectedSkill?.id === skill.id ? '#333' : '#000',
+                            padding: '5px 10px',
+                            fontSize: '0.8em',
+                            color: targetMode && selectedSkill?.id === skill.id ? (isValidTarget ? 'orange' : 'red') : '#aaa'
+                        }}>
+                            <span style={{color: '#0f0', fontWeight: 'bold'}}>[{skill.key}]</span> {skill.name}
+                            <span style={{fontSize: '0.7em', color: '#666', marginLeft: '5px'}}>R:{skill.range}</span>
+                        </div>
+                    ))}
+
+                    <button
+                        onClick={triggerPickup}
+                        style={{
+                            background: '#002200', border: '1px solid #0f0', color: '#0f0',
+                            padding: '5px 10px', cursor: 'pointer', fontFamily: 'monospace', fontSize: '0.8em'
+                        }}
+                    >
+                        [G] PICKUP
+                    </button>
+                </div>
+            )}
 
             <div 
                 ref={logContainerRef}
