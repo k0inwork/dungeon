@@ -23,6 +23,7 @@ let player_vy = 0;
 let gravity = 5000;
 let jump_force = -75000;
 let move_speed = 20000;
+let current_level = 0;
 
 function calc_idx(x, y) { return (y * MAP_WIDTH + x); }
 
@@ -119,7 +120,10 @@ function update_physics() {
     // Win condition: reach bottom-left area after falling
     if (player_x <= 2 * 65536) {
         if (player_y >= 17 * 65536) {
-           bus_send(EVT_LEVEL_TRANSITION, K_PLATFORM, K_HOST, 0, 0, 0); // Back to Hub
+           let nextLevel = 0; // Default back to Hub
+           if (current_level == 2) { nextLevel = 3; } // From Platform 1 to Platform 2
+
+           bus_send(EVT_LEVEL_TRANSITION, K_PLATFORM, K_HOST, nextLevel, 0, 0);
            player_x = 5 * 65536; // Reset pos
         }
     }
@@ -159,6 +163,10 @@ function jump_player() {
     }
 }
 
+function set_level(id) {
+    current_level = id;
+}
+
 function handle_events() {
     if (M_OP == 101) { move_player(M_P1); }
     if (M_OP == 301) { jump_player(); }
@@ -172,6 +180,7 @@ export const PLATFORM_KERNEL_BLOCKS = [
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.PLATFORM),
   ": RUN_PLATFORM_CYCLE PROCESS_INBOX UPDATE_PHYSICS RENDER ;",
   ": INIT_PLATFORMER INIT_PLATFORMER ;",
+  ": SET_LEVEL ( id -- ) SET_LEVEL ;",
   ": CMD_JUMP JUMP_PLAYER ;",
   ": CMD_MOVE ( dir -- ) MOVE_PLAYER ;"
 ];

@@ -37,7 +37,8 @@ struct GridEntity {
     color,
     y,
     x,
-    type
+    type,
+    itemId
 }
 
 let entities = new Array(GridEntity, MAX_ENTITIES, 0x90000);
@@ -184,10 +185,14 @@ function move_entity(id, dx, dy) {
 
 function kill_entity(id) {
     let ent = get_ent_ptr(id);
+    let stats = RpgEntity(id);
+
     COLLISION_MAP[calc_idx(ent.x, ent.y)] = 0;
-    ent.char = 36;
+    ent.char = 36; // '$'
     ent.color = 16766720; 
     ent.type = 3;
+    ent.itemId = stats.invItem;
+
     redraw_cell(ent.x, ent.y, ent.color, ent.char);
     Log("[GRID] Entity Dropped Loot");
 }
@@ -198,12 +203,13 @@ function try_pickup(playerId, x, y) {
         let ent = get_ent_ptr(id);
         if (ent.char != 0) {
             if (ent.type == 3) {
+                let droppedItem = ent.itemId;
                 ent.char = 0;
                 ent.x = -1;
                 ent.y = -1;
                 ENTITY_MAP[calc_idx(x, y)] = 0;
                 refresh_tile(x, y, -1);
-                bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, id, 0);
+                bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, droppedItem, 0);
                 return;
             }
         }

@@ -21,7 +21,8 @@ struct RpgEntity {
     level,
     exp,
     state,
-    targetId
+    targetId,
+    invItem
 }
 
 let rpg_table = new Array(RpgEntity, MAX_ENTITIES, 0xA0000);
@@ -41,12 +42,17 @@ function init_stats(id, type) {
     e.def = 2;
     e.level = 1;
     e.state = 0; // 0=Alive
+    e.invItem = 0;
     
     if (id == 0) {
         // Player Buff
         e.maxHp = 200;
         e.hp = 200;
         e.atk = 20; 
+    } else {
+        // NPC Loot mapping
+        if (type == 1) { e.invItem = 2003; } // Rat Fur
+        if (type == 2) { e.invItem = 2001; } // Giant Rat Tooth
     }
     
     Log("Stats Init for ID:");

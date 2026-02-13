@@ -1,11 +1,13 @@
 
 import { KernelTestRunner } from "./KernelRunner";
+import { forthService } from "../services/WaForthService";
 import { KernelID, Opcode, PACKET_SIZE_INTS, VSO_REGISTRY } from "../types/Protocol";
 import { MEMORY } from "../constants/Memory";
 
 export class IntegrationSimulator {
     kernels: Map<number, KernelTestRunner> = new Map();
     busLog: string[] = [];
+    packetLog: any[] = [];
 
     addKernel(id: number, name: string, runner: KernelTestRunner) {
         this.kernels.set(id, runner);
@@ -19,8 +21,13 @@ export class IntegrationSimulator {
     }
 
     handleSync(requestor: KernelTestRunner, id: number, typeId: number, stack: any) {
-        const entry = Object.values(VSO_REGISTRY).find(v => v.typeId === typeId);
-        if (!entry) return stack.push(0);
+        const entry = (Object.values(VSO_REGISTRY).find(v => v.typeId === typeId) ||
+                       forthService.dynamicVsoRegistry.get(typeId)) as any;
+
+        if (!entry) {
+            console.error(`[SIM] Sync Error: Unknown TypeID ${typeId}`);
+            return stack.push(0);
+        }
 
         const source = this.kernels.get(entry.owner);
         if (!source) return stack.push(0);
@@ -64,6 +71,14 @@ export class IntegrationSimulator {
                     const senderName = KernelID[id] || id;
                     const targetName = KernelID[target] || target;
                     this.busLog.push(`[BUS] ${senderName} -> ${targetName}: ${opName} (${data[offset+3]}, ${data[offset+4]}, ${data[offset+5]})`);
+                    this.packetLog.push({
+                        op: opName,
+                        sender: senderName,
+                        target: targetName,
+                        p1: data[offset+3],
+                        p2: data[offset+4],
+                        p3: data[offset+5]
+                    });
 
                     if (target === KernelID.BUS) {
                         Object.keys(inboxes).forEach(tid => {
@@ -94,7 +109,11 @@ export class IntegrationSimulator {
         // 3. PROCESS
         this.kernels.forEach(k => {
             k.proc.run("PROCESS_INBOX");
-            if (k.id === 'HIVE') k.proc.run("RUN_HIVE_CYCLE");
+            if (k.proc.isWordDefined("RUN_HIVE_CYCLE")) k.proc.run("RUN_HIVE_CYCLE");
+            if (k.proc.isWordDefined("RUN_ENV_CYCLE")) k.proc.run("RUN_ENV_CYCLE");
+            if (k.proc.isWordDefined("RUN_BATTLE_CYCLE")) k.proc.run("RUN_BATTLE_CYCLE");
+            if (k.proc.isWordDefined("RUN_PLAYER_CYCLE")) k.proc.run("RUN_PLAYER_CYCLE");
+            if (k.proc.isWordDefined("RUN_GENERIC_CYCLE")) k.proc.run("RUN_GENERIC_CYCLE");
         });
     }
 }
