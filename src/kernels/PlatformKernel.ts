@@ -228,9 +228,12 @@ function handle_events() {
 ${STANDARD_AJS_POSTAMBLE}
 `;
 
+export const PLATFORM_AJS_SOURCE = AJS_LOGIC;
+
 export const PLATFORM_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.PLATFORM),
+  "S\" [PLATFORM] AJS Loaded\" S.",
   ": RUN_PLATFORM_CYCLE PROCESS_INBOX UPDATE_PHYSICS RENDER ;",
   ": CMD_JUMP JUMP_PLAYER ;",
   ": CMD_MOVE ( dir -- ) MOVE_PLAYER ;",

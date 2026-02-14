@@ -71,6 +71,7 @@ const App = () => {
   const [targetMode, setTargetMode] = useState(false);
   const [playerPos, setPlayerPos] = useState({ x: 5, y: 5 });
   const [cursorPos, setCursorPos] = useState({ x: 5, y: 5 }); // Default start
+  const [lastTargetId, setLastTargetId] = useState<number | null>(null);
   const [selectedSkill, setSelectedSkill] = useState<PlayerSkill | null>(null);
   const [isValidTarget, setIsValidTarget] = useState(true);
 
@@ -286,7 +287,6 @@ const App = () => {
         if (x !== -1) { px = x; py = y; }
     });
     addLog(`Spawning Player at ${px},${py}`);
-    setPlayerPos({x: px, y: py});
     setCursorPos({x: px, y: py});
     mainProc.run(`${px} ${py} 65535 64 0 SPAWN_ENTITY`);
 
@@ -324,6 +324,8 @@ const App = () => {
       if (nextLevel) {
           addLog(`Transitioning to ${nextLevel.name}...`);
           setCurrentLevel(nextLevel);
+          // Reset UI state for transition
+          setLastTargetId(null);
           // Update active_level in worldInfo for UI components
           setWorldInfo({
               ...worldInfo,
@@ -421,6 +423,10 @@ const App = () => {
                           }
                       }
 
+                      if (op === Opcode.EVT_MOVED && header[1] === KernelID.GRID) {
+                          // Player Pos now synced from Player Kernel memory in syncPlayerStats
+                      }
+
                       if (target === KernelID.BUS) {
                           for (const [key, inbox] of inboxes.entries()) {
                               if (key !== header[1]) {
@@ -473,8 +479,14 @@ const App = () => {
 
       // 3. SECOND BROKER PASS: Deliver responses emitted during cycles
       runBroker();
+
+      // 4. SECOND PASS OF CYCLES: Ensure events delivered in Step 3 are processed immediately
+      // (Especially important for EVT_MOVED to update Player/Hive state)
+      kernels.forEach(k => {
+          k.proc.run("PROCESS_INBOX");
+      });
       
-      // 4. Update Inspector if active
+      // 5. Update Inspector if active
       if (inspectStats) {
           handleInspect(inspectStats.x, inspectStats.y);
       }
@@ -490,13 +502,16 @@ const App = () => {
           const maxHp = mem.getInt32(base + 4, true);
           const gold = mem.getInt32(base + 8, true);
           const invCount = mem.getInt32(base + 12, true);
+          const px = mem.getInt32(base + 16, true);
+          const py = mem.getInt32(base + 20, true);
 
           const items: number[] = [];
           for (let i=0; i<invCount; i++) {
-              items.push(mem.getUint32(base + 16 + i*4, true));
+              items.push(mem.getUint32(base + 24 + i*4, true));
           }
 
-          setPlayerStats({ hp, maxHp, gold, invCount, items });
+          setPlayerStats({ hp, maxHp, gold, invCount, px, py, items });
+          setPlayerPos({ x: px, y: py });
       }
   };
 
@@ -610,7 +625,9 @@ const App = () => {
           if (keysDownRef.current.has("ArrowRight")) platProc.run("1 CMD_MOVE");
 
           try {
-              platProc.run("RUN_PLATFORM_CYCLE");
+              if (platProc.isWordDefined("RUN_PLATFORM_CYCLE")) {
+                  platProc.run("RUN_PLATFORM_CYCLE");
+              }
               const raw = platProc.getMemory() as ArrayBuffer;
               const vramSize = MEMORY.GRID_WIDTH * MEMORY.GRID_HEIGHT * 4;
               if (raw.byteLength >= MEMORY.VRAM_ADDR + vramSize) {
@@ -678,9 +695,15 @@ const App = () => {
                 const skill = PLAYER_SKILLS.find(s => s.key === k);
                 if (skill) {
                     setSelectedSkill(skill);
-                    // Re-evaluate range immediately for current cursor pos
+                    // Reset cursor to player if switching skills (for safety) or to last target
+                    // but here we just re-validate current cursor
                     const dist = Math.abs(cursorPos.x - playerPos.x) + Math.abs(cursorPos.y - playerPos.y);
-                    setIsValidTarget(dist <= skill.range);
+                    if (dist > skill.range) {
+                        setCursorPos({ ...playerPos });
+                        setIsValidTarget(true);
+                    } else {
+                        setIsValidTarget(true);
+                    }
                     addLog(`[TARGETING] Switched to ${skill.name} (Range: ${skill.range})`);
                 }
                 return;
@@ -698,29 +721,36 @@ const App = () => {
             if (cx >= MEMORY.GRID_WIDTH) cx = MEMORY.GRID_WIDTH - 1;
             if (cy >= MEMORY.GRID_HEIGHT) cy = MEMORY.GRID_HEIGHT - 1;
             
-            setCursorPos({x: cx, y: cy});
-            
-            // Range Check
+            // BLOCK MOVEMENT OUT OF RANGE
             if (selectedSkill) {
                 const dist = Math.abs(cx - playerPos.x) + Math.abs(cy - playerPos.y);
-                setIsValidTarget(dist <= selectedSkill.range);
+                if (dist <= selectedSkill.range) {
+                    setCursorPos({x: cx, y: cy});
+                    setIsValidTarget(true);
+                } else {
+                    // Recalculate if it was out of range (visual feedback)
+                    // We don't move the cursor if it would go out of range
+                }
+            } else {
+                setCursorPos({x: cx, y: cy});
             }
 
             if (k === "Enter" && selectedSkill) {
-                if (!isValidTarget) {
-                    addLog("TARGET OUT OF RANGE!");
-                    return;
-                }
-                const targetId = getEntityAt(cx, cy);
+                const targetId = getEntityAt(cursorPos.x, cursorPos.y);
                 if (targetId !== -1) {
+                    // Cannot attack self with offensive skills (Player is ID 0)
+                    if (targetId === 0 && selectedSkill.range > 0) {
+                        addLog("INVALID TARGET: Cannot attack self.");
+                        return;
+                    }
+
                     addLog(`Executing ${selectedSkill.name} on ID ${targetId}`);
                     const playerProc = forthService.get("PLAYER");
                     if (playerProc && playerProc.isReady) {
-                        // Send Attack Command to Bus
-                        // P1=Source(0), P2=Target(targetId), P3=SkillID
                         const cmd = `0 OUT_PTR ! 303 2 255 0 ${targetId} ${selectedSkill.id} BUS_SEND`;
                         playerProc.run(cmd);
                         tickSimulation();
+                        setLastTargetId(targetId);
                         setTargetMode(false);
                         setSelectedSkill(null);
                     }
@@ -759,8 +789,36 @@ const App = () => {
                     // Requires Targeting
                     setSelectedSkill(skill);
                     setTargetMode(true);
-                    setCursorPos({...playerPos}); // Reset cursor to player
-                    setIsValidTarget(true); // Range 0 is valid at start
+
+                    let startPos = { ...playerPos };
+                    // Try to auto-focus last target if alive and in range
+                    if (lastTargetId !== null) {
+                        const gridProc = forthService.get("GRID");
+                        const gridMem = new DataView(gridProc.getMemory());
+                        const ENTITY_TABLE_ADDR = 0x90000;
+                        const GRID_ENT_SIZE = 24;
+                        const base = ENTITY_TABLE_ADDR + (lastTargetId * GRID_ENT_SIZE);
+                        const entChar = gridMem.getInt32(base, true);
+                        if (entChar !== 0) {
+                            const tx = gridMem.getInt32(base + 12, true);
+                            const ty = gridMem.getInt32(base + 8, true);
+                            const dist = Math.abs(tx - playerPos.x) + Math.abs(ty - playerPos.y);
+
+                            const battleProc = forthService.get("BATTLE");
+                            const battleMem = new DataView(battleProc.getMemory());
+                            const RPG_TABLE_ADDR = 0xA0000;
+                            const RPG_ENT_SIZE = 36;
+                            const state = battleMem.getInt32(RPG_TABLE_ADDR + (lastTargetId * RPG_ENT_SIZE) + 24, true);
+
+                            if (dist <= skill.range && state === 0) {
+                                startPos = { x: tx, y: ty };
+                                addLog(`[TARGETING] Auto-focused last target ID ${lastTargetId}`);
+                            }
+                        }
+                    }
+
+                    setCursorPos(startPos);
+                    setIsValidTarget(true);
                     addLog(`[TARGETING] Select target for ${skill.name} (Range: ${skill.range})...`);
                 }
             }
@@ -774,17 +832,6 @@ const App = () => {
                 const cmd = `0 OUT_PTR ! 101 2 1 0 ${dx} ${dy} BUS_SEND`;
                 playerProc.run(cmd);
                 tickSimulation();
-                
-                // Track player position on success (for range checks)
-                // Note: Real position is in Wasm, this is a client prediction/cache.
-                // ideally we read it from EVT_MOVED, but this is responsive enough.
-                setPlayerPos(prev => {
-                    const nx = prev.x + dx;
-                    const ny = prev.y + dy;
-                    // Simple bounds clamp for local state
-                    if (nx < 0 || nx >= MEMORY.GRID_WIDTH || ny < 0 || ny >= MEMORY.GRID_HEIGHT) return prev;
-                    return {x: nx, y: ny};
-                });
             }
         }
         

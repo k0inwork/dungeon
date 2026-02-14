@@ -100,8 +100,8 @@ export const VSO_REGISTRY: Record<string, VsoStructDef> = {
         typeId: 4,
         owner: KernelID.PLAYER,
         baseAddr: 0xC0000,
-        sizeBytes: 56,
-        fields: ["hp", "maxHp", "gold", "invCount", "inv0", "inv1", "inv2", "inv3", "inv4", "inv5", "inv6", "inv7", "inv8", "inv9"]
+        sizeBytes: 64,
+        fields: ["hp", "maxHp", "gold", "invCount", "x", "y", "inv0", "inv1", "inv2", "inv3", "inv4", "inv5", "inv6", "inv7", "inv8", "inv9"]
     }
 };
 

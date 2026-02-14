@@ -811,6 +811,7 @@ export class AetherTranspiler {
                     this.emit(`  ${entry.sizeBytes} * ${entry.baseAddr} +`);
                 } else {
                     // REMOTE ACCESS: call sync_object(id, typeId)
+                    console.log(`[Transpiler] Emitting Remote VSO Access for ${func} (Kernel ${this.currentKernelId})`);
                     this.emit(`  VSO_${func} JS_SYNC_OBJECT`);
                 }
                 return;

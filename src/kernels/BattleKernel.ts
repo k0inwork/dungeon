@@ -52,7 +52,17 @@ function init_stats(id, type) {
     } else {
         // NPC Loot mapping
         if (type == 1) { e.invItem = 2003; } // Rat Fur
-        if (type == 2) { e.invItem = 2001; } // Giant Rat Tooth
+        if (type == 2) {
+            // Aggressive Rat ('R') drops Tail (2002), others drop Tooth (2001)
+            let gridEnt = GridEntity(id);
+            Log("Check Glyph for ID:"); Log(id);
+            Log("Glyph found:"); Log(gridEnt.char);
+            if (gridEnt.char == 82) { // 'R'
+                e.invItem = 2002;
+            } else {
+                e.invItem = 2001;
+            }
+        }
     }
     
     Log("Stats Init for ID:");

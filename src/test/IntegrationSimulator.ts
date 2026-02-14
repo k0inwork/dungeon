@@ -9,6 +9,13 @@ export class IntegrationSimulator {
     busLog: string[] = [];
     packetLog: any[] = [];
 
+    busSend(op: number, sender: number, target: number, p1: number, p2: number, p3: number) {
+        const k = this.kernels.get(sender);
+        if (k) {
+            k.proc.run(`0 OUT_PTR ! ${op} ${sender} ${target} ${p1} ${p2} ${p3} BUS_SEND`);
+        }
+    }
+
     addKernel(id: number, name: string, runner: KernelTestRunner) {
         this.kernels.set(id, runner);
 
@@ -43,7 +50,9 @@ export class IntegrationSimulator {
             return;
         }
 
-        destMem.set(srcMem.subarray(srcAddr, srcAddr + entry.sizeBytes), destAddr);
+        const data = srcMem.subarray(srcAddr, srcAddr + entry.sizeBytes);
+        console.log(`[SIM] Syncing Type ${typeId} ID ${id} from Addr ${srcAddr.toString(16)}. Data:`, data.subarray(0, 4));
+        destMem.set(data, destAddr);
         stack.push(destAddr);
     }
 

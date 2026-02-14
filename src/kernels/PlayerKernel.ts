@@ -9,7 +9,7 @@ const AJS_LOGIC = `
 ${STANDARD_AJS_PREAMBLE}
 
 // 1. MEMORY
-const INV_BASE = 0xC0010; // PLAYER_STRUCT + 16
+const INV_BASE = 0xC0018; // PLAYER_STRUCT + 24
 const INVENTORY = new Uint32Array(INV_BASE);
 
 // 2. LOGIC
@@ -18,6 +18,8 @@ struct PlayerState {
     maxHp,
     gold,
     invCount,
+    x,
+    y,
     inv0, inv1, inv2, inv3, inv4,
     inv5, inv6, inv7, inv8, inv9
 }
@@ -54,7 +56,19 @@ function add_item(itemId) {
 
 function handle_events() {
   if (M_OP == EVT_SPAWN) {
-     // Run init on first spawn event?
+     if (M_P1 == 0) {
+         let p = get_player_ptr();
+         p.x = (M_P3 >>> 16) & 255;
+         p.y = M_P3 & 255;
+     }
+  }
+
+  if (M_OP == EVT_MOVED) {
+      if (M_P1 == 0) {
+          let p = get_player_ptr();
+          p.x = M_P2;
+          p.y = M_P3;
+      }
   }
 
   if (M_OP == EVT_COLLIDE) {
