@@ -21,13 +21,11 @@ interface StructDef {
     size: number;
 }
 
-// Variables that are defined as VARIABLE in Forth and must be fetched (@) when used as R-values
+// Variables that are defined as VARIABLE in Forth Firmware and must be fetched (@) when used as R-values
+// These should NOT be re-defined as VARIABLE by the transpiler.
 const KNOWN_GLOBALS = new Set([
-  "ENTITY_COUNT", "HIVE_ENT_COUNT", "RNG_SEED",
-  "PLAYER_HP", "PLAYER_GOLD",
-  "LAST_PLAYER_X", "LAST_PLAYER_Y",
   "M_OP", "M_SENDER", "M_TARGET", "M_P1", "M_P2", "M_P3",
-  "OUT_PTR"
+  "OUT_PTR", "STR_PTR"
 ]);
 
 export class AetherTranspiler {
@@ -221,6 +219,7 @@ export class AetherTranspiler {
         if (n.type === "VariableDeclaration") {
           n.declarations.forEach((decl: any) => {
             const name = decl.id.name.toUpperCase();
+            if (KNOWN_GLOBALS.has(name)) return;
 
             // Detect Type Hints: const x = new Uint8Array(...)
             if (decl.init && decl.init.type === "NewExpression" && decl.init.callee.name && decl.init.callee.name.includes("Uint8")) {
@@ -397,6 +396,19 @@ export class AetherTranspiler {
       if (init) {
           if (init.type === "Literal") {
             val = init.value;
+          } else if (init.type === "UnaryExpression") {
+              if (init.operator === "-" && init.argument.type === "Literal") {
+                  val = -init.argument.value;
+              } else if (init.operator === "!" && init.argument.type === "Literal") {
+                  val = init.argument.value ? 0 : -1;
+              }
+          } else if (init.type === "BinaryExpression") {
+              if (init.left.type === "Literal" && init.right.type === "Literal") {
+                  if (init.operator === "*") val = init.left.value * init.right.value;
+                  if (init.operator === "+") val = init.left.value + init.right.value;
+                  if (init.operator === "-") val = init.left.value - init.right.value;
+                  if (init.operator === "/") val = Math.floor(init.left.value / init.right.value);
+              }
           } else if (init.type === "NewExpression" || init.type === "CallExpression") {
               // Handle new Uint8Array(0x30000) -> 0x30000
               if (init.arguments && init.arguments.length > 0 && init.arguments[0].type === "Literal") {

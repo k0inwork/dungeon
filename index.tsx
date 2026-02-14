@@ -66,6 +66,7 @@ const App = () => {
   
   // Inspector & Targeting State
   const [inspectStats, setInspectStats] = useState<EntityStats | null>(null);
+  const [groundItem, setGroundItem] = useState<any>(null);
   const [playerStats, setPlayerStats] = useState<any>(null);
   const [targetMode, setTargetMode] = useState(false);
   const [playerPos, setPlayerPos] = useState({ x: 5, y: 5 });
@@ -370,6 +371,9 @@ const App = () => {
   const tickSimulation = () => {
       const kernels: { id: number, proc: any }[] = [];
 
+      // Update Ground Inspector
+      updateGroundInspector();
+
       forthService.processes.forEach((proc, name) => {
           if (proc.isReady) {
               const numericId = KernelID[name as keyof typeof KernelID];
@@ -487,8 +491,48 @@ const App = () => {
           const gold = mem.getInt32(base + 8, true);
           const invCount = mem.getInt32(base + 12, true);
 
-          setPlayerStats({ hp, maxHp, gold, invCount });
+          const items: number[] = [];
+          for (let i=0; i<invCount; i++) {
+              items.push(mem.getUint32(base + 16 + i*4, true));
+          }
+
+          setPlayerStats({ hp, maxHp, gold, invCount, items });
       }
+  };
+
+  const getItemName = (id: number) => {
+      if (id === 2001) return "Giant Rat Tooth";
+      if (id === 2002) return "Rat Tail";
+      if (id === 2003) return "Rat Fur";
+      return `Item #${id}`;
+  };
+
+  const updateGroundInspector = () => {
+      if (!activeKernels.has("GRID")) return;
+      const gridProc = forthService.get("GRID");
+      const gridMem = new DataView(gridProc.getMemory());
+      const ENTITY_TABLE_ADDR = 0x90000;
+      const MAX_ENTITIES = 32;
+      const GRID_ENT_SIZE = 24; // Updated size in Protocol
+
+      let found = null;
+      // Start from 1 to skip player
+      for (let i = 1; i < MAX_ENTITIES; i++) {
+          const base = ENTITY_TABLE_ADDR + (i * GRID_ENT_SIZE);
+          const entChar = gridMem.getInt32(base, true);
+          if (entChar === 0) continue;
+
+          const entY = gridMem.getInt32(base + 8, true);
+          const entX = gridMem.getInt32(base + 12, true);
+          const entType = gridMem.getInt32(base + 16, true);
+          const itemId = gridMem.getInt32(base + 20, true);
+
+          if (entX === playerPos.x && entY === playerPos.y && entType === 3) {
+              found = { id: i, itemId };
+              break;
+          }
+      }
+      setGroundItem(found);
   };
 
   // Inspect Entity at X, Y by checking Kernel Memory directly
@@ -868,6 +912,33 @@ const App = () => {
                     <div>HP: <span style={{color: playerStats.hp < 25 ? "red" : "#0f0"}}>{playerStats.hp} / {playerStats.maxHp}</span></div>
                     <div>GOLD: <span style={{color: "yellow"}}>{playerStats.gold}</span></div>
                     <div>INV: <span style={{color: "cyan"}}>{playerStats.invCount} / 10</span></div>
+                    {playerStats.items && playerStats.items.length > 0 && (
+                        <div style={{marginTop: "5px", borderTop: "1px solid #333", paddingTop: "5px"}}>
+                            {playerStats.items.map((it: number, idx: number) => (
+                                <div key={idx} style={{color: "#aaa"}}>- {getItemName(it)}</div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* GROUND ITEM BOX */}
+            {groundItem && (
+                <div style={{
+                    position: "absolute",
+                    bottom: "140px",
+                    left: "10px",
+                    width: "200px",
+                    background: "rgba(0, 40, 0, 0.9)",
+                    border: "2px solid yellow",
+                    padding: "10px",
+                    fontFamily: "monospace",
+                    fontSize: "0.8em",
+                    zIndex: 20
+                }}>
+                    <div style={{color: "yellow", fontWeight: "bold", marginBottom: "5px"}}>LOOT BELOW YOU:</div>
+                    <div style={{color: "white"}}>{getItemName(groundItem.itemId)}</div>
+                    <div style={{marginTop: "5px", color: "#666", fontSize: "0.9em"}}>Press [G] to Pickup</div>
                 </div>
             )}
 
