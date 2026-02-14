@@ -1,0 +1,937 @@
+
+[1m[46m RUN [49m[22m [36mv4.0.18 [39m[90m/app[39m
+
+ [31m❯[39m src/test/PlatformTranspile.test.ts [2m([22m[2m2 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[32m 36[2mms[22m[39m
+[31m     [31m×[31m transpiles successfully without errors[39m[32m 27[2mms[22m[39m
+     [32m✓[39m emits correct VRAM address access[32m 8[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m src/test/PlatformTranspile.test.ts[2m > [22mPlatformKernel Transpilation[2m > [22mtranspiles successfully without errors
+[31m[1mAssertionError[22m: expected '( --- STRUCT OFFSETS --- )\n( Struct:…' not to contain 'ERROR'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- ERROR[39m
+[31m+ ( --- STRUCT OFFSETS --- )[39m
+[31m+ ( Struct: GridEntity )[39m
+[31m+ 24 CONSTANT SIZEOF_GRIDENTITY[39m
+[31m+ 0 CONSTANT OFF_GRIDENTITY_CHAR[39m
+[31m+ 4 CONSTANT OFF_GRIDENTITY_COLOR[39m
+[31m+ 8 CONSTANT OFF_GRIDENTITY_Y[39m
+[31m+ 12 CONSTANT OFF_GRIDENTITY_X[39m
+[31m+ 16 CONSTANT OFF_GRIDENTITY_TYPE[39m
+[31m+ 20 CONSTANT OFF_GRIDENTITY_ITEMID[39m
+[31m+ ( Struct: HiveEntity )[39m
+[31m+ 12 CONSTANT SIZEOF_HIVEENTITY[39m
+[31m+ 0 CONSTANT OFF_HIVEENTITY_X[39m
+[31m+ 4 CONSTANT OFF_HIVEENTITY_Y[39m
+[31m+ 8 CONSTANT OFF_HIVEENTITY_TYPE[39m
+[31m+ ( Struct: RpgEntity )[39m
+[31m+ 36 CONSTANT SIZEOF_RPGENTITY[39m
+[31m+ 0 CONSTANT OFF_RPGENTITY_HP[39m
+[31m+ 4 CONSTANT OFF_RPGENTITY_MAXHP[39m
+[31m+ 8 CONSTANT OFF_RPGENTITY_ATK[39m
+[31m+ 12 CONSTANT OFF_RPGENTITY_DEF[39m
+[31m+ 16 CONSTANT OFF_RPGENTITY_LEVEL[39m
+[31m+ 20 CONSTANT OFF_RPGENTITY_EXP[39m
+[31m+ 24 CONSTANT OFF_RPGENTITY_STATE[39m
+[31m+ 28 CONSTANT OFF_RPGENTITY_TARGETID[39m
+[31m+ 32 CONSTANT OFF_RPGENTITY_INVITEM[39m
+[31m+ ( Struct: NPC )[39m
+[31m+ 36 CONSTANT SIZEOF_NPC[39m
+[31m+ 0 CONSTANT OFF_NPC_HP[39m
+[31m+ 4 CONSTANT OFF_NPC_MAXHP[39m
+[31m+ 8 CONSTANT OFF_NPC_ATK[39m
+[31m+ 12 CONSTANT OFF_NPC_DEF[39m
+[31m+ 16 CONSTANT OFF_NPC_LEVEL[39m
+[31m+ 20 CONSTANT OFF_NPC_EXP[39m
+[31m+ 24 CONSTANT OFF_NPC_STATE[39m
+[31m+ 28 CONSTANT OFF_NPC_TARGETID[39m
+[31m+ 32 CONSTANT OFF_NPC_INVITEM[39m
+[31m+ ( Struct: PlayerState )[39m
+[31m+ 64 CONSTANT SIZEOF_PLAYERSTATE[39m
+[31m+ 0 CONSTANT OFF_PLAYERSTATE_HP[39m
+[31m+ 4 CONSTANT OFF_PLAYERSTATE_MAXHP[39m
+[31m+ 8 CONSTANT OFF_PLAYERSTATE_GOLD[39m
+[31m+ 12 CONSTANT OFF_PLAYERSTATE_INVCOUNT[39m
+[31m+ 16 CONSTANT OFF_PLAYERSTATE_X[39m
+[31m+ 20 CONSTANT OFF_PLAYERSTATE_Y[39m
+[31m+ 24 CONSTANT OFF_PLAYERSTATE_INV0[39m
+[31m+ 28 CONSTANT OFF_PLAYERSTATE_INV1[39m
+[31m+ 32 CONSTANT OFF_PLAYERSTATE_INV2[39m
+[31m+ 36 CONSTANT OFF_PLAYERSTATE_INV3[39m
+[31m+ 40 CONSTANT OFF_PLAYERSTATE_INV4[39m
+[31m+ 44 CONSTANT OFF_PLAYERSTATE_INV5[39m
+[31m+ 48 CONSTANT OFF_PLAYERSTATE_INV6[39m
+[31m+ 52 CONSTANT OFF_PLAYERSTATE_INV7[39m
+[31m+ 56 CONSTANT OFF_PLAYERSTATE_INV8[39m
+[31m+ 60 CONSTANT OFF_PLAYERSTATE_INV9[39m
+[31m+ ( --------------------- )[39m
+[31m+ ( --- AETHER AUTO-GLOBALS --- )[39m
+[31m+ 0 CONSTANT K_HOST[39m
+[31m+ 1 CONSTANT K_GRID[39m
+[31m+ 2 CONSTANT K_PLAYER[39m
+[31m+ 3 CONSTANT K_HIVE[39m
+[31m+ 4 CONSTANT K_BATTLE[39m
+[31m+ 5 CONSTANT K_PLATFORM[39m
+[31m+ 10 CONSTANT K_TEST1[39m
+[31m+ 11 CONSTANT K_TEST2[39m
+[31m+ 12 CONSTANT K_TEST3[39m
+[31m+ 255 CONSTANT K_BUS[39m
+[31m+ 101 CONSTANT REQ_MOVE[39m
+[31m+ 102 CONSTANT REQ_TELEPORT[39m
+[31m+ 103 CONSTANT REQ_TERRAIN[39m
+[31m+ 105 CONSTANT REQ_PATH_STEP[39m
+[31m+ 201 CONSTANT EVT_MOVED[39m
+[31m+ 202 CONSTANT EVT_COLLIDE[39m
+[31m+ 203 CONSTANT EVT_SPAWN[39m
+[31m+ 204 CONSTANT EVT_DAMAGE[39m
+[31m+ 205 CONSTANT EVT_DEATH[39m
+[31m+ 206 CONSTANT EVT_ITEM_GET[39m
+[31m+ 207 CONSTANT EVT_LEVEL_TRANSITION[39m
+[31m+ 301 CONSTANT CMD_INTERACT[39m
+[31m+ 302 CONSTANT CMD_SPEAK[39m
+[31m+ 303 CONSTANT CMD_ATTACK[39m
+[31m+ 304 CONSTANT CMD_KILL[39m
+[31m+ 305 CONSTANT CMD_PICKUP[39m
+[31m+ 901 CONSTANT SYS_LOG[39m
+[31m+ 999 CONSTANT SYS_ERROR[39m
+[31m+ 1000 CONSTANT SYS_BLOB[39m
+[31m+ 1 CONSTANT VSO_GRIDENTITY[39m
+[31m+ 2 CONSTANT VSO_HIVEENTITY[39m
+[31m+ 3 CONSTANT VSO_RPGENTITY[39m
+[31m+ 3 CONSTANT VSO_NPC[39m
+[31m+ 4 CONSTANT VSO_PLAYERSTATE[39m
+[31m+ 1024 CONSTANT INPUT_QUEUE[39m
+[31m+ 66560 CONSTANT OUTPUT_QUEUE[39m
+[31m+ 458752 CONSTANT STR_BUF_START[39m
+[31m+ 524287 CONSTANT STR_BUF_END[39m
+[31m+ 851968 CONSTANT TEMP_VSO_BUFFER[39m
+[31m+ 1028 CONSTANT INBOX[39m
+[31m+ 66564 CONSTANT OUTBOX[39m
+[31m+ 1024 CONSTANT IN_COUNT[39m
+[31m+ 66560 CONSTANT OUT_COUNT[39m
+[31m+ 40 CONSTANT MAP_WIDTH[39m
+[31m+ 20 CONSTANT MAP_HEIGHT[39m
+[31m+ 196608 CONSTANT COLLISION_MAP[39m
+[31m+ 262144 CONSTANT TERRAIN_MAP[39m
+[31m+ 524288 CONSTANT VRAM[39m
+[31m+ 266240 CONSTANT TRANSITION_MAP[39m
+[31m+ 5000 CONSTANT GRAVITY[39m
+[31m+ -75000 CONSTANT JUMP_FORCE[39m
+[31m+ 20000 CONSTANT MOVE_SPEED[39m
+[31m+ VARIABLE PLAYER_X[39m
+[31m+ VARIABLE PLAYER_Y[39m
+[31m+ VARIABLE PLAYER_VX[39m
+[31m+ VARIABLE PLAYER_VY[39m
+[31m+ VARIABLE CURRENT_LEVEL[39m
+[31m+ VARIABLE LV_BUS_SEND_OP[39m
+[31m+ VARIABLE LV_BUS_SEND_SENDER[39m
+[31m+ VARIABLE LV_BUS_SEND_TARGET[39m
+[31m+ VARIABLE LV_BUS_SEND_P1[39m
+[31m+ VARIABLE LV_BUS_SEND_P2[39m
+[31m+ VARIABLE LV_BUS_SEND_P3[39m
+[31m+ VARIABLE LV_CALC_IDX_X[39m
+[31m+ VARIABLE LV_CALC_IDX_Y[39m
+[31m+ VARIABLE LV_GET_COLLISION_X[39m
+[31m+ VARIABLE LV_GET_COLLISION_Y[39m
+[31m+ VARIABLE LV_INIT_PLATFORMER_I[39m
+[31m+ VARIABLE LV_SET_TRANSITION_CHARCODE[39m
+[31m+ VARIABLE LV_SET_TRANSITION_TARGETIDX[39m
+[31m+ VARIABLE LV_SET_PLAYER_POS_X[39m
+[31m+ VARIABLE LV_SET_PLAYER_POS_Y[39m
+[31m+ VARIABLE LV_LOAD_TILE_X[39m
+[31m+ VARIABLE LV_LOAD_TILE_Y[39m
+[31m+ VARIABLE LV_LOAD_TILE_COLOR[39m
+[31m+ VARIABLE LV_LOAD_TILE_CHAR[39m
+[31m+ VARIABLE LV_LOAD_TILE_TYPE[39m
+[31m+ VARIABLE LV_LOAD_TILE_I[39m
+[31m+ VARIABLE LV_UPDATE_PHYSICS_NX[39m
+[31m+ VARIABLE LV_UPDATE_PHYSICS_NY[39m
+[31m+ VARIABLE LV_UPDATE_PHYSICS_LX[39m
+[31m+ VARIABLE LV_UPDATE_PHYSICS_RX[39m
+[31m+ VARIABLE LV_UPDATE_PHYSICS_BY_FOOT[39m
+[31m+ VARIABLE LV_UPDATE_PHYSICS_BY_HEAD[39m
+[31m+ VARIABLE LV_UPDATE_PHYSICS_BY_MID_TRAVEL[39m
+[31m+ VARIABLE LV_UPDATE_PHYSICS_H_RX[39m
+[31m+ VARIABLE LV_UPDATE_PHYSICS_H_LX[39m
+[31m+ VARIABLE LV_UPDATE_PHYSICS_PY[39m
+[31m+ VARIABLE LV_UPDATE_PHYSICS_COLL[39m
+[31m+ VARIABLE LV_UPDATE_PHYSICS_P_CX[39m
+[31m+ VARIABLE LV_UPDATE_PHYSICS_P_CY[39m
+[31m+ VARIABLE LV_UPDATE_PHYSICS_P_TI[39m
+[31m+ VARIABLE LV_UPDATE_PHYSICS_P_PACKED[39m
+[31m+ VARIABLE LV_UPDATE_PHYSICS_P_CHAR[39m
+[31m+ VARIABLE LV_UPDATE_PHYSICS_P_TARGETPLUSONE[39m
+[31m+ VARIABLE LV_RENDER_I[39m
+[31m+ VARIABLE LV_RENDER_PX[39m
+[31m+ VARIABLE LV_RENDER_PY[39m
+[31m+ VARIABLE LV_RENDER_PIDX[39m
+[31m+ VARIABLE LV_MOVE_PLAYER_DIR[39m
+[31m+ VARIABLE LV_JUMP_PLAYER_BX[39m
+[31m+ VARIABLE LV_JUMP_PLAYER_BY[39m
+[31m+ VARIABLE LV_SET_LEVEL_ID[39m
+[31m+ VARIABLE LV_PROCESS_INBOX_TOTALCOUNT[39m
+[31m+ VARIABLE LV_PROCESS_INBOX_OFFSET[39m
+[31m+ VARIABLE LV_PROCESS_INBOX_OP[39m
+[31m+ ( ------------------------- )[39m
+[31m+   0[39m
+[31m+   M_OP ![39m
+[31m+   0[39m
+[31m+   M_SENDER ![39m
+[31m+   0[39m
+[31m+   M_TARGET ![39m
+[31m+   0[39m
+[31m+   M_P1 ![39m
+[31m+   0[39m
+[31m+   M_P2 ![39m
+[31m+   0[39m
+[31m+   M_P3 ![39m
+[31m+   0[39m
+[31m+   OUT_PTR ![39m
+[31m+[39m
+[31m+ : BUS_SEND ( OP SENDER TARGET P1 P2 P3 -- )[39m
+[31m+   LV_BUS_SEND_P3 ![39m
+[31m+   LV_BUS_SEND_P2 ![39m
+[31m+   LV_BUS_SEND_P1 ![39m
+[31m+   LV_BUS_SEND_TARGET ![39m
+[31m+   LV_BUS_SEND_SENDER ![39m
+[31m+   LV_BUS_SEND_OP ![39m
+[31m+   LV_BUS_SEND_OP @[39m
+[31m+   OUTBOX[39m
+[31m+   OUT_PTR @[39m
+[31m+   CELLS + ![39m
+[31m+   LV_BUS_SEND_SENDER @[39m
+[31m+   OUTBOX[39m
+[31m+   OUT_PTR @[39m
+[31m+   1[39m
+[31m+   +[39m
+[31m+   CELLS + ![39m
+[31m+   LV_BUS_SEND_TARGET @[39m
+[31m+   OUTBOX[39m
+[31m+   OUT_PTR @[39m
+[31m+   2[39m
+[31m+   +[39m
+[31m+   CELLS + ![39m
+[31m+   LV_BUS_SEND_P1 @[39m
+[31m+   OUTBOX[39m
+[31m+   OUT_PTR @[39m
+[31m+   3[39m
+[31m+   +[39m
+[31m+   CELLS + ![39m
+[31m+   LV_BUS_SEND_P2 @[39m
+[31m+   OUTBOX[39m
+[31m+   OUT_PTR @[39m
+[31m+   4[39m
+[31m+   +[39m
+[31m+   CELLS + ![39m
+[31m+   LV_BUS_SEND_P3 @[39m
+[31m+   OUTBOX[39m
+[31m+   OUT_PTR @[39m
+[31m+   5[39m
+[31m+   +[39m
+[31m+   CELLS + ![39m
+[31m+   6[39m
+[31m+   OUT_PTR +![39m
+[31m+   OUT_PTR @[39m
+[31m+   OUT_COUNT[39m
+[31m+   0[39m
+[31m+   CELLS + ![39m
+[31m+ ;[39m
+[31m+[39m
+[31m+ : BUS_READ_INPUT (  -- )[39m
+[31m+   IN_COUNT[39m
+[31m+   0[39m
+[31m+   CELLS + @[39m
+[31m+   EXIT[39m
+[31m+ ;[39m
+[31m+   131072[39m
+[31m+   PLAYER_X ![39m
+[31m+   655360[39m
+[31m+   PLAYER_Y ![39m
+[31m+   0[39m
+[31m+   PLAYER_VX ![39m
+[31m+   0[39m
+[31m+   PLAYER_VY ![39m
+[31m+   0[39m
+[31m+   CURRENT_LEVEL ![39m
+[31m+[39m
+[31m+ : CALC_IDX ( X Y -- )[39m
+[31m+   LV_CALC_IDX_Y ![39m
+[31m+   LV_CALC_IDX_X ![39m
+[31m+   LV_CALC_IDX_Y @[39m
+[31m+   MAP_WIDTH[39m
+[31m+   *[39m
+[31m+   LV_CALC_IDX_X @[39m
+[31m+   +[39m
+[31m+   EXIT[39m
+[31m+ ;[39m
+[31m+[39m
+[31m+ : GET_COLLISION ( X Y -- )[39m
+[31m+   LV_GET_COLLISION_Y ![39m
+[31m+   LV_GET_COLLISION_X ![39m
+[31m+   LV_GET_COLLISION_X @[39m
+[31m+   0[39m
+[31m+   <[39m
+[31m+   IF[39m
+[31m+   1[39m
+[31m+   EXIT[39m
+[31m+   THEN[39m
+[31m+   LV_GET_COLLISION_X @[39m
+[31m+   MAP_WIDTH[39m
+[31m+   >=[39m
+[31m+   IF[39m
+[31m+   1[39m
+[31m+   EXIT[39m
+[31m+   THEN[39m
+[31m+   LV_GET_COLLISION_Y @[39m
+[31m+   0[39m
+[31m+   <[39m
+[31m+   IF[39m
+[31m+   0[39m
+[31m+   EXIT[39m
+[31m+   THEN[39m
+[31m+   LV_GET_COLLISION_Y @[39m
+[31m+   MAP_HEIGHT[39m
+[31m+   >=[39m
+[31m+   IF[39m
+[31m+   1[39m
+[31m+   EXIT[39m
+[31m+   THEN[39m
+[31m+   COLLISION_MAP[39m
+[31m+   LV_GET_COLLISION_X @[39m
+[31m+   LV_GET_COLLISION_Y @[39m
+[31m+   CALC_IDX[39m
+[31m+   + C@[39m
+[31m+   EXIT[39m
+[31m+ ;[39m
+[31m+[39m
+[31m+ : INIT_PLATFORMER (  -- )[39m
+[31m+   131072[39m
+[31m+   PLAYER_X ![39m
+[31m+   131072[39m
+[31m+   PLAYER_Y ![39m
+[31m+   0[39m
+[31m+   PLAYER_VX ![39m
+[31m+   0[39m
+[31m+   PLAYER_VY ![39m
+[31m+   0[39m
+[31m+   CURRENT_LEVEL ![39m
+[31m+   0[39m
+[31m+   LV_INIT_PLATFORMER_I ![39m
+[31m+   BEGIN[39m
+[31m+   LV_INIT_PLATFORMER_I @[39m
+[31m+   800[39m
+[31m+   <[39m
+[31m+   WHILE[39m
+[31m+   0[39m
+[31m+   COLLISION_MAP[39m
+[31m+   LV_INIT_PLATFORMER_I @[39m
+[31m+   + C![39m
+[31m+   0[39m
+[31m+   TERRAIN_MAP[39m
+[31m+   LV_INIT_PLATFORMER_I @[39m
+[31m+   CELLS + ![39m
+[31m+   1 LV_INIT_PLATFORMER_I +![39m
+[31m+   REPEAT[39m
+[31m+   0[39m
+[31m+   LV_INIT_PLATFORMER_I ![39m
+[31m+   BEGIN[39m
+[31m+   LV_INIT_PLATFORMER_I @[39m
+[31m+   256[39m
+[31m+   <[39m
+[31m+   WHILE[39m
+[31m+   0[39m
+[31m+   TRANSITION_MAP[39m
+[31m+   LV_INIT_PLATFORMER_I @[39m
+[31m+   CELLS + ![39m
+[31m+   1 LV_INIT_PLATFORMER_I +![39m
+[31m+   REPEAT[39m
+[31m+ ;[39m
+[31m+[39m
+[31m+ : SET_TRANSITION ( CHARCODE TARGETIDX -- )[39m
+[31m+   LV_SET_TRANSITION_TARGETIDX ![39m
+[31m+   LV_SET_TRANSITION_CHARCODE ![39m
+[31m+   LV_SET_TRANSITION_TARGETIDX @[39m
+[31m+   1[39m
+[31m+   +[39m
+[31m+   TRANSITION_MAP[39m
+[31m+   LV_SET_TRANSITION_CHARCODE @[39m
+[31m+   CELLS + ![39m
+[31m+ ;[39m
+[31m+[39m
+[31m+ : SET_PLAYER_POS ( X Y -- )[39m
+[31m+   LV_SET_PLAYER_POS_Y ![39m
+[31m+   LV_SET_PLAYER_POS_X ![39m
+[31m+   LV_SET_PLAYER_POS_X @[39m
+[31m+   65536[39m
+[31m+   *[39m
+[31m+   PLAYER_X ![39m
+[31m+   LV_SET_PLAYER_POS_Y @[39m
+[31m+   65536[39m
+[31m+   *[39m
+[31m+   PLAYER_Y ![39m
+[31m+ ;[39m
+[31m+[39m
+[31m+ : LOAD_TILE ( X Y COLOR CHAR TYPE -- )[39m
+[31m+   LV_LOAD_TILE_TYPE ![39m
+[31m+   LV_LOAD_TILE_CHAR ![39m
+[31m+   LV_LOAD_TILE_COLOR ![39m
+[31m+   LV_LOAD_TILE_Y ![39m
+[31m+   LV_LOAD_TILE_X ![39m
+[31m+   LV_LOAD_TILE_X @[39m
+[31m+   LV_LOAD_TILE_Y @[39m
+[31m+   CALC_IDX[39m
+[31m+   LV_LOAD_TILE_I ![39m
+[31m+   LV_LOAD_TILE_COLOR @[39m
+[31m+   8[39m
+[31m+   LSHIFT[39m
+[31m+   LV_LOAD_TILE_CHAR @[39m
+[31m+   OR[39m
+[31m+   TERRAIN_MAP[39m
+[31m+   LV_LOAD_TILE_I @[39m
+[31m+   CELLS + ![39m
+[31m+   LV_LOAD_TILE_TYPE @[39m
+[31m+   COLLISION_MAP[39m
+[31m+   LV_LOAD_TILE_I @[39m
+[31m+   + C![39m
+[31m+ ;[39m
+[31m+[39m
+[31m+ : UPDATE_PHYSICS (  -- )[39m
+[31m+   PLAYER_VY @[39m
+[31m+   GRAVITY[39m
+[31m+   +[39m
+[31m+   PLAYER_VY ![39m
+[31m+   PLAYER_VX @[39m
+[31m+   8[39m
+[31m+   *[39m
+[31m+   10[39m
+[31m+   /[39m
+[31m+   PLAYER_VX ![39m
+[31m+   PLAYER_VX @[39m
+[31m+   0[39m
+[31m+   <>[39m
+[31m+   IF[39m
+[31m+   THEN[39m
+[31m+   PLAYER_X @[39m
+[31m+   PLAYER_VX @[39m
+[31m+   +[39m
+[31m+   LV_UPDATE_PHYSICS_NX ![39m
+[31m+   PLAYER_Y @[39m
+[31m+   PLAYER_VY @[39m
+[31m+   +[39m
+[31m+   LV_UPDATE_PHYSICS_NY ![39m
+[31m+   PLAYER_X @[39m
+[31m+   4000[39m
+[31m+   +[39m
+[31m+   65536[39m
+[31m+   /[39m
+[31m+   LV_UPDATE_PHYSICS_LX ![39m
+[31m+   PLAYER_X @[39m
+[31m+   61536[39m
+[31m+   +[39m
+[31m+   65536[39m
+[31m+   /[39m
+[31m+   LV_UPDATE_PHYSICS_RX ![39m
+[31m+   LV_UPDATE_PHYSICS_NY @[39m
+[31m+   65535[39m
+[31m+   +[39m
+[31m+   65536[39m
+[31m+   /[39m
+[31m+   LV_UPDATE_PHYSICS_BY_FOOT ![39m
+[31m+   LV_UPDATE_PHYSICS_NY @[39m
+[31m+   65536[39m
+[31m+   /[39m
+[31m+   LV_UPDATE_PHYSICS_BY_HEAD ![39m
+[31m+   PLAYER_Y @[39m
+[31m+   PLAYER_VY @[39m
+[31m+   2[39m
+[31m+   /[39m
+[31m+   +[39m
+[31m+   65535[39m
+[31m+   +[39m
+[31m+   65536[39m
+[31m+   /[39m
+[31m+   LV_UPDATE_PHYSICS_BY_MID_TRAVEL ![39m
+[31m+   PLAYER_VY @[39m
+[31m+   0[39m
+[31m+   >[39m
+[31m+   IF[39m
+[31m+   LV_UPDATE_PHYSICS_LX @[39m
+[31m+   LV_UPDATE_PHYSICS_BY_FOOT @[39m
+[31m+   GET_COLLISION[39m
+[31m+   LV_UPDATE_PHYSICS_RX @[39m
+[31m+   LV_UPDATE_PHYSICS_BY_FOOT @[39m
+[31m+   GET_COLLISION[39m
+[31m+   OR[39m
+[31m+   LV_UPDATE_PHYSICS_LX @[39m
+[31m+   LV_UPDATE_PHYSICS_BY_MID_TRAVEL @[39m
+[31m+   GET_COLLISION[39m
+[31m+   OR[39m
+[31m+   LV_UPDATE_PHYSICS_RX @[39m
+[31m+   LV_UPDATE_PHYSICS_BY_MID_TRAVEL @[39m
+[31m+   GET_COLLISION[39m
+[31m+   OR[39m
+[31m+   IF[39m
+[31m+   LV_UPDATE_PHYSICS_LX @[39m
+[31m+   LV_UPDATE_PHYSICS_BY_MID_TRAVEL @[39m
+[31m+   GET_COLLISION[39m
+[31m+   LV_UPDATE_PHYSICS_RX @[39m
+[31m+   LV_UPDATE_PHYSICS_BY_MID_TRAVEL @[39m
+[31m+   GET_COLLISION[39m
+[31m+   OR[39m
+[31m+   IF[39m
+[31m+   LV_UPDATE_PHYSICS_LX @[39m
+[31m+   LV_UPDATE_PHYSICS_BY_FOOT @[39m
+[31m+   GET_COLLISION[39m
+[31m+   0[39m
+[31m+   =[39m
+[31m+   LV_UPDATE_PHYSICS_RX @[39m
+[31m+   LV_UPDATE_PHYSICS_BY_FOOT @[39m
+[31m+   GET_COLLISION[39m
+[31m+   0[39m
+[31m+   =[39m
+[31m+   AND[39m
+[31m+   IF[39m
+[31m+   LV_UPDATE_PHYSICS_BY_MID_TRAVEL @[39m
+[31m+   LV_UPDATE_PHYSICS_BY_FOOT ![39m
+[31m+   THEN[39m
+[31m+   THEN[39m
+[31m+   0[39m
+[31m+   PLAYER_VY ![39m
+[31m+   LV_UPDATE_PHYSICS_BY_FOOT @[39m
+[31m+   1[39m
+[31m+   -[39m
+[31m+   65536[39m
+[31m+   *[39m
+[31m+   PLAYER_Y ![39m
+[31m+   PLAYER_Y @[39m
+[31m+   LV_UPDATE_PHYSICS_NY ![39m
+[31m+   ELSE[39m
+[31m+   LV_UPDATE_PHYSICS_NY @[39m
+[31m+   PLAYER_Y ![39m
+[31m+   THEN[39m
+[31m+   ELSE[39m
+[31m+   PLAYER_VY @[39m
+[31m+   0[39m
+[31m+   <[39m
+[31m+   IF[39m
+[31m+   LV_UPDATE_PHYSICS_LX @[39m
+[31m+   LV_UPDATE_PHYSICS_BY_HEAD @[39m
+[31m+   GET_COLLISION[39m
+[31m+   LV_UPDATE_PHYSICS_RX @[39m
+[31m+   LV_UPDATE_PHYSICS_BY_HEAD @[39m
+[31m+   GET_COLLISION[39m
+[31m+   OR[39m
+[31m+   LV_UPDATE_PHYSICS_LX @[39m
+[31m+   LV_UPDATE_PHYSICS_BY_MID_TRAVEL @[39m
+[31m+   GET_COLLISION[39m
+[31m+   OR[39m
+[31m+   LV_UPDATE_PHYSICS_RX @[39m
+[31m+   LV_UPDATE_PHYSICS_BY_MID_TRAVEL @[39m
+[31m+   GET_COLLISION[39m
+[31m+   OR[39m
+[31m+   IF[39m
+[31m+   0[39m
+[31m+   PLAYER_VY ![39m
+[31m+   LV_UPDATE_PHYSICS_BY_HEAD @[39m
+[31m+   1[39m
+[31m+   +[39m
+[31m+   65536[39m
+[31m+   *[39m
+[31m+   PLAYER_Y ![39m
+[31m+   PLAYER_Y @[39m
+[31m+   LV_UPDATE_PHYSICS_NY ![39m
+[31m+   ELSE[39m
+[31m+   LV_UPDATE_PHYSICS_NY @[39m
+[31m+   PLAYER_Y ![39m
+[31m+   THEN[39m
+[31m+   ELSE[39m
+[31m+   LV_UPDATE_PHYSICS_NY @[39m
+[31m+   PLAYER_Y ![39m
+[31m+   THEN[39m
+[31m+   THEN[39m
+[31m+   LV_UPDATE_PHYSICS_NX @[39m
+[31m+   63536[39m
+[31m+   +[39m
+[31m+   65536[39m
+[31m+   /[39m
+[31m+   LV_UPDATE_PHYSICS_H_RX ![39m
+[31m+   LV_UPDATE_PHYSICS_NX @[39m
+[31m+   2000[39m
+[31m+   +[39m
+[31m+   65536[39m
+[31m+   /[39m
+[31m+   LV_UPDATE_PHYSICS_H_LX ![39m
+[31m+   PLAYER_Y @[39m
+[31m+   65536[39m
+[31m+   /[39m
+[31m+   LV_UPDATE_PHYSICS_PY ![39m
+[31m+   PLAYER_VX @[39m
+[31m+   0[39m
+[31m+   >[39m
+[31m+   IF[39m
+[31m+   LV_UPDATE_PHYSICS_H_RX @[39m
+[31m+   LV_UPDATE_PHYSICS_PY @[39m
+[31m+   GET_COLLISION[39m
+[31m+   LV_UPDATE_PHYSICS_COLL ![39m
+[31m+   LV_UPDATE_PHYSICS_COLL @[39m
+[31m+   0[39m
+[31m+   <>[39m
+[31m+   IF[39m
+[31m+   S" [PLATFORM] Collision detected at:"[39m
+[31m+   S.[39m
+[31m+   LV_UPDATE_PHYSICS_H_RX @[39m
+[31m+   .N[39m
+[31m+   LV_UPDATE_PHYSICS_PY @[39m
+[31m+   .N[39m
+[31m+   0[39m
+[31m+   PLAYER_VX ![39m
+[31m+   LV_UPDATE_PHYSICS_H_RX @[39m
+[31m+   1[39m
+[31m+   -[39m
+[31m+   65536[39m
+[31m+   *[39m
+[31m+   PLAYER_X ![39m
+[31m+   ELSE[39m
+[31m+   LV_UPDATE_PHYSICS_NX @[39m
+[31m+   PLAYER_X ![39m
+[31m+   THEN[39m
+[31m+   ELSE[39m
+[31m+   PLAYER_VX @[39m
+[31m+   0[39m
+[31m+   <[39m
+[31m+   IF[39m
+[31m+   LV_UPDATE_PHYSICS_H_LX @[39m
+[31m+   LV_UPDATE_PHYSICS_PY @[39m
+[31m+   GET_COLLISION[39m
+[31m+   IF[39m
+[31m+   0[39m
+[31m+   PLAYER_VX ![39m
+[31m+   LV_UPDATE_PHYSICS_H_LX @[39m
+[31m+   1[39m
+[31m+   +[39m
+[31m+   65536[39m
+[31m+   *[39m
+[31m+   PLAYER_X ![39m
+[31m+   ELSE[39m
+[31m+   LV_UPDATE_PHYSICS_NX @[39m
+[31m+   PLAYER_X ![39m
+[31m+   THEN[39m
+[31m+   THEN[39m
+[31m+   THEN[39m
+[31m+   PLAYER_X @[39m
+[31m+   0[39m
+[31m+   <[39m
+[31m+   IF[39m
+[31m+   0[39m
+[31m+   PLAYER_X ![39m
+[31m+   THEN[39m
+[31m+   PLAYER_Y @[39m
+[31m+   0[39m
+[31m+   <[39m
+[31m+   IF[39m
+[31m+   0[39m
+[31m+   PLAYER_Y ![39m
+[31m+   THEN[39m
+[31m+   PLAYER_X @[39m
+[31m+   65536[39m
+[31m+   /[39m
+[31m+   LV_UPDATE_PHYSICS_P_CX ![39m
+[31m+   PLAYER_Y @[39m
+[31m+   65536[39m
+[31m+   /[39m
+[31m+   LV_UPDATE_PHYSICS_P_CY ![39m
+[31m+   LV_UPDATE_PHYSICS_P_CX @[39m
+[31m+   LV_UPDATE_PHYSICS_P_CY @[39m
+[31m+   CALC_IDX[39m
+[31m+   LV_UPDATE_PHYSICS_P_TI ![39m
+[31m+   LV_UPDATE_PHYSICS_P_TI @[39m
+[31m+   0[39m
+[31m+   >=[39m
+[31m+   IF[39m
+[31m+   LV_UPDATE_PHYSICS_P_TI @[39m
+[31m+   800[39m
+[31m+   <[39m
+[31m+   IF[39m
+[31m+   TERRAIN_MAP[39m
+[31m+   LV_UPDATE_PHYSICS_P_TI @[39m
+[31m+   CELLS + @[39m
+[31m+   LV_UPDATE_PHYSICS_P_PACKED ![39m
+[31m+   LV_UPDATE_PHYSICS_P_PACKED @[39m
+[31m+   255[39m
+[31m+   AND[39m
+[31m+   LV_UPDATE_PHYSICS_P_CHAR ![39m
+[31m+   TRANSITION_MAP[39m
+[31m+   LV_UPDATE_PHYSICS_P_CHAR @[39m
+[31m+   CELLS + @[39m
+[31m+   LV_UPDATE_PHYSICS_P_TARGETPLUSONE ![39m
+[31m+   LV_UPDATE_PHYSICS_P_CHAR @[39m
+[31m+   0[39m
+[31m+   <>[39m
+[31m+   IF[39m
+[31m+   THEN[39m
+[31m+   LV_UPDATE_PHYSICS_P_TARGETPLUSONE @[39m
+[31m+   0[39m
+[31m+   <>[39m
+[31m+   IF[39m
+[31m+   EVT_LEVEL_TRANSITION[39m
+[31m+   K_PLATFORM[39m
+[31m+   K_HOST[39m
+[31m+   LV_UPDATE_PHYSICS_P_TARGETPLUSONE @[39m
+[31m+   1[39m
+[31m+   -[39m
+[31m+   0[39m
+[31m+   0[39m
+[31m+   BUS_SEND[39m
+[31m+   5[39m
+[31m+   65536[39m
+[31m+   *[39m
+[31m+   PLAYER_X ![39m
+[31m+   THEN[39m
+[31m+   THEN[39m
+[31m+   THEN[39m
+[31m+   PLAYER_X @[39m
+[31m+   39[39m
+[31m+   65536[39m
+[31m+   *[39m
+[31m+   >[39m
+[31m+   IF[39m
+[31m+   39[39m
+[31m+   65536[39m
+[31m+   *[39m
+[31m+   PLAYER_X ![39m
+[31m+   THEN[39m
+[31m+   PLAYER_Y @[39m
+[31m+   19[39m
+[31m+   65536[39m
+[31m+   *[39m
+[31m+   >[39m
+[31m+   IF[39m
+[31m+   19[39m
+[31m+   65536[39m
+[31m+   *[39m
+[31m+   PLAYER_Y ![39m
+[31m+   THEN[39m
+[31m+ ;[39m
+[31m+[39m
+[31m+ : RENDER (  -- )[39m
+[31m+   0[39m
+[31m+   LV_RENDER_I ![39m
+[31m+   BEGIN[39m
+[31m+   LV_RENDER_I @[39m
+[31m+   800[39m
+[31m+   <[39m
+[31m+   WHILE[39m
+[31m+   4473924[39m
+[31m+   8[39m
+[31m+   LSHIFT[39m
+[31m+   46[39m
+[31m+   OR[39m
+[31m+   VRAM[39m
+[31m+   LV_RENDER_I @[39m
+[31m+   CELLS + ![39m
+[31m+   1 LV_RENDER_I +![39m
+[31m+   REPEAT[39m
+[31m+   PLAYER_X @[39m
+[31m+   65536[39m
+[31m+   /[39m
+[31m+   LV_RENDER_PX ![39m
+[31m+   PLAYER_Y @[39m
+[31m+   65536[39m
+[31m+   /[39m
+[31m+   LV_RENDER_PY ![39m
+[31m+   LV_RENDER_PX @[39m
+[31m+   LV_RENDER_PY @[39m
+[31m+   CALC_IDX[39m
+[31m+   LV_RENDER_PIDX ![39m
+[31m+   LV_RENDER_PIDX @[39m
+[31m+   0[39m
+[31m+   >=[39m
+[31m+   IF[39m
+[31m+   LV_RENDER_PIDX @[39m
+[31m+   800[39m
+[31m+   <[39m
+[31m+   IF[39m
+[31m+   65280[39m
+[31m+   8[39m
+[31m+   LSHIFT[39m
+[31m+   64[39m
+[31m+   OR[39m
+[31m+   VRAM[39m
+[31m+   LV_RENDER_PIDX @[39m
+[31m+   CELLS + ![39m
+[31m+   THEN[39m
+[31m+   THEN[39m
+[31m+ ;[39m
+[31m+[39m
+[31m+ : MOVE_PLAYER ( DIR -- )[39m
+[31m+   LV_MOVE_PLAYER_DIR ![39m
+[31m+   PLAYER_VX @[39m
+[31m+   LV_MOVE_PLAYER_DIR @[39m
+[31m+   MOVE_SPEED[39m
+[31m+   *[39m
+[31m+   +[39m
+[31m+   PLAYER_VX ![39m
+[31m+ ;[39m
+[31m+[39m
+[31m+ : JUMP_PLAYER (  -- )[39m
+[31m+   PLAYER_X @[39m
+[31m+   65536[39m
+[31m+   /[39m
+[31m+   LV_JUMP_PLAYER_BX ![39m
+[31m+   PLAYER_Y @[39m
+[31m+   65536[39m
+[31m+   /[39m
+[31m+   1[39m
+[31m+   +[39m
+[31m+   LV_JUMP_PLAYER_BY ![39m
+[31m+   LV_JUMP_PLAYER_BX @[39m
+[31m+   LV_JUMP_PLAYER_BY @[39m
+[31m+   GET_COLLISION[39m
+[31m+   0[39m
+[31m+   <>[39m
+[31m+   IF[39m
+[31m+   JUMP_FORCE[39m
+[31m+   PLAYER_VY ![39m
+[31m+   THEN[39m
+[31m+ ;[39m
+[31m+[39m
+[31m+ : SET_LEVEL ( ID -- )[39m
+[31m+   LV_SET_LEVEL_ID ![39m
+[31m+   LV_SET_LEVEL_ID @[39m
+[31m+   CURRENT_LEVEL ![39m
+[31m+ ;[39m
+[31m+[39m
+[31m+ : HANDLE_EVENTS (  -- )[39m
+[31m+   M_OP @[39m
+[31m+   101[39m
+[31m+   =[39m
+[31m+   IF[39m
+[31m+   M_P1 @[39m
+[31m+   MOVE_PLAYER[39m
+[31m+   THEN[39m
+[31m+   M_OP @[39m
+[31m+   301[39m
+[31m+   =[39m
+[31m+   IF[39m
+[31m+   JUMP_PLAYER[39m
+[31m+   THEN[39m
+[31m+ ;[39m
+[31m+[39m
+[31m+ : PROCESS_INBOX (  -- )[39m
+[31m+   0[39m
+[31m+   OUT_PTR ![39m
+[31m+   BUS_READ_INPUT[39m
+[31m+   LV_PROCESS_INBOX_TOTALCOUNT ![39m
+[31m+   0[39m
+[31m+   LV_PROCESS_INBOX_OFFSET ![39m
+[31m+   BEGIN[39m
+[31m+   LV_PROCESS_INBOX_OFFSET @[39m
+[31m+   LV_PROCESS_INBOX_TOTALCOUNT @[39m
+[31m+   <[39m
+[31m+   WHILE[39m
+[31m+   INBOX[39m
+[31m+   LV_PROCESS_INBOX_OFFSET @[39m
+[31m+   CELLS + @[39m
+[31m+   LV_PROCESS_INBOX_OP ![39m
+[31m+   LV_PROCESS_INBOX_OP @[39m
+[31m+   SYS_BLOB[39m
+[31m+   =[39m
+[31m+   IF[39m
+[31m+   INBOX[39m
+[31m+   LV_PROCESS_INBOX_OFFSET @[39m
+[31m+   4[39m
+[31m+   +[39m
+[31m+   CELLS + @[39m
+[31m+   M_OP ![39m
+[31m+   INBOX[39m
+[31m+   LV_PROCESS_INBOX_OFFSET @[39m
+[31m+   1[39m
+[31m+   +[39m
+[31m+   CELLS + @[39m
+[31m+   M_SENDER ![39m
+[31m+   INBOX[39m
+[31m+   LV_PROCESS_INBOX_OFFSET @[39m
+[31m+   2[39m
+[31m+   +[39m
+[31m+   CELLS + @[39m
+[31m+   M_TARGET ![39m
+[31m+   INBOX[39m
+[31m+   LV_PROCESS_INBOX_OFFSET @[39m
+[31m+   3[39m
+[31m+   +[39m
+[31m+   CELLS + @[39m
+[31m+   M_P1 ![39m
+[31m+   INPUT_QUEUE[39m
+[31m+   4[39m
+[31m+   +[39m
+[31m+   LV_PROCESS_INBOX_OFFSET @[39m
+[31m+   6[39m
+[31m+   +[39m
+[31m+   4[39m
+[31m+   *[39m
+[31m+   +[39m
+[31m+   M_P2 ![39m
+[31m+   HANDLE_EVENTS[39m
+[31m+   M_P1 @[39m
+[31m+   6[39m
+[31m+   +[39m
+[31m+   LV_PROCESS_INBOX_OFFSET +![39m
+[31m+   ELSE[39m
+[31m+   LV_PROCESS_INBOX_OP @[39m
+[31m+   M_OP ![39m
+[31m+   INBOX[39m
+[31m+   LV_PROCESS_INBOX_OFFSET @[39m
+[31m+   1[39m
+[31m+   +[39m
+[31m+   CELLS + @[39m
+[31m+   M_SENDER ![39m
+[31m+   INBOX[39m
+[31m+   LV_PROCESS_INBOX_OFFSET @[39m
+[31m+   2[39m
+[31m+   +[39m
+[31m+   CELLS + @[39m
+[31m+   M_TARGET ![39m
+[31m+   INBOX[39m
+[31m+   LV_PROCESS_INBOX_OFFSET @[39m
+[31m+   3[39m
+[31m+   +[39m
+[31m+   CELLS + @[39m
+[31m+   M_P1 ![39m
+[31m+   INBOX[39m
+[31m+   LV_PROCESS_INBOX_OFFSET @[39m
+[31m+   4[39m
+[31m+   +[39m
+[31m+   CELLS + @[39m
+[31m+   M_P2 ![39m
+[31m+   INBOX[39m
+[31m+   LV_PROCESS_INBOX_OFFSET @[39m
+[31m+   5[39m
+[31m+   +[39m
+[31m+   CELLS + @[39m
+[31m+   M_P3 ![39m
+[31m+   HANDLE_EVENTS[39m
+[31m+   6[39m
+[31m+   LV_PROCESS_INBOX_OFFSET +![39m
+[31m+   THEN[39m
+[31m+   REPEAT[39m
+[31m+ ;[39m
+
+[36m [2m❯[22m src/test/PlatformTranspile.test.ts:[2m11:28[22m[39m
+    [90m  9| [39m        [34mexpect[39m(output)[33m.[39m[34mtoContain[39m([32m': RENDER'[39m)[33m;[39m
+    [90m 10| [39m        [34mexpect[39m(output)[33m.[39m[34mtoContain[39m([32m': UPDATE_PHYSICS'[39m)[33m;[39m
+    [90m 11| [39m        [34mexpect[39m(output)[33m.[39mnot[33m.[39m[34mtoContain[39m([32m'ERROR'[39m)[33m;[39m
+    [90m   | [39m                           [31m^[39m
+    [90m 12| [39m    })[33m;[39m
+    [90m 13| [39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m1 passed[39m[22m[90m (2)[39m
+[2m   Start at [22m 21:19:02
+[2m   Duration [22m 509ms[2m (transform 198ms, setup 0ms, import 266ms, tests 36ms, environment 0ms)[22m

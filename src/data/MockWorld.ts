@@ -24,8 +24,8 @@ const HUB_LEVEL: LevelData = {
       { symbol: "#", name: "Hub Wall", type: "WALL", color: 0x444444, passable: false, description: "Reinforced steel." },
       { symbol: "R", name: "Roguelike Portal", type: "GATE", color: 0x00FFFF, passable: true, description: "To the Deep Sewers.", target_id: "rogue_dungeon" },
       { symbol: "P", name: "Platformer Portal", type: "GATE", color: 0xFF00FF, passable: true, description: "To the Vertical Shaft.", target_id: "platform_dungeon" },
-      { symbol: "[", name: "Bracket", type: "WALL", color: 0x555555, passable: false, description: "Decor." },
-      { symbol: "]", name: "Bracket", type: "WALL", color: 0x555555, passable: false, description: "Decor." }
+      { symbol: "[", name: "Bracket", type: "WALL", color: 0x555555, passable: true, description: "Decor." },
+      { symbol: "]", name: "Bracket", type: "WALL", color: 0x555555, passable: true, description: "Decor." }
     ],
     entities: [],
     entity_roster: [],
@@ -50,11 +50,11 @@ const ROGUE_LEVEL: LevelData = {
     entity_roster: [
       {
         id: "mutant_rat",
-        name: "Mutant Rat",
+        name: "Aggressive Rat",
         x: 0, y: 0,
         taxonomy: { race: "Synth-Rat", class: "Scrapper", origin: "Test Subject" },
         stats: { hp: 20, speed: 12 },
-        glyph: { char: "e", color: 0xFF0000 },
+        glyph: { char: "R", color: 0xFF5555 },
         scripts: { passive: "aggressive", active: [] }
       }
     ],

@@ -222,31 +222,41 @@ export class AetherTranspiler {
             if (KNOWN_GLOBALS.has(name)) return;
 
             // Detect Type Hints: const x = new Uint8Array(...)
-            if (decl.init && decl.init.type === "NewExpression" && decl.init.callee.name && decl.init.callee.name.includes("Uint8")) {
-                this.varTypes.set(name, "Uint8Array");
-            } else if (decl.init && decl.init.type === "CallExpression" && decl.init.callee.name && decl.init.callee.name === "Uint8Array") {
-                this.varTypes.set(name, "Uint8Array");
-            } else if (decl.init && decl.init.type === "NewExpression" && decl.init.callee.name === "Array") {
-                const firstArg = decl.init.arguments[0];
-                const secondArg = decl.init.arguments[1];
-                const thirdArg = decl.init.arguments[2];
-                if (firstArg && firstArg.type === "Identifier" && this.structs.has(firstArg.name)) {
-                    this.varTypes.set(name, `struct ${firstArg.name}`);
-                    if (secondArg) {
-                        if (secondArg.type === "Literal") {
-                            this.structArrayCounts.set(name, secondArg.value);
-                        } else if (secondArg.type === "Identifier") {
-                            this.structArrayCounts.set(name, secondArg.name.toUpperCase());
+            if (decl.init && decl.init.type === "NewExpression" && decl.init.callee.type === "Identifier") {
+                const calleeName = decl.init.callee.name;
+                if (calleeName.includes("Uint8")) this.varTypes.set(name, "Uint8Array");
+                else if (calleeName.includes("Uint32")) this.varTypes.set(name, "Uint32Array");
+                else if (calleeName.includes("Int32")) this.varTypes.set(name, "Int32Array");
+                else if (calleeName === "Array") {
+                    const firstArg = decl.init.arguments[0];
+                    const secondArg = decl.init.arguments[1];
+                    const thirdArg = decl.init.arguments[2];
+                    if (firstArg && firstArg.type === "Identifier") {
+                        this.varTypes.set(name, `struct ${firstArg.name}`);
+                        if (secondArg) {
+                            if (secondArg.type === "Literal") {
+                                this.structArrayCounts.set(name, secondArg.value);
+                            } else if (secondArg.type === "Identifier") {
+                                this.structArrayCounts.set(name, secondArg.name.toUpperCase());
+                            }
+                        }
+                        if (thirdArg && thirdArg.type === "Literal") {
+                            this.globalConsts.set(name, thirdArg);
                         }
                     }
-                    if (thirdArg && thirdArg.type === "Literal") {
-                        this.globalConsts.set(name, thirdArg);
-                    }
                 }
+            } else if (decl.init && decl.init.type === "CallExpression" && decl.init.callee.type === "Identifier") {
+                const calleeName = decl.init.callee.name;
+                if (calleeName === "Uint8Array") this.varTypes.set(name, "Uint8Array");
+                else if (calleeName === "Uint32Array") this.varTypes.set(name, "Uint32Array");
+                else if (calleeName === "Int32Array") this.varTypes.set(name, "Int32Array");
             }
 
             if (n.kind === "const") {
-              this.globalConsts.set(name, decl.init);
+              // Only add to globalConsts if it wasn't already handled as a struct array with a fixed address
+              if (!this.structArrayCounts.has(name) || !this.globalConsts.has(name)) {
+                this.globalConsts.set(name, decl.init);
+              }
             } else {
               this.globalVars.add(name);
             }
@@ -391,6 +401,7 @@ export class AetherTranspiler {
     // 1. Emit simple constants first
     this.globalConsts.forEach((init, name) => {
       if (this.isStructArray(name)) return;
+      if (this.getStructType(name)) return;
 
       let val = 0;
       if (init) {
@@ -404,10 +415,10 @@ export class AetherTranspiler {
               }
           } else if (init.type === "BinaryExpression") {
               if (init.left.type === "Literal" && init.right.type === "Literal") {
-                  if (init.operator === "*") val = init.left.value * init.right.value;
-                  if (init.operator === "+") val = init.left.value + init.right.value;
-                  if (init.operator === "-") val = init.left.value - init.right.value;
-                  if (init.operator === "/") val = Math.floor(init.left.value / init.right.value);
+                  if (init.operator === "*") val = Number(init.left.value) * Number(init.right.value);
+                  if (init.operator === "+") val = Number(init.left.value) + Number(init.right.value);
+                  if (init.operator === "-") val = Number(init.left.value) - Number(init.right.value);
+                  if (init.operator === "/") val = Math.floor(Number(init.left.value) / Number(init.right.value));
               }
           } else if (init.type === "NewExpression" || init.type === "CallExpression") {
               // Handle new Uint8Array(0x30000) -> 0x30000
@@ -489,7 +500,18 @@ export class AetherTranspiler {
   private static compileNode(node: ASTNode) {
     switch (node.type) {
       case "Program":
-        node.body.forEach((n: any) => this.compileNode(n));
+        const funcs = node.body.filter((n: any) => n.type === "FunctionDeclaration");
+        const topLevel = node.body.filter((n: any) => n.type !== "FunctionDeclaration");
+
+        funcs.forEach((n: any) => this.compileNode(n));
+
+        if (topLevel.length > 0) {
+            this.emit(`\n( --- TOP-LEVEL INITIALIZATION --- )`);
+            this.emit(`: INITIALIZE_GLOBALS`);
+            topLevel.forEach((n: any) => this.compileNode(n));
+            this.emit(`;`);
+            this.emit(`INITIALIZE_GLOBALS`);
+        }
         break;
 
       case "FunctionDeclaration":
@@ -555,24 +577,31 @@ export class AetherTranspiler {
         let isSupported = false;
 
         if (node.init && node.init.type === 'VariableDeclaration' && node.init.declarations.length === 1) {
-            loopVarName = node.init.declarations[0].id.name;
-            const startVal = node.init.declarations[0].init;
-            
-            if (node.test && node.test.type === 'BinaryExpression' && node.test.operator === '<' && node.test.left.name === loopVarName) {
-                 const endVal = node.test.right;
+            const decl = node.init.declarations[0];
+            if (decl.id.type === 'Identifier') {
+                loopVarName = decl.id.name;
+                const startVal = decl.init;
 
-                 if (node.update && node.update.type === 'UpdateExpression' && node.update.operator === '++' && node.update.argument.name === loopVarName) {
-                     isSupported = true;
-                     this.compileNode(endVal);   // Limit
-                     this.compileNode(startVal); // Start
-                     this.emit(`  DO`);
-                     
-                     this.loopVars.push(loopVarName.toUpperCase());
-                     this.compileNode(node.body);
-                     this.loopVars.pop();
-                     
-                     this.emit(`  LOOP`);
-                 }
+                if (node.test && node.test.type === 'BinaryExpression' && node.test.operator === '<' &&
+                    node.test.left.type === 'Identifier' && node.test.left.name === loopVarName) {
+                     const endVal = node.test.right;
+
+                     if (node.update && node.update.type === 'UpdateExpression' &&
+                         (node.update.operator === '++' || node.update.operator === '--') &&
+                         node.update.argument.type === 'Identifier' && node.update.argument.name === loopVarName) {
+
+                         isSupported = true;
+                         this.compileNode(endVal);   // Limit
+                         this.compileNode(startVal); // Start
+                         this.emit(`  DO`);
+
+                         this.loopVars.push(loopVarName.toUpperCase());
+                         this.compileNode(node.body);
+                         this.loopVars.pop();
+
+                         this.emit(`  ${node.update.operator === '++' ? 'LOOP' : '-1 +LOOP'}`);
+                     }
+                }
             }
         }
 

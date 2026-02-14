@@ -16,8 +16,8 @@ const VRAM          = new Uint32Array(0x80000);
 const TRANSITION_MAP = new Int32Array(0x41000); // 256 entries
 
 // Fixed-point 16.16
-let player_x = 2 * 65536;
-let player_y = 10 * 65536;
+let player_x = 131072;
+let player_y = 655360;
 let player_vx = 0;
 let player_vy = 0;
 
@@ -37,10 +37,10 @@ function get_collision(x, y) {
 }
 
 function init_platformer() {
-    Log("[PLATFORM] INIT: X Addr next...");
+    // Log("[PLATFORM] INIT: X Addr next...");
     // AJS doesn't have an & operator, but I can use a Forth block
-    player_x = 2 * 65536;
-    player_y = 2 * 65536;
+    player_x = 131072;
+    player_y = 131072;
     player_vx = 0;
     player_vy = 0;
     current_level = 0;
@@ -58,7 +58,7 @@ function init_platformer() {
         i++;
     }
 
-    Log("[PLATFORM] Kernel Ready (v6)");
+    // Log("[PLATFORM] Kernel Ready (v6)");
 }
 
 function set_transition(charCode, targetIdx) {
@@ -66,9 +66,8 @@ function set_transition(charCode, targetIdx) {
 }
 
 function set_player_pos(x, y) {
-    Log("[PLATFORM] PLAYER_X Addr:");
-    Log(player_x); // Wait, this logs the value. I want the address.
-    // In AJS I can't get the address easily.
+    // Log("[PLATFORM] PLAYER_X Addr:");
+    // Log(player_x);
     player_x = x * 65536;
     player_y = y * 65536;
 }
@@ -84,8 +83,8 @@ function update_physics() {
     player_vx = (player_vx * 8) / 10; // friction
 
     if (player_vx != 0) {
-        Log("[PLATFORM] VX after friction:");
-        Log(player_vx);
+        // Log("[PLATFORM] VX after friction:");
+        // Log(player_vx);
     }
 
     let nx = player_x + player_vx;
@@ -166,17 +165,17 @@ function update_physics() {
             let p_targetPlusOne = TRANSITION_MAP[p_char];
 
             if (p_char != 0) {
-                Log("[PLATFORM] At Tile Char:");
-                Log(p_char);
-                Log("Target+1:");
-                Log(p_targetPlusOne);
+                // Log("[PLATFORM] At Tile Char:");
+                // Log(p_char);
+                // Log("Target+1:");
+                // Log(p_targetPlusOne);
             }
 
             if (p_targetPlusOne != 0) {
                 bus_send(EVT_LEVEL_TRANSITION, K_PLATFORM, K_HOST, p_targetPlusOne - 1, 0, 0);
-                Log("[PLATFORM] Transition Sent!");
+                // Log("[PLATFORM] Transition Sent!");
                 player_x = 5 * 65536; // Reset pos to prevent multi-trigger
-                Log("[PLATFORM] Player X Reset!");
+                // Log("[PLATFORM] Player X Reset!");
             }
         }
     }
@@ -189,7 +188,7 @@ function render() {
     // 1. Copy Terrain to VRAM
     let i = 0;
     while (i < 800) { // 40 * 20
-        VRAM[i] = TERRAIN_MAP[i];
+        VRAM[i] = (0x444444 << 8) | 46; // Gray dot
         i++;
     }
 
@@ -233,7 +232,8 @@ export const PLATFORM_AJS_SOURCE = AJS_LOGIC;
 export const PLATFORM_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.PLATFORM),
-  "S\" [PLATFORM] AJS Loaded\" S.",
+  "( [PLATFORM] AJS Loaded )",
+  ": INIT_MAP INIT_PLATFORMER ;",
   ": RUN_PLATFORM_CYCLE PROCESS_INBOX UPDATE_PHYSICS RENDER ;",
   ": CMD_JUMP JUMP_PLAYER ;",
   ": CMD_MOVE ( dir -- ) MOVE_PLAYER ;",

@@ -28,6 +28,7 @@ test('transpiles array of structs', () => {
   expect(forth).toContain('CREATE NPCS 100 SIZEOF_TESTNPC * ALLOT');
 
   // Check for access npcs[1].a = 5
+  // Note: Literal 5 might be pushed before the rest
   expect(forth).toMatch(/5\s+NPCS\s+1\s+SIZEOF_TESTNPC\s+\*\s+\+\s+OFF_TESTNPC_A\s+\+\s+!/);
 
   // Check for let k = npcs[2]

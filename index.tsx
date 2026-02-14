@@ -101,7 +101,8 @@ const App = () => {
           // We want [PLAYER], [BATTLE], or anything mentioning "Attack/Damage/Die"
           const isGameplay = msg.includes("PLAYER") || msg.includes("BATTLE") || msg.includes("HIVE") || 
                              msg.includes("GRID") || msg.includes("PLATFORM") ||
-                             msg.includes("Attack") || msg.includes("Hits") || msg.includes("Die") || msg.includes("Loot");
+                             msg.includes("Attack") || msg.includes("Hits") || msg.includes("Die") || msg.includes("Loot") ||
+                             msg.includes("ERR") || msg.includes("stack empty") || msg.includes("undefined word");
                              
           if (isGameplay) {
               // Strip timestamp for UI cleanliness
@@ -207,6 +208,72 @@ const App = () => {
     return () => cancelAnimationFrame(requestRef.current!);
   }, []);
 
+  // Ensure kernels are synced if they load late
+  useEffect(() => {
+      if (currentLevel && worldInfo) {
+          const platProc = forthService.get("PLATFORM");
+          if (activeKernels.has("PLATFORM")) {
+              // Re-push level data to platformer specifically
+              // to handle the case where it loaded after the level was generated
+              pushLevelData(platProc, currentLevel);
+          }
+      }
+  }, [activeKernels]);
+
+  const pushLevelData = (proc: any, level: any) => {
+      if (!proc || !proc.isReady) return;
+      addLog(`[SYS] Syncing Level Data to ${proc.id}...`);
+
+      proc.run("INIT_MAP"); // Ensure it has the word or safe-fail
+      if (proc.id === "PLATFORM") {
+          proc.run("INIT_PLATFORMER");
+          let levelIdx = worldInfo?.atlas?.findIndex(a => a.id === level.id) || 0;
+          proc.run(`${levelIdx} SET_LEVEL`);
+      }
+
+      level.map_layout.forEach((row: string, y: number) => {
+          if (y >= MEMORY.GRID_HEIGHT) return;
+          for (let x = 0; x < MEMORY.GRID_WIDTH; x++) {
+              const char = row[x] || ' ';
+              let color = 0x888888;
+              let type = 0;
+              let charCode = char.charCodeAt(0);
+
+              const isPortalPart = char === '[' || char === ']' || char === 'R' || char === 'P';
+              const terrain = level.terrain_legend.find((t: any) => t.symbol === char);
+              if (terrain) {
+                  color = terrain.color;
+                  type = terrain.passable ? 0 : 1;
+              } else if (char === '@' || isPortalPart) {
+                  type = 0;
+                  if (char === '@') { charCode = '.'.charCodeAt(0); color = 0x444444; }
+              }
+              proc.run(`${x} ${y} ${color} ${charCode} ${type} LOAD_TILE`);
+          }
+      });
+
+      // Sync Transitions
+      level.terrain_legend.forEach((t: any) => {
+          if (t.type === "GATE" && t.target_id) {
+              let targetIdx = worldInfo?.atlas?.findIndex(a => a.id === t.target_id);
+              if (targetIdx !== undefined && targetIdx !== -1) {
+                  const charCode = t.symbol.charCodeAt(0);
+                  proc.run(`${charCode} ${targetIdx} SET_TRANSITION`);
+              }
+          }
+      });
+
+      // Spawn Player
+      let px = 5, py = 5;
+      level.map_layout.forEach((row: string, y: number) => {
+          const x = row.indexOf('@');
+          if (x !== -1) { px = x; py = y; }
+      });
+      if (proc.id === "PLATFORM") {
+          proc.run(`${px} ${py} SET_PLAYER_POS`);
+      }
+  };
+
   const loadLevel = (level: any, info?: WorldData) => {
     const mainProc = forthService.get("GRID");
     const hiveProc = forthService.get("HIVE");
@@ -217,69 +284,11 @@ const App = () => {
     hiveProc.run("INIT_HIVE");
     playerProc.run("INIT_PLAYER");
 
-    // Populate transition table for kernels
-    const atlas = info?.atlas || worldInfo?.atlas;
-    level.terrain_legend.forEach((t: any) => {
-        if (t.type === "GATE" && t.target_id) {
-            let targetIdx = atlas?.findIndex(a => a.id === t.target_id);
-            if (targetIdx !== undefined && targetIdx !== -1) {
-                const charCode = t.symbol.charCodeAt(0);
-                mainProc.run(`${charCode} ${targetIdx} SET_TRANSITION`);
-            }
-        }
-    });
-
+    pushLevelData(mainProc, level);
     const platProc = forthService.get("PLATFORM");
     if (platProc.isReady) {
-        platProc.run("INIT_PLATFORMER");
-        // Use atlas index if available
-        let levelIdx = 0;
-        if (atlas) {
-            levelIdx = atlas.findIndex(a => a.id === level.id);
-        }
-        platProc.run(`${levelIdx} SET_LEVEL`);
-
-        level.terrain_legend.forEach((t: any) => {
-            if (t.type === "GATE" && t.target_id) {
-                let targetIdx = atlas?.findIndex(a => a.id === t.target_id);
-                if (targetIdx !== undefined && targetIdx !== -1) {
-                    const charCode = t.symbol.charCodeAt(0);
-                    platProc.run(`${charCode} ${targetIdx} SET_TRANSITION`);
-                }
-            }
-        });
+        pushLevelData(platProc, level);
     }
-
-    level.map_layout.forEach((row: string, y: number) => {
-      if (y >= MEMORY.GRID_HEIGHT) return;
-      for (let x = 0; x < MEMORY.GRID_WIDTH; x++) {
-        const char = row[x] || ' ';
-        let color = 0x888888;
-        let type = 0;
-        let charCode = char.charCodeAt(0);
-
-        const isPortalPart = char === '[' || char === ']' || char === 'R' || char === 'P';
-        const terrain = level.terrain_legend.find((t: any) => t.symbol === char);
-        if (terrain) {
-          color = terrain.color;
-          type = terrain.passable ? 0 : 1;
-        } else if (char === '@' || isPortalPart) {
-           type = 0; // Passable
-           if (char === '@') {
-             charCode = '.'.charCodeAt(0);
-             color = 0x444444;
-           }
-        }
-        if (!terrain && char !== '@' && char !== ' ' && !isPortalPart) {
-           type = 1;
-        }
-
-        mainProc.run(`${x} ${y} ${color} ${charCode} ${type} LOAD_TILE`);
-        if (platProc.isReady) {
-            platProc.run(`${x} ${y} ${color} ${charCode} ${type} LOAD_TILE`);
-        }
-      }
-    });
 
     let px = 5, py = 5;
     level.map_layout.forEach((row: string, y: number) => {
@@ -289,10 +298,6 @@ const App = () => {
     addLog(`Spawning Player at ${px},${py}`);
     setCursorPos({x: px, y: py});
     mainProc.run(`${px} ${py} 65535 64 0 SPAWN_ENTITY`);
-
-    if (platProc.isReady) {
-        platProc.run(`${px} ${py} SET_PLAYER_POS`);
-    }
 
     level.entities.forEach((ent: any) => {
         const c = ent.glyph.color || 0xFF0000;
@@ -625,9 +630,7 @@ const App = () => {
           if (keysDownRef.current.has("ArrowRight")) platProc.run("1 CMD_MOVE");
 
           try {
-              if (platProc.isWordDefined("RUN_PLATFORM_CYCLE")) {
-                  platProc.run("RUN_PLATFORM_CYCLE");
-              }
+              platProc.run("RUN_PLATFORM_CYCLE");
               const raw = platProc.getMemory() as ArrayBuffer;
               const vramSize = MEMORY.GRID_WIDTH * MEMORY.GRID_HEIGHT * 4;
               if (raw.byteLength >= MEMORY.VRAM_ADDR + vramSize) {
@@ -664,6 +667,14 @@ const App = () => {
             tickSimulation();
         }
   };
+
+  // Background simulation for HIVE/Enemies in GRID mode
+  useEffect(() => {
+    if (mode === "GRID" && activeKernels.has("HIVE")) {
+        const timer = setInterval(tickSimulation, SIMULATION_TICK_RATE_MS);
+        return () => clearInterval(timer);
+    }
+  }, [mode, activeKernels]);
 
   useEffect(() => {
     const handleKeyDown = (e: React.KeyboardEvent | KeyboardEvent) => {
@@ -818,7 +829,11 @@ const App = () => {
                     }
 
                     setCursorPos(startPos);
-                    setIsValidTarget(true);
+
+                    // Re-validate validity for visual feedback immediately
+                    const dist = Math.abs(startPos.x - playerPos.x) + Math.abs(startPos.y - playerPos.y);
+                    setIsValidTarget(dist <= skill.range);
+
                     addLog(`[TARGETING] Select target for ${skill.name} (Range: ${skill.range})...`);
                 }
             }
