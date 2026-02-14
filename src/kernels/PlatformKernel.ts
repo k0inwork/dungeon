@@ -13,6 +13,7 @@ const MAP_HEIGHT = 20;
 const COLLISION_MAP = new Uint8Array(0x30000);
 const TERRAIN_MAP   = new Uint32Array(0x40000);
 const VRAM          = new Uint32Array(0x80000);
+const TRANSITION_MAP = new Int32Array(0x41000); // 256 entries
 
 // Fixed-point 16.16
 let player_x = 2 * 65536;
@@ -20,9 +21,9 @@ let player_y = 10 * 65536;
 let player_vx = 0;
 let player_vy = 0;
 
-let gravity = 5000;
-let jump_force = -75000;
-let move_speed = 20000;
+const gravity = 5000;
+const jump_force = -75000;
+const move_speed = 20000;
 let current_level = 0;
 
 function calc_idx(x, y) { return (y * MAP_WIDTH + x); }
@@ -40,7 +41,24 @@ function init_platformer() {
     player_y = 2 * 65536;
     player_vx = 0;
     player_vy = 0;
+    current_level = 0;
+
+    let i = 0;
+    while (i < 256) {
+        TRANSITION_MAP[i] = 0;
+        i++;
+    }
+
     Log("[PLATFORM] Kernel Ready (v4)");
+}
+
+function set_transition(charCode, targetIdx) {
+    TRANSITION_MAP[charCode] = targetIdx + 1;
+}
+
+function set_player_pos(x, y) {
+    player_x = x * 65536;
+    player_y = y * 65536;
 }
 
 function load_tile(x, y, color, char, type) {
@@ -117,14 +135,19 @@ function update_physics() {
     if (player_x < 0) player_x = 0;
     if (player_y < 0) player_y = 0;
 
-    // Win condition: reach bottom-left area after falling
-    if (player_x <= 2 * 65536) {
-        if (player_y >= 17 * 65536) {
-           let nextLevel = 0; // Default back to Hub
-           if (current_level == 2) { nextLevel = 3; } // From Platform 1 to Platform 2
-
-           bus_send(EVT_LEVEL_TRANSITION, K_PLATFORM, K_HOST, nextLevel, 0, 0);
-           player_x = 5 * 65536; // Reset pos
+    // Win condition: reach any GATE tile
+    let p_cx = player_x / 65536;
+    let p_cy = player_y / 65536;
+    let p_ti = calc_idx(p_cx, p_cy);
+    if (p_ti >= 0) {
+        if (p_ti < 800) {
+            let p_packed = TERRAIN_MAP[p_ti];
+            let p_char = p_packed & 255;
+            let p_targetPlusOne = TRANSITION_MAP[p_char];
+            if (p_targetPlusOne != 0) {
+                bus_send(EVT_LEVEL_TRANSITION, K_PLATFORM, K_HOST, p_targetPlusOne - 1, 0, 0);
+                player_x = 5 * 65536; // Reset pos to prevent multi-trigger
+            }
         }
     }
 

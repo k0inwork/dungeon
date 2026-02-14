@@ -87,12 +87,15 @@ export interface TerrainDef {
   color: number;
   description: string;
   passable: boolean;
+  target_id?: string; // For GATE type
 }
 
 export interface LevelData {
     id: string;
     name: string;
     description: string;
+    simulation_mode: "GRID" | "PLATFORM";
+    is_safe_zone: boolean;
     map_layout: string[]; 
     terrain_legend: TerrainDef[];
     entities: EntityDef[];
@@ -102,6 +105,7 @@ export interface LevelData {
       jump_force: number;
       wall_color: number;
     };
+    force_regeneration?: boolean;
 }
 
 // --- MASTER ROOT OBJECT ---
@@ -223,8 +227,8 @@ ${code}
     if (mockData.levels) {
         for (const [id, level] of Object.entries(mockData.levels)) {
             const levelData = level as LevelData;
-            // Rogue dungeon gets random generation, others use their preset layout if available
-            if (levelData.map_layout.length === 0 || id === "rogue_dungeon") {
+            // Levels with empty layout or force_regeneration get random generation
+            if (levelData.map_layout.length === 0 || levelData.force_regeneration) {
                 const mapGen = new MapGenerator(40, 20, "MOCK_SEED_" + id + "_" + Date.now());
                 const generatedMap = mapGen.generate(
                     levelData.entity_roster,
@@ -234,8 +238,10 @@ ${code}
                 levelData.entities = generatedMap.entities;
             }
         }
-        // Sync active_level with hub
-        mockData.active_level = mockData.levels["hub"];
+        // Sync active_level with first atlas node if available
+        if (mockData.atlas && mockData.atlas.length > 0) {
+            mockData.active_level = mockData.levels[mockData.atlas[0].id];
+        }
     }
     
     return mockData;
@@ -334,8 +340,11 @@ ${code}
       {
         "atlas": [{ "id": "l1", "name": "Start", "biome": "Type", "difficulty": 1, "connections": [] }],
         "active_level": {
+          "id": "l1",
           "name": "Level Name",
           "description": "Flavor",
+          "simulation_mode": "GRID",
+          "is_safe_zone": false,
           "terrain_legend": [ { "symbol": ".", "name": "Floor", "type": "FLOOR", "color": 2236962, "passable": true, "description": "Desc" } ],
           "entity_roster": [
             {

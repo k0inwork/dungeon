@@ -54,7 +54,7 @@ const App = () => {
   const [log, setLog] = useState<string[]>([]);
   const [seed, setSeed] = useState("Cyberpunk Sewers");
   const [worldInfo, setWorldInfo] = useState<WorldData | null>(null);
-  const [currentLevelId, setCurrentLevelId] = useState<string>("hub");
+  const [currentLevel, setCurrentLevel] = useState<any | null>(null);
 
   // Track successful kernel loads to prevent loop execution if load failed
   const [activeKernels, setActiveKernels] = useState<Set<string>>(new Set());
@@ -66,6 +66,7 @@ const App = () => {
   
   // Inspector & Targeting State
   const [inspectStats, setInspectStats] = useState<EntityStats | null>(null);
+  const [playerStats, setPlayerStats] = useState<any>(null);
   const [targetMode, setTargetMode] = useState(false);
   const [playerPos, setPlayerPos] = useState({ x: 5, y: 5 });
   const [cursorPos, setCursorPos] = useState({ x: 5, y: 5 }); // Default start
@@ -204,7 +205,7 @@ const App = () => {
     return () => cancelAnimationFrame(requestRef.current!);
   }, []);
 
-  const loadLevel = (level: any) => {
+  const loadLevel = (level: any, info?: WorldData) => {
     const mainProc = forthService.get("GRID");
     const hiveProc = forthService.get("HIVE");
     const playerProc = forthService.get("PLAYER");
@@ -214,11 +215,37 @@ const App = () => {
     hiveProc.run("INIT_HIVE");
     playerProc.run("INIT_PLAYER");
 
+    // Populate transition table for kernels
+    const atlas = info?.atlas || worldInfo?.atlas;
+    level.terrain_legend.forEach((t: any) => {
+        if (t.type === "GATE" && t.target_id) {
+            let targetIdx = atlas?.findIndex(a => a.id === t.target_id);
+            if (targetIdx !== undefined && targetIdx !== -1) {
+                const charCode = t.symbol.charCodeAt(0);
+                mainProc.run(`${charCode} ${targetIdx} SET_TRANSITION`);
+            }
+        }
+    });
+
     const platProc = forthService.get("PLATFORM");
     if (platProc.isReady) {
         platProc.run("INIT_PLATFORMER");
-        const levelIdx = ["hub", "rogue_dungeon", "platform_dungeon", "platform_dungeon_2"].indexOf(level.id);
+        // Use atlas index if available
+        let levelIdx = 0;
+        if (atlas) {
+            levelIdx = atlas.findIndex(a => a.id === level.id);
+        }
         platProc.run(`${levelIdx} SET_LEVEL`);
+
+        level.terrain_legend.forEach((t: any) => {
+            if (t.type === "GATE" && t.target_id) {
+                let targetIdx = atlas?.findIndex(a => a.id === t.target_id);
+                if (targetIdx !== undefined && targetIdx !== -1) {
+                    const charCode = t.symbol.charCodeAt(0);
+                    platProc.run(`${charCode} ${targetIdx} SET_TRANSITION`);
+                }
+            }
+        });
     }
 
     level.map_layout.forEach((row: string, y: number) => {
@@ -262,13 +289,17 @@ const App = () => {
     setCursorPos({x: px, y: py});
     mainProc.run(`${px} ${py} 65535 64 0 SPAWN_ENTITY`);
 
+    if (platProc.isReady) {
+        platProc.run(`${px} ${py} SET_PLAYER_POS`);
+    }
+
     level.entities.forEach((ent: any) => {
         const c = ent.glyph.color || 0xFF0000;
         const ch = ent.glyph.char.charCodeAt(0);
 
         let aiType = 1;
         if (ent.glyph.char === '$') aiType = 3;
-        else if (ent.scripts && ent.scripts.passive && ent.scripts.passive.includes('aggressive')) aiType = 2;
+        else if (ent.scripts && ent.scripts.passive && ent.scripts.passive === "aggressive") aiType = 2;
         else if (ent.id.includes("giant")) aiType = 2;
 
         mainProc.run(`${ent.x} ${ent.y} ${c} ${ch} ${aiType} SPAWN_ENTITY`);
@@ -278,23 +309,20 @@ const App = () => {
         platformerRef.current.configure(level.platformer_config);
     }
 
-    if (level.id === "platform_dungeon" || level.id === "platform_dungeon_2") {
-        switchMode("PLATFORM");
-    } else {
-        switchMode("GRID");
-    }
+    switchMode(level.simulation_mode || "GRID");
+    setTimeout(syncPlayerStats, 100);
   };
 
   const handleLevelTransition = (targetLevelIdx: number) => {
-      if (!worldInfo || !worldInfo.levels) return;
+      if (!worldInfo || !worldInfo.atlas || !worldInfo.levels) return;
 
-      const levelIds = ["hub", "rogue_dungeon", "platform_dungeon", "platform_dungeon_2"];
-      const targetId = levelIds[targetLevelIdx];
-      const nextLevel = worldInfo.levels[targetId];
+      const node = worldInfo.atlas[targetLevelIdx];
+      if (!node) return;
+      const nextLevel = worldInfo.levels[node.id];
 
       if (nextLevel) {
           addLog(`Transitioning to ${nextLevel.name}...`);
-          setCurrentLevelId(targetId);
+          setCurrentLevel(nextLevel);
           // Update active_level in worldInfo for UI components
           setWorldInfo({
               ...worldInfo,
@@ -318,9 +346,10 @@ const App = () => {
           data = await generatorService.generateWorld(seed);
       }
       setWorldInfo(data);
+      setCurrentLevel(data.active_level);
       addLog(`World Generated: ${data.theme.name}`);
       
-      loadLevel(data.active_level);
+      loadLevel(data.active_level, data);
       addLog("Simulation Ready.");
 
     } catch (e) {
@@ -444,6 +473,21 @@ const App = () => {
       // 4. Update Inspector if active
       if (inspectStats) {
           handleInspect(inspectStats.x, inspectStats.y);
+      }
+      syncPlayerStats();
+  };
+
+  const syncPlayerStats = () => {
+      const playerProc = forthService.get("PLAYER");
+      if (playerProc && playerProc.isReady) {
+          const mem = new DataView(playerProc.getMemory());
+          const base = 0xC0000;
+          const hp = mem.getInt32(base, true);
+          const maxHp = mem.getInt32(base + 4, true);
+          const gold = mem.getInt32(base + 8, true);
+          const invCount = mem.getInt32(base + 12, true);
+
+          setPlayerStats({ hp, maxHp, gold, invCount });
       }
   };
 
@@ -654,7 +698,7 @@ const App = () => {
         
         // Skill Shortcuts (1-4)
         if (['1', '2', '3', '4'].includes(k)) {
-            if (currentLevelId === "hub") return;
+            if (currentLevel?.is_safe_zone) return;
             const skill = PLAYER_SKILLS.find(s => s.key === k);
             if (skill) {
                 if (skill.name === "HEAL") {
@@ -725,7 +769,7 @@ const App = () => {
         window.removeEventListener("keydown", handleKeyDown);
         window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [mode, targetMode, cursorPos, selectedSkill, isValidTarget, playerPos, currentLevelId]);
+  }, [mode, targetMode, cursorPos, selectedSkill, isValidTarget, playerPos, currentLevel]);
 
   return (
     <div style={{ backgroundColor: "#111", color: "#0f0", fontFamily: "Courier New", height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
@@ -806,6 +850,27 @@ const App = () => {
         {viewMode === "GAME" && (mode === "GRID" || mode === "PLATFORM") && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
             
+            {/* PLAYER STATS BOX */}
+            {playerStats && (
+                <div style={{
+                    position: "absolute",
+                    top: "10px",
+                    left: "-220px",
+                    width: "200px",
+                    background: "rgba(0, 0, 0, 0.8)",
+                    border: "1px solid #0f0",
+                    padding: "10px",
+                    fontFamily: "monospace",
+                    fontSize: "0.8em",
+                    zIndex: 20
+                }}>
+                    <div style={{borderBottom: "1px solid #333", marginBottom: "5px", color: "#0f0"}}>PLAYER STATUS</div>
+                    <div>HP: <span style={{color: playerStats.hp < 25 ? "red" : "#0f0"}}>{playerStats.hp} / {playerStats.maxHp}</span></div>
+                    <div>GOLD: <span style={{color: "yellow"}}>{playerStats.gold}</span></div>
+                    <div>INV: <span style={{color: "cyan"}}>{playerStats.invCount} / 10</span></div>
+                </div>
+            )}
+
             {/* INSPECTOR OVERLAY */}
             {inspectStats && (
                 <div style={{
@@ -853,7 +918,7 @@ const App = () => {
             </div>
 
             {/* ACTION BAR */}
-            {currentLevelId !== "hub" && (
+            {(!currentLevel || !currentLevel.is_safe_zone) && (
                 <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                     {PLAYER_SKILLS.map(skill => (
                         <div key={skill.id} style={{

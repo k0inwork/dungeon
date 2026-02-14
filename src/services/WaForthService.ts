@@ -347,4 +347,7 @@ class ForthProcessManager {
   }
 }
 
-export const forthService = new ForthProcessManager(); (window as any).forthService = forthService;
+export const forthService = new ForthProcessManager();
+if (typeof window !== 'undefined') {
+    (window as any).forthService = forthService;
+}

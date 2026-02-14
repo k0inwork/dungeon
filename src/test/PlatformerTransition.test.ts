@@ -12,9 +12,12 @@ describe('Platformer Level Transition', () => {
     // Initial state
     runner.run('INIT_PLATFORMER');
 
-    // Simulate reaching win area (bottom left)
-    // player_x = 2.0, player_y = 18.0
-    // Use CAPITALIZED names for Forth variables
+    // Set 'E' (69) to transition to target 5
+    runner.run('69 5 SET_TRANSITION');
+    // Load tile 'E' at 2, 18
+    runner.run('2 18 0 69 0 LOAD_TILE');
+
+    // Move player to 2, 18
     runner.run('2 65536 * PLAYER_X !');
     runner.run('18 65536 * PLAYER_Y !');
 
@@ -32,7 +35,7 @@ describe('Platformer Level Transition', () => {
         if (outMem[i] === Opcode.EVT_LEVEL_TRANSITION) {
             foundTransition = true;
             expect(outMem[i+2]).toBe(KernelID.HOST);
-            expect(outMem[i+3]).toBe(0); // Target level 0 (Hub)
+            expect(outMem[i+3]).toBe(5); // Target level 5
         }
     }
     expect(foundTransition).toBe(true);

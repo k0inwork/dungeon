@@ -46,18 +46,28 @@ describe('PlatformKernel Logic Tests', () => {
   test('Horizontal Movement', () => {
     runner.proc.run('INIT_PLATFORMER');
     runner.proc.run('1 CMD_MOVE'); // Move Right
+    // Friction is applied in UPDATE_PHYSICS
     runner.proc.run('UPDATE_PHYSICS');
 
     // VX should be move_speed (20000) * friction_factor
     // Friction is (vx * 8) / 10. So 20000 * 8 / 10 = 16000
+    // If it fails, we check if it is still 20000 (meaning update didn't happen)
     runner.proc.run('PLAYER_VX @ 16000 JS_ASSERT');
   });
 
-  test('Win Condition (Bottom-Left)', () => {
+  test('Win Condition (GATE Tile)', () => {
     runner.proc.run('INIT_PLATFORMER');
-    // Teleport to bottom-left
-    runner.proc.run('1 65536 * PLAYER_X !');
+
+    // Set up a GATE tile at 2, 18 with target level 5
+    // 'G' = 71
+    runner.proc.run('71 5 SET_TRANSITION');
+    runner.proc.run('2 18 0 71 0 LOAD_TILE');
+
+    // Teleport to 2, 18
+    runner.proc.run('2 65536 * PLAYER_X !');
     runner.proc.run('18 65536 * PLAYER_Y !');
+
+    // Run cycle
     runner.proc.run('UPDATE_PHYSICS');
 
     // Should have reset to 5,Y (reset pos) and sent transition

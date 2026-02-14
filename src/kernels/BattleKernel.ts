@@ -71,7 +71,7 @@ function skill_basic_attack(srcId, tgtId) {
     tgt.hp -= dmg;
     
     Log("Basic Attack!");
-    Bus.send(EVT_DAMAGE, K_BATTLE, K_BUS, tgtId, dmg, 0);
+    bus_send(EVT_DAMAGE, K_BATTLE, K_BUS, tgtId, dmg, 0);
     
     return tgt.hp;
 }
@@ -86,7 +86,7 @@ function skill_heavy_smash(srcId, tgtId) {
     tgt.hp -= dmg;
     
     Log("HEAVY SMASH!");
-    Bus.send(EVT_DAMAGE, K_BATTLE, K_BUS, tgtId, dmg, 2); // Type 2 = Crit/Heavy
+    bus_send(EVT_DAMAGE, K_BATTLE, K_BUS, tgtId, dmg, 2); // Type 2 = Crit/Heavy
     
     return tgt.hp;
 }
@@ -98,7 +98,7 @@ function skill_heal_self(srcId) {
     if (src.hp > src.maxHp) { src.hp = src.maxHp; }
     
     Log("Self Heal");
-    Bus.send(EVT_DAMAGE, K_BATTLE, K_BUS, srcId, -amount, 4); // Negative Damage = Heal
+    bus_send(EVT_DAMAGE, K_BATTLE, K_BUS, srcId, -amount, 4); // Negative Damage = Heal
 }
 
 function skill_fireball(srcId, tgtId) {
@@ -112,7 +112,7 @@ function skill_fireball(srcId, tgtId) {
     tgt.hp -= dmg;
     
     Log("CAST FIREBALL!");
-    Bus.send(EVT_DAMAGE, K_BATTLE, K_BUS, tgtId, dmg, 1); // Type 1 = Thermal
+    bus_send(EVT_DAMAGE, K_BATTLE, K_BUS, tgtId, dmg, 1); // Type 1 = Thermal
     
     return tgt.hp;
 }
@@ -147,7 +147,7 @@ function execute_skill(srcId, tgtId, skillId) {
     if (remainingHp <= 0) {
         if (tgt.state == 0) { // Only die once
             tgt.state = 1; // Dead
-            Bus.send(EVT_DEATH, K_BATTLE, K_BUS, tgtId, 0, 0);
+            bus_send(EVT_DEATH, K_BATTLE, K_BUS, tgtId, 0, 0);
             Log("Entity Died:");
             Log(tgtId);
             if (tgtId == 0) Log("GAME OVER");

@@ -140,8 +140,8 @@ export class MapGenerator {
       }
     }
 
-    // 5C. Place EXIT Portal (H) if it exists in legend
-    const exitPortalDef = terrainLegend.find(t => t.symbol === "H");
+    // 5C. Place EXIT Portal if it exists in legend (Type GATE)
+    const exitPortalDef = terrainLegend.find(t => t.type === "GATE");
     if (exitPortalDef) {
         // Find a spot far from player
         let bestSpot = floors[0];
@@ -169,7 +169,7 @@ export class MapGenerator {
         if (x === playerStart.x && y === playerStart.y) {
           line += "@";
         } else if (grid[y][x] === 2) {
-          line += "H";
+          line += exitPortalDef?.symbol || "H";
         } else {
           line += grid[y][x] === 1 ? wallDef.symbol : floorDef.symbol;
         }

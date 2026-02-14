@@ -89,11 +89,11 @@ function decide_action(id) {
       let dist = dx + dy;
       
       if (dist < 10) {
-         Bus.send(REQ_PATH_STEP, K_HIVE, K_GRID, id, LAST_PLAYER_X, LAST_PLAYER_Y);
+         bus_send(REQ_PATH_STEP, K_HIVE, K_GRID, id, LAST_PLAYER_X, LAST_PLAYER_Y);
       } else {
          let rdx = rand_dir_x();
          let rdy = rand_dir_y();
-         Bus.send(REQ_MOVE, K_HIVE, K_GRID, id, rdx, rdy);
+         bus_send(REQ_MOVE, K_HIVE, K_GRID, id, rdx, rdy);
       }
   } else {
       let r = Random();
@@ -101,7 +101,7 @@ function decide_action(id) {
       if (m < 50) {
          let rdx = rand_dir_x();
          let rdy = rand_dir_y();
-         Bus.send(REQ_MOVE, K_HIVE, K_GRID, id, rdx, rdy);
+         bus_send(REQ_MOVE, K_HIVE, K_GRID, id, rdx, rdy);
       }
   }
 }
@@ -125,7 +125,7 @@ function handle_events() {
         if (M_P1 > 0) {
             if (M_P2 == 0) {
                Log("Enemy Attacks Player!");
-               Bus.send(CMD_ATTACK, K_HIVE, K_BUS, M_P1, M_P2, 0);
+               bus_send(CMD_ATTACK, K_HIVE, K_BUS, M_P1, M_P2, 0);
             }
         }
      }

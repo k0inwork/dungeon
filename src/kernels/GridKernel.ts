@@ -17,6 +17,7 @@ const COLLISION_MAP = new Uint8Array(0x30000);
 const ENTITY_MAP    = new Uint8Array(0x31000);
 const TERRAIN_MAP   = new Uint32Array(0x40000);
 const VRAM          = new Uint32Array(0x80000);
+const TRANSITION_MAP = new Int32Array(0x41000); // 256 entries
 
 let ENTITY_COUNT = 0;
 
@@ -70,8 +71,19 @@ function init_map() {
         }
         y++;
     }
+
+    let i = 0;
+    while (i < 256) {
+        TRANSITION_MAP[i] = 0;
+        i++;
+    }
+
     ENTITY_COUNT = 0;
     Log("[GRID] Map Initialized (AJS v7.0)");
+}
+
+function set_transition(charCode, targetIdx) {
+    TRANSITION_MAP[charCode] = targetIdx + 1;
 }
 
 function load_tile(x, y, color, char, type) {
@@ -148,16 +160,9 @@ function move_entity(id, dx, dy) {
   if (id == 0) {
       let packed = TERRAIN_MAP[ti];
       let char = packed & 255;
-      if (char == 82) { // 'R'
-          bus_send(EVT_LEVEL_TRANSITION, K_GRID, K_HOST, 1, 0, 0);
-          return;
-      }
-      if (char == 80) { // 'P'
-          bus_send(EVT_LEVEL_TRANSITION, K_GRID, K_HOST, 2, 0, 0);
-          return;
-      }
-      if (char == 72) { // 'H'
-          bus_send(EVT_LEVEL_TRANSITION, K_GRID, K_HOST, 0, 0, 0);
+      let targetIdxPlusOne = TRANSITION_MAP[char];
+      if (targetIdxPlusOne != 0) {
+          bus_send(EVT_LEVEL_TRANSITION, K_GRID, K_HOST, targetIdxPlusOne - 1, 0, 0);
           return;
       }
   }
