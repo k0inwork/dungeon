@@ -5,4 +5,4 @@ then we have 3 entrances to 3 roguelikes
 but those are "links"
 so actually we have 3 platformer links - they lead to 3 roguelikes - their exits lead back to top dungeon
 
-2) 
+2) extend AJS to support complex control structures (like more complex expression in for and while cycles)
