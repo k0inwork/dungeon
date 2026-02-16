@@ -220,14 +220,16 @@ const App = () => {
       }
   }, [activeKernels]);
 
-  const pushLevelData = (proc: any, level: any) => {
+  const pushLevelData = (proc: any, level: any, info?: WorldData) => {
       if (!proc || !proc.isReady) return;
       addLog(`[SYS] Syncing Level Data to ${proc.id}...`);
+
+      const atlas = info?.atlas || worldInfo?.atlas;
 
       proc.run("INIT_MAP"); // Ensure it has the word or safe-fail
       if (proc.id === "PLATFORM") {
           proc.run("INIT_PLATFORMER");
-          let levelIdx = worldInfo?.atlas?.findIndex(a => a.id === level.id) || 0;
+          let levelIdx = atlas?.findIndex(a => a.id === level.id) || 0;
           proc.run(`${levelIdx} SET_LEVEL`);
       }
 
@@ -255,7 +257,7 @@ const App = () => {
       // Sync Transitions
       level.terrain_legend.forEach((t: any) => {
           if (t.type === "GATE" && t.target_id) {
-              let targetIdx = worldInfo?.atlas?.findIndex(a => a.id === t.target_id);
+              let targetIdx = atlas?.findIndex(a => a.id === t.target_id);
               if (targetIdx !== undefined && targetIdx !== -1) {
                   const charCode = t.symbol.charCodeAt(0);
                   proc.run(`${charCode} ${targetIdx} SET_TRANSITION`);
@@ -284,10 +286,10 @@ const App = () => {
     hiveProc.run("INIT_HIVE");
     playerProc.run("INIT_PLAYER");
 
-    pushLevelData(mainProc, level);
+    pushLevelData(mainProc, level, info);
     const platProc = forthService.get("PLATFORM");
     if (platProc.isReady) {
-        pushLevelData(platProc, level);
+        pushLevelData(platProc, level, info);
     }
 
     let px = 5, py = 5;

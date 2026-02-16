@@ -107,14 +107,15 @@ STR_BUF_START STR_PTR !
   ( Check bounds: Reset to start if buffer full )
   DUP STR_PTR @ + STR_BUF_END > IF STR_BUF_START STR_PTR ! THEN
   
-  STR_PTR @ >R       ( Save Dest to R-stack )
-  2DUP R@ -ROT CMOVE ( Copy from Addr to Dest )
+  OVER               ( addr len addr )
+  STR_PTR @          ( addr len addr dest )
+  2 PICK             ( addr len addr dest len )
+  CMOVE              ( addr len )
   
+  STR_PTR @          ( addr len dest )
+  SWAP               ( addr dest len )
+  NIP                ( dest len )
   DUP STR_PTR +!     ( Advance Ptr by Len )
-  
-  NIP                ( addr len -- len )
-  R>                 ( len dest )
-  SWAP               ( dest len )
 ;
 
 ( Convert Number to String )

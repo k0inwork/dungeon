@@ -474,24 +474,27 @@ export class AetherTranspiler {
 
     // 4. Emit Local Variables
     this.scopes.forEach(scope => {
+      this.currentScope = scope; // Temporarily set for resolveVar
       scope.args.forEach(arg => {
-        this.emit(`VARIABLE LV_${scope.functionName}_${arg}`);
+        this.emit(`VARIABLE ${this.resolveVar(arg)}`);
       });
       scope.variables.forEach(v => {
-        const fullName = `LV_${scope.functionName}_${v}`;
-        if (this.isStructArray(fullName)) {
-            const structName = this.getStructType(fullName);
-            const count = this.structArrayCounts.get(fullName) || 0;
+        const fullName = this.resolveVar(v);
+        const unhashed = this.getUnhashedName(v);
+        if (this.isStructArray(v)) {
+            const structName = this.getStructType(v);
+            const count = this.structArrayCounts.get(unhashed) || 0;
             this.emit(`CREATE ${fullName} ${count} SIZEOF_${structName?.toUpperCase()} * ALLOT`);
 
             const entry = AetherTranspiler.globalExportRegistry.get(structName!);
-            if (entry && entry.owner === this.currentKernelId && entry.varName === fullName) {
+            if (entry && entry.owner === this.currentKernelId && entry.varName === unhashed) {
                 this.emit(`${fullName} ${entry.typeId} ${entry.sizeBytes} JS_REGISTER_VSO`);
             }
         } else {
             this.emit(`VARIABLE ${fullName}`);
         }
       });
+      this.currentScope = null;
     });
     this.emit("( ------------------------- )");
   }
@@ -507,10 +510,10 @@ export class AetherTranspiler {
 
         if (topLevel.length > 0) {
             this.emit(`\n( --- TOP-LEVEL INITIALIZATION --- )`);
-            this.emit(`: INITIALIZE_GLOBALS`);
+            this.emit(`: INITIALIZE_AJS_GLOBALS`);
             topLevel.forEach((n: any) => this.compileNode(n));
             this.emit(`;`);
-            this.emit(`INITIALIZE_GLOBALS`);
+            this.emit(`INITIALIZE_AJS_GLOBALS`);
         }
         break;
 
@@ -541,6 +544,9 @@ export class AetherTranspiler {
         node.declarations.forEach((decl: any) => {
            if (decl.init) {
                const varName = this.resolveVar(decl.id.name);
+               if (KNOWN_GLOBALS.has(varName)) {
+                   return;
+               }
                // If it's a top-level constant, it's already defined
                if (this.globalConsts.has(varName)) {
                    return;
@@ -987,13 +993,13 @@ export class AetherTranspiler {
   }
 
   private static isByteType(name: string): boolean {
-      const resolved = this.resolveVar(name);
-      return this.varTypes.get(resolved) === "Uint8Array";
+      const unhashed = this.getUnhashedName(name);
+      return this.varTypes.get(unhashed) === "Uint8Array";
   }
 
   private static getStructType(name: string): string | null {
-      const resolved = this.resolveVar(name);
-      const type = this.varTypes.get(resolved);
+      const unhashed = this.getUnhashedName(name);
+      const type = this.varTypes.get(unhashed);
       if (type && type.startsWith("struct ")) {
           return type.substring(7);
       }
@@ -1001,8 +1007,8 @@ export class AetherTranspiler {
   }
 
   private static isStructArray(name: string): boolean {
-      const resolved = this.resolveVar(name);
-      return this.structArrayCounts.has(resolved);
+      const unhashed = this.getUnhashedName(name);
+      return this.structArrayCounts.has(unhashed);
   }
 
   private static getExpressionStructType(node: ASTNode): string | null {
@@ -1034,7 +1040,25 @@ export class AetherTranspiler {
     return null;
   }
 
-  private static resolveVar(name: string): string {
+  private static hashName(name: string): string {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        const char = name.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash | 0; // Convert to 32bit integer
+    }
+    return Math.abs(hash).toString(36).toUpperCase();
+  }
+
+  private static sanitizeName(name: string): string {
+    if (name.length <= 31) return name;
+    if (name.startsWith("LV_")) {
+        return `LV_${this.hashName(name)}`;
+    }
+    return `G_${this.hashName(name)}`;
+  }
+
+  private static getUnhashedName(name: string): string {
     const upName = name.toUpperCase();
     if (this.currentScope) {
         if (this.currentScope.args.includes(upName) || this.currentScope.variables.has(upName)) {
@@ -1042,6 +1066,10 @@ export class AetherTranspiler {
         }
     }
     return upName;
+  }
+
+  private static resolveVar(name: string): string {
+    return this.sanitizeName(this.getUnhashedName(name));
   }
 
   private static emit(str: string) {

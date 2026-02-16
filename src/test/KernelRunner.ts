@@ -24,10 +24,17 @@ export class KernelTestRunner {
     const logStart = this.proc.outputLog.length;
     this.proc.run(cmd);
 
-    // Extract new STDOUT entries
+    console.log(`[Runner] Logs for ${cmd}:`, this.proc.outputLog.slice(logStart));
+
+    // Extract new STDOUT and JS_LOG entries
     const newLogs = this.proc.outputLog.slice(logStart)
-        .filter(l => l.includes("[STDOUT]"))
-        .map(l => l.split("[STDOUT] ")[1])
+        .map(l => {
+            if (l.includes("[STDOUT]")) return l.split("[STDOUT] ")[1];
+            // JS_LOG messages don't have a special tag, they just have the process header [NAME HH:MM:SS]
+            const parts = l.split("] ");
+            if (parts.length > 1) return parts.slice(1).join("] ");
+            return l;
+        })
         .join(" ")
         .trim();
 

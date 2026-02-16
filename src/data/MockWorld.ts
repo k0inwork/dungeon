@@ -55,6 +55,7 @@ const ROGUE_LEVEL: LevelData = {
         taxonomy: { race: "Synth-Rat", class: "Scrapper", origin: "Test Subject" },
         stats: { hp: 20, speed: 12 },
         glyph: { char: "R", color: 0xFF5555 },
+        ai_type: 2,
         scripts: { passive: "aggressive", active: [] }
       }
     ],

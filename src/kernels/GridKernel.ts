@@ -162,6 +162,8 @@ function move_entity(id, dx, dy) {
       let char = packed & 255;
       let targetIdxPlusOne = TRANSITION_MAP[char];
       if (targetIdxPlusOne != 0) {
+          Log("[GRID] Triggering transition for char:");
+          Log(char);
           bus_send(EVT_LEVEL_TRANSITION, K_GRID, K_HOST, targetIdxPlusOne - 1, 0, 0);
           return;
       }

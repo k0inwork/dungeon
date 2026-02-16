@@ -89,6 +89,7 @@ export class ForthProcess {
        const len = stack.pop();
        const addr = stack.pop();
        const msg = this.readString(addr, len);
+       console.log(`[JS_LOG Binding] ${msg}`);
        this.log(msg);
     });
 
@@ -201,8 +202,8 @@ export class ForthProcess {
   }
 
   log(msg: string) {
-    // Deduplication Logic
-    if (msg === this.lastLogMsg) {
+    // Deduplication Logic - Skip for STDOUT to preserve structured output in traces
+    if (msg === this.lastLogMsg && !msg.startsWith("[STDOUT]")) {
         this.lastLogCount++;
         if (this.outputLog.length > 0) {
             const timestamp = new Date().toLocaleTimeString().split(" ")[0];
@@ -221,7 +222,7 @@ export class ForthProcess {
     const entry = `[${this.id} ${timestamp}] ${msg}`;
     
     this.outputLog.push(entry);
-    if (this.outputLog.length > 50) this.outputLog.shift();
+    if (this.outputLog.length > 5000) this.outputLog.shift();
     
     // Multicast to Process Listeners
     this.logListeners.forEach(cb => cb(entry));

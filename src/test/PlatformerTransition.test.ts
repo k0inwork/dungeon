@@ -9,15 +9,16 @@ describe('Platformer Transition', () => {
     const runner = new KernelTestRunner('PLATFORM', KernelID.PLATFORM);
     await runner.boot(PLATFORM_KERNEL_BLOCKS);
 
-    // Initialize platformer on level 2 (which has a gate)
-    runner.proc.run('2 INIT_PLATFORMER');
+    // Initialize platformer
+    runner.proc.run('INIT_PLATFORMER');
 
-    // Set player position near the gate 'E' (Char 69)
-    // In Level 2, 'E' is at (38, 14)
-    // 38 * 65536 = 2490368
-    // 14 * 65536 = 917504
-    runner.proc.run('2490368 PLAYER_X !');
-    runner.proc.run('917504 PLAYER_Y !');
+    // Set up a gate 'E' (69) at (38, 14) that leads to level 0 (Hub)
+    runner.proc.run('69 0 SET_TRANSITION');
+    runner.proc.run('38 14 0 69 0 LOAD_TILE');
+
+    // Set player position near the gate 'E'
+    runner.proc.run('2490368 PLAYER_X !'); // 38 * 65536
+    runner.proc.run('917504 PLAYER_Y !');  // 14 * 65536
 
     // Wait for the transition event to be sent
     const outMem = new Int32Array(runner.getMemory(), 0x10400, 1024);
