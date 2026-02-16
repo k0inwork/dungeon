@@ -80,8 +80,8 @@ export const VSO_REGISTRY: Record<string, VsoStructDef> = {
         typeId: 3,
         owner: KernelID.BATTLE,
         baseAddr: 0xA0000,
-        sizeBytes: 32,
-        fields: ["hp", "maxHp", "atk", "def", "level", "exp", "state", "targetId"]
+        sizeBytes: 36,
+        fields: ["hp", "maxHp", "atk", "def", "level", "exp", "state", "targetId", "invItem"]
     },
     "PlayerState": {
         typeId: 4,

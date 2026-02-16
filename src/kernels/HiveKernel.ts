@@ -32,6 +32,16 @@ struct HiveEntity {
     type
 }
 
+struct RpgEntity {
+    hp,
+    maxHp,
+    atk,
+    def,
+    level,
+    exp,
+    state,
+    targetId
+}
 let hive_entities = new Array(HiveEntity, MAX_ENTITIES, 0x90000);
 export hive_entities;
 
@@ -78,7 +88,10 @@ function abs(n) {
 
 function decide_action(id) {
   let ent = get_hive_ptr(id);
-  if (ent.type == 3) return;
+  if (ent.type == 3) return; // Skip items/loot
+
+  let stats = RpgEntity(id);
+  if (stats.state == 1) return; // Skip dead entities
   
   if (ent.type == 2) {
       let playerStats = RpgEntity(0);
@@ -118,6 +131,10 @@ function handle_events() {
   if (M_OP == EVT_SPAWN) {
       set_hive_type(M_P1, M_P2);
       if (M_P2 == 2) { Log("[HIVE] Aggressive Entity Registered"); }
+  }
+
+  if (M_OP == EVT_DEATH) {
+      set_hive_type(M_P1, 3); // Mark as loot/dead to stop processing
   }
   
   if (M_OP == EVT_COLLIDE) {

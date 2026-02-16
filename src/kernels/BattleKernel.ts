@@ -10,6 +10,7 @@ ${STANDARD_AJS_PREAMBLE}
 
 // 1. RPG Stats Memory
 const MAX_ENTITIES = 32;
+const RPG_SIZE = 36;
 let ENTITY_COUNT = 0;
 
 // 2. LOGIC
@@ -21,7 +22,8 @@ struct RpgEntity {
     level,
     exp,
     state,
-    targetId
+    targetId,
+    invItem
 }
 
 let rpg_table = new Array(RpgEntity, MAX_ENTITIES, 0xA0000);
@@ -41,6 +43,7 @@ function init_stats(id, type) {
     e.def = 2;
     e.level = 1;
     e.state = 0; // 0=Alive
+    e.invItem = 0;
     
     if (id == 0) {
         // Player Buff
@@ -55,6 +58,15 @@ function init_stats(id, type) {
 
 // --- SKILL SCRIPTS ---
 
+function log_combat(srcId, tgtId, dmg, label) {
+    if (srcId == 0) {
+        Log("You use "); Log(label);
+        Log(" on enemy: "); Log(dmg); Log(" dmg");
+    } else {
+        Log("Enemy hits YOU for "); Log(dmg); Log(" dmg");
+    }
+}
+
 function skill_basic_attack(srcId, tgtId) {
     let src = get_rpg_ptr(srcId);
     let tgt = get_rpg_ptr(tgtId);
@@ -64,7 +76,7 @@ function skill_basic_attack(srcId, tgtId) {
     
     tgt.hp -= dmg;
     
-    Log("Basic Attack!");
+    log_combat(srcId, tgtId, dmg, "Attack");
     Bus.send(EVT_DAMAGE, K_BATTLE, K_BUS, tgtId, dmg, 0);
     
     return tgt.hp;
@@ -79,7 +91,7 @@ function skill_heavy_smash(srcId, tgtId) {
     
     tgt.hp -= dmg;
     
-    Log("HEAVY SMASH!");
+    log_combat(srcId, tgtId, dmg, "SMASH");
     Bus.send(EVT_DAMAGE, K_BATTLE, K_BUS, tgtId, dmg, 2); // Type 2 = Crit/Heavy
     
     return tgt.hp;
@@ -91,7 +103,7 @@ function skill_heal_self(srcId) {
     src.hp += amount;
     if (src.hp > src.maxHp) { src.hp = src.maxHp; }
     
-    Log("Self Heal");
+    Log("You HEAL for "); Log(amount); Log(" HP");
     Bus.send(EVT_DAMAGE, K_BATTLE, K_BUS, srcId, -amount, 4); // Negative Damage = Heal
 }
 
@@ -105,7 +117,7 @@ function skill_fireball(srcId, tgtId) {
     
     tgt.hp -= dmg;
     
-    Log("CAST FIREBALL!");
+    log_combat(srcId, tgtId, dmg, "FIREBALL");
     Bus.send(EVT_DAMAGE, K_BATTLE, K_BUS, tgtId, dmg, 1); // Type 1 = Thermal
     
     return tgt.hp;
@@ -116,6 +128,10 @@ function skill_fireball(srcId, tgtId) {
 function execute_skill(srcId, tgtId, skillId) {
     let remainingHp = 100;
     
+    // Check if attacker is valid
+    let src = get_rpg_ptr(srcId);
+    if (src.state == 1) return;
+
     // Check if target is valid
     let tgt = get_rpg_ptr(tgtId);
     if (tgt.state == 1) {
@@ -141,7 +157,7 @@ function execute_skill(srcId, tgtId, skillId) {
     if (remainingHp <= 0) {
         if (tgt.state == 0) { // Only die once
             tgt.state = 1; // Dead
-            Bus.send(EVT_DEATH, K_BATTLE, K_BUS, tgtId, 0, 0);
+            Bus.send(EVT_DEATH, K_BATTLE, K_BUS, tgtId, tgt.invItem, 0);
             Log("Entity Died:");
             Log(tgtId);
             if (tgtId == 0) Log("GAME OVER");
@@ -153,6 +169,14 @@ function handle_events() {
     if (M_OP == EVT_SPAWN) {
         // M_P1 = ID, M_P2 = Type
         init_stats(M_P1, M_P2);
+
+        // Assign Inventory for Testing
+        let e = get_rpg_ptr(M_P1);
+        if (M_P2 == 2) { // Big Rats / Aggressive
+             e.invItem = 2001;
+        } else if (M_P2 == 1) { // Regular Rats / Passive
+             e.invItem = 2003;
+        }
     }
     
     if (M_OP == CMD_ATTACK) {
