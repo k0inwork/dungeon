@@ -33,6 +33,9 @@ describe('Integration: Rat Chase', () => {
     // Initialize Kernels
     grid.run('INIT_MAP');
     hive.run('INIT_HIVE');
+
+    // Process SUB packets generated during boot/init
+    sim.tick();
   });
 
   test('Aggressive NPC moves towards player', () => {
