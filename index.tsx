@@ -7,6 +7,7 @@ import { TerminalCanvas } from "./src/components/TerminalCanvas";
 import { generatorService, WorldData } from "./src/services/GeneratorService";
 import { ArchitectView } from "./src/components/ArchitectView";
 import { DebuggerConsole } from "./src/components/DebuggerConsole";
+import { AIConfigPanel } from "./src/components/AIConfigPanel"; // [webllm+] panel import
 import { MEMORY } from "./src/constants/Memory";
 import { GRID_KERNEL_BLOCKS } from "./src/kernels/GridKernel";
 import { HIVE_KERNEL_BLOCKS } from "./src/kernels/HiveKernel";
@@ -52,6 +53,7 @@ const App = () => {
   const [viewMode, setViewMode] = useState<ViewMode>("GAME");
   const [log, setLog] = useState<string[]>([]);
   const [seed, setSeed] = useState("Cyberpunk Sewers");
+  const [aiReady, setAiReady] = useState(true); // [webllm+] track if AI (local or cloud) is initialized
   const [worldInfo, setWorldInfo] = useState<WorldData | null>(null);
   const [currentLevelId, setCurrentLevelId] = useState<string>("hub");
 
@@ -101,7 +103,6 @@ const App = () => {
   useEffect(() => {
       const handleKernelLog = (msg: string) => {
           // Filter for gameplay relevant info
-          // We want [PLAYER], [BATTLE], or anything mentioning "Attack/Damage/Die"
           const isGameplay = msg.includes("PLAYER") || msg.includes("BATTLE") || msg.includes("HIVE") || 
                              msg.includes("GRID") || msg.includes("PLATFORM") ||
                              msg.includes("Attack") || msg.includes("Hits") || msg.includes("Die") || msg.includes("Loot");
@@ -127,7 +128,6 @@ const App = () => {
   const updateBusHistory = () => {
       let hist = forthService.busHistory;
       if (filterMovement) {
-          // FILTER OUT NOISE: MOVEMENT and COLLISIONS
           hist = hist.filter(p => 
               p.op !== "REQ_MOVE" && 
               p.op !== "EVT_MOVED" && 
@@ -143,7 +143,6 @@ const App = () => {
   }, [showBus, filterMovement]);
 
   // --- CONSOLE INTERCEPTOR ---
-  // Captures browser errors and displays them in the game terminal
   useEffect(() => {
     const originalError = console.error;
     const originalWarn = console.warn;
@@ -173,7 +172,6 @@ const App = () => {
         console.warn = originalWarn;
     };
   }, []);
-  // ---------------------------
 
   const loadKernel = async (id: string, blocks: string[]) => {
       try {
@@ -239,7 +237,7 @@ const App = () => {
           color = terrain.color;
           type = terrain.passable ? 0 : 1;
         } else if (char === '@' || isPortalPart) {
-           type = 0; // Passable
+           type = 0;
            if (char === '@') {
              charCode = '.'.charCodeAt(0);
              color = 0x444444;
@@ -299,7 +297,6 @@ const App = () => {
       if (nextLevel) {
           addLog(`Transitioning to ${nextLevel.name}...`);
           setCurrentLevelId(targetId);
-          // Update active_level in worldInfo for UI components
           setWorldInfo({
               ...worldInfo,
               active_level: nextLevel
@@ -329,9 +326,9 @@ const App = () => {
       const playerProc = forthService.get("PLAYER");
       
       addLog("Resetting Physics & AI Kernels...");
-      mainProc.run("INIT_MAP"); // Now calls AJS implementation
+      mainProc.run("INIT_MAP");
       hiveProc.run("INIT_HIVE");
-      playerProc.run("INIT_PLAYER"); // New AJS Init
+      playerProc.run("INIT_PLAYER");
 
       addLog("Injecting Map Data...");
       const level = data.active_level;
@@ -341,7 +338,7 @@ const App = () => {
         for (let x = 0; x < MEMORY.GRID_WIDTH; x++) {
           const char = row[x] || ' ';
           let color = 0x888888; 
-          let type = 0; // 0 = Walkable, 1 = Wall
+          let type = 0;
           let charCode = char.charCodeAt(0);
 
           const terrain = level.terrain_legend.find(t => t.symbol === char);
@@ -350,13 +347,12 @@ const App = () => {
             type = terrain.passable ? 0 : 1;
           } else if (char === '@') {
              type = 0;
-             charCode = 32; // Use Space for terrain at spawn point
+             charCode = 32;
           }
           if (!terrain && char !== '@' && char !== ' ') {
              type = 1;
           }
 
-          // LOAD_TILE is now AJS-backed, args same order
           mainProc.run(`${x} ${y} ${color} ${charCode} ${type} LOAD_TILE`);
         }
       });
@@ -375,13 +371,12 @@ const App = () => {
           const c = ent.glyph.color || 0xFF0000;
           const ch = ent.glyph.char.charCodeAt(0);
           
-          // Determine AI Type
-          let aiType = 1; // Default Passive
+          let aiType = 1;
           
           if (ent.glyph.char === '$') {
-              aiType = 3; // ITEM/LOOT
+              aiType = 3;
           } else if (ent.scripts && ent.scripts.passive && ent.scripts.passive.includes('aggressive')) {
-              aiType = 2; // Aggressive
+              aiType = 2;
           } else if (ent.id.includes("giant")) {
               aiType = 2; 
           }
@@ -393,7 +388,6 @@ const App = () => {
       loadLevel(data.active_level);
       addLog("Simulation Ready.");
 
-      // Initial Sync
       setTimeout(syncKernelState, 100);
 
     } catch (e) {
@@ -416,28 +410,10 @@ const App = () => {
       const hive = forthService.get("HIVE");
       const player = forthService.get("PLAYER");
       const battle = forthService.get("BATTLE");
+      const platform = forthService.get("PLATFORM");
 
       if (!main.isReady || !hive.isReady || !player.isReady || !battle.isReady) return;
       if (!activeKernels.has("GRID") || !activeKernels.has("HIVE") || !activeKernels.has("PLAYER") || !activeKernels.has("BATTLE")) return;
-
-      const processPackets = () => {
-          // 1. MESSAGE BROKER: Move Packets from Output -> Input
-          const kernels = [
-              { id: KernelID.GRID, proc: main },
-              { id: KernelID.HIVE, proc: hive },
-              { id: KernelID.PLAYER, proc: player },
-              { id: KernelID.BATTLE, proc: battle }
-          ];
-
-          const inboxes: Record<number, number[]> = {
-              [KernelID.GRID]: [],
-              [KernelID.HIVE]: [],
-              [KernelID.PLAYER]: [],
-              [KernelID.BATTLE]: []
-          };
-
-          kernels.forEach(k => {
-      const platform = forthService.get("PLATFORM");
 
       const kernels = [
           { id: KernelID.GRID, proc: main },
@@ -447,6 +423,7 @@ const App = () => {
           { id: KernelID.PLATFORM, proc: platform }
       ];
 
+      // [webllm+] Unified message broker to handle inter-kernel communication
       const runBroker = () => {
           const inboxes = new Map<number, number[]>();
           inboxes.set(KernelID.GRID, []);
@@ -455,6 +432,7 @@ const App = () => {
           inboxes.set(KernelID.BATTLE, []);
           inboxes.set(KernelID.PLATFORM, []);
 
+          // 1. Collect packets from all kernels
           kernels.forEach(k => {
               if (!k.proc.isReady) return;
               const outMem = new Int32Array(k.proc.getMemory(), MEMORY.OUTPUT_QUEUE_ADDR, 1024);
@@ -475,6 +453,7 @@ const App = () => {
                       const packet = outMem.subarray(offset, offset + packetLen);
                       forthService.logPacket(header[1], header[2], header[0], header[3], header[4], header[5]);
 
+                      // Handle Host-specific events
                       const target = header[2];
                       if (op === Opcode.EVT_DEATH && header[3] === 0) setGameOver(true);
                       if (op === Opcode.EVT_MOVED && header[3] === 0) setPlayerPos({ x: header[4], y: header[5] });
@@ -515,6 +494,7 @@ const App = () => {
           });
 
           kernels.forEach(k => {
+              if (!k.proc.isReady) return;
               const inboxData = inboxes[k.id];
               const inMem = new Int32Array(k.proc.getMemory(), MEMORY.INPUT_QUEUE_ADDR, 1024);
               if (inboxData.length > 0) {
@@ -536,45 +516,19 @@ const App = () => {
                           }
                       }
 
-                      if (target === KernelID.BUS) {
-                          for (const [key, inbox] of inboxes.entries()) {
-                              if (key !== header[1]) {
-                                  inbox.push(...packet);
-                              }
-                          }
-                      }
-                      else if (target !== KernelID.HOST) {
-                          const inbox = inboxes.get(target);
-                          if (inbox) {
-                              inbox.push(...packet);
-                          }
-                      }
-
                       offset += packetLen;
                   }
                   outMem[0] = 0; // Clear Output Queue
               }
           });
 
-          kernels.forEach(k => {
-              if (!k.proc.isReady) return;
-              const inboxData = inboxes.get(k.id);
-              if (inboxData) {
-                  const inMem = new Int32Array(k.proc.getMemory(), MEMORY.INPUT_QUEUE_ADDR, 1024);
-                  if (inboxData.length > 0) {
-                      inMem[0] = inboxData.length;
-                      inMem.set(inboxData, 1);
-                  } else {
-                      inMem[0] = 0;
-                  }
-              }
-          });
-      };
+          // 2. Distribute packets to target kernels
 
-      // 1. FIRST BROKER PASS
+
+      // 1. FIRST BROKER PASS: Deliver initial commands
       runBroker();
       
-      // 2. RUN CYCLES (The Heartbeat)
+      // 2. RUN CYCLES: The Heartbeat
       player.run("PROCESS_INBOX");
       main.run("PROCESS_INBOX");
       battle.run("PROCESS_INBOX"); 
@@ -583,13 +537,11 @@ const App = () => {
       }
       hive.run("RUN_HIVE_CYCLE");
       main.run("RUN_ENV_CYCLE");
-      // 3. Process resulting events (updates React state immediately)
-      processPackets();
 
-      // 4. Second Pass for GRID: Process events like EVT_DEATH immediately
-      // This ensures color changes (gray rats) happen in the same frame as death.
-      main.run("PROCESS_INBOX");
+      // 3. SECOND BROKER PASS: Deliver responses emitted during cycles
+      runBroker();
 
+      // 4. Update UI state from memory
       syncKernelState();
       
       if (inspectStats) handleInspect(inspectStats.x, inspectStats.y);
@@ -600,7 +552,6 @@ const App = () => {
       const gridProc = forthService.get("GRID");
       if (!playerProc?.isReady || !gridProc?.isReady) return;
 
-      // 1. Sync Player Stats (0xC0000)
       const pMem = new DataView(playerProc.getMemory());
       const pBase = 0xC0000;
       setPlayerStats({
@@ -610,14 +561,12 @@ const App = () => {
           inv: pMem.getInt32(pBase + 12, true)
       });
 
-      // 2. Sync Ground Items at Player Position
-      // Read current player X, Y from Grid Kernel directly for absolute accuracy
       const gMemView = new DataView(gridProc.getMemory());
-      const px = gMemView.getInt32(0x90000 + 12, true); // Entity 0 is Player
+      const px = gMemView.getInt32(0x90000 + 12, true);
       const py = gMemView.getInt32(0x90000 + 8, true);
 
       const idx = py * MEMORY.GRID_WIDTH + px;
-      const lootVal = new Uint8Array(gridProc.getMemory())[0x32000 + idx]; // LOOT_MAP
+      const lootVal = new Uint8Array(gridProc.getMemory())[0x32000 + idx];
 
       if (lootVal > 0) {
           const lootId = lootVal - 1;
@@ -629,18 +578,9 @@ const App = () => {
           setGroundItems([name]);
       } else {
           setGroundItems([]);
-
-      // 3. SECOND BROKER PASS: Deliver responses emitted during cycles
-      runBroker();
-      
-      // 4. Update Inspector if active
-      if (inspectStats) {
-          handleInspect(inspectStats.x, inspectStats.y);
       }
   };
 
-  // Inspect Entity at X, Y by checking Kernel Memory directly
-  // Returns the ID found, or -1
   const getEntityAt = (x: number, y: number): number => {
       if (!activeKernels.has("GRID")) return -1;
       const gridProc = forthService.get("GRID");
@@ -658,7 +598,6 @@ const App = () => {
       const COLLISION_MAP_ADDR = 0x30000;
       const ENTITY_MAP_ADDR = 0x31000;
       const idx = y * MEMORY.GRID_WIDTH + x;
-      // Wall if collision is 1 but no entity is there
       return gridMem[COLLISION_MAP_ADDR + idx] === 1 && gridMem[ENTITY_MAP_ADDR + idx] === 0;
   };
 
@@ -742,7 +681,6 @@ const App = () => {
   const triggerPickup = () => {
         const playerProc = forthService.get("PLAYER");
         if (playerProc && playerProc.isReady) {
-            // CMD_PICKUP [PlayerID, PlayerX, PlayerY]
             const cmd = `0 OUT_PTR ! 305 2 1 0 ${playerPos.x} ${playerPos.y} BUS_SEND`;
             playerProc.run(cmd);
             tickSimulation();
@@ -765,12 +703,10 @@ const App = () => {
 
         if (mode !== "GRID") return;
         
-        // Prevent default browser behavior for gameplay keys
         if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " "].includes(k)) {
             e.preventDefault();
         }
 
-        // --- TARGET MODE INPUT ---
         if (targetMode) {
             if (k === "Escape") {
                 setTargetMode(false);
@@ -779,14 +715,11 @@ const App = () => {
                 return;
             }
             
-            // Allow Skill Switching inside Target Mode
             if (['1', '2', '3', '4'].includes(k)) {
                 const skill = PLAYER_SKILLS.find(s => s.key === k);
                 if (skill) {
                     setSelectedSkill(skill);
-                    // Reset cursor to player when switching skills for better UX
                     setCursorPos({...playerPos});
-                    // Only HEAL is valid on self (ID 0)
                     setIsValidTarget(skill.name === "HEAL");
                     addLog(`[TARGETING] Switched to ${skill.name} (Range: ${skill.range})`);
                 }
@@ -800,24 +733,20 @@ const App = () => {
             if (k === "ArrowLeft") cx--;
             if (k === "ArrowRight") cx++;
             
-            // Bounds Check
             if (cx < 0) cx = 0; if (cy < 0) cy = 0;
             if (cx >= MEMORY.GRID_WIDTH) cx = MEMORY.GRID_WIDTH - 1;
             if (cy >= MEMORY.GRID_HEIGHT) cy = MEMORY.GRID_HEIGHT - 1;
             
-            // Wall Check: Block cursor from entering walls
             if (isWallAt(cx, cy)) {
                 cx = cursorPos.x;
                 cy = cursorPos.y;
             }
 
-            // Range Check & Block movement outside range
             if (selectedSkill) {
                 const dist = Math.abs(cx - playerPos.x) + Math.abs(cy - playerPos.y);
                 if (dist <= selectedSkill.range) {
                     setCursorPos({x: cx, y: cy});
 
-                    // Validate target: Attack skills cannot target self (ID 0)
                     if (selectedSkill.name !== "HEAL" && cx === playerPos.x && cy === playerPos.y) {
                         setIsValidTarget(false);
                     } else {
@@ -835,7 +764,6 @@ const App = () => {
                 }
                 const targetId = getEntityAt(cursorPos.x, cursorPos.y);
                 if (targetId !== -1) {
-                    // Final safety: Cannot attack self
                     if (selectedSkill.name !== "HEAL" && targetId === 0) {
                         addLog("CANNOT ATTACK SELF!");
                         return;
@@ -844,8 +772,6 @@ const App = () => {
                     addLog(`Executing ${selectedSkill.name} on ID ${targetId}`);
                     const playerProc = forthService.get("PLAYER");
                     if (playerProc && playerProc.isReady) {
-                        // Send Attack Command to Bus
-                        // P1=Source(0), P2=Target(targetId), P3=SkillID
                         const cmd = `0 OUT_PTR ! 303 2 255 0 ${targetId} ${selectedSkill.id} BUS_SEND`;
                         playerProc.run(cmd);
                         tickSimulation();
@@ -859,7 +785,6 @@ const App = () => {
             return;
         }
 
-        // --- NORMAL MODE INPUT ---
         let dx = 0;
         let dy = 0;
         
@@ -868,20 +793,16 @@ const App = () => {
         if (k === "ArrowLeft") dx = -1;
         if (k === "ArrowRight") dx = 1;
         
-        // Skill Shortcuts (1-4)
         if (['1', '2', '3', '4'].includes(k)) {
             if (currentLevelId === "hub") return;
             const skill = PLAYER_SKILLS.find(s => s.key === k);
             if (skill) {
-                // All skills now use Targeting Mode for consistency
                 setSelectedSkill(skill);
                 setTargetMode(true);
-                setCursorPos({...playerPos}); // Reset cursor to player
+                setCursorPos({...playerPos});
 
-                // Only HEAL is valid on self (ID 0)
                 setIsValidTarget(skill.name === "HEAL");
 
-                // Special log for HEAL
                 if (skill.name === "HEAL") {
                     addLog(`[TARGETING] Select target for HEAL (Self). Press ENTER.`);
                 } else {
@@ -894,7 +815,6 @@ const App = () => {
         if (dx !== 0 || dy !== 0) {
             const playerProc = forthService.get("PLAYER");
             if (playerProc && playerProc.isReady) {
-                // Send Move Request
                 const cmd = `0 OUT_PTR ! 101 2 1 0 ${dx} ${dy} BUS_SEND`;
                 playerProc.run(cmd);
                 tickSimulation();
@@ -902,7 +822,6 @@ const App = () => {
         }
         
         if (k === " ") {
-            // Spacebar = Interact/Heavy Smash Shortcut (Legacy)
              const playerProc = forthService.get("PLAYER");
             if (playerProc && playerProc.isReady) {
                 const cmd = `0 OUT_PTR ! 301 2 2 0 0 0 BUS_SEND`;
@@ -931,7 +850,6 @@ const App = () => {
   return (
     <div style={{ backgroundColor: "#111", color: "#0f0", fontFamily: "Courier New", height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       
-      {/* BUS LOG SIDEBAR - RIGHT SIDE */}
       <div style={{
           position: 'absolute', top: 0, right: 0, bottom: 0,
           width: '350px',
@@ -971,7 +889,6 @@ const App = () => {
           </div>
       </div>
 
-      {/* HEADER */}
       <div style={{ flex: "0 0 40px", padding: "10px", borderBottom: "1px solid #333", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#000" }}>
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center' }}>
             <span style={{ fontWeight: 'bold' }}>AI ROGUELIKE v2.1 [INVENTORY]</span>
@@ -987,24 +904,37 @@ const App = () => {
 
       <div style={{ flex: "1 1 auto", position: "relative", display: "flex", justifyContent: "center", alignItems: "center", overflow: "hidden" }}>
         
-        {/* BOOT MODE */}
         {mode === "BOOT" && (
-          <div style={{ textAlign: "center" }}>
+          <div style={{ textAlign: "center", display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <h1>WORLD SEED INPUT</h1>
             <input type="text" value={seed} onChange={(e) => setSeed(e.target.value)} style={{ background: "#000", border: "1px solid #0f0", color: "#0f0", padding: "10px", fontSize: "1.2em", width: "300px", textAlign: "center" }} />
-            <br /><br />
+
+            {/* [webllm+] Config panel integration */}
+            <AIConfigPanel onReady={setAiReady} />
+
+            <br />
             <div style={{ color: "#666", marginBottom: "10px" }}>Tip: Shift+Click for Instant Mock World</div>
-            <button onClick={handleGenerate} style={{ background: "#0f0", color: "#000", border: "none", padding: "10px 20px", fontSize: "1.2em", cursor: "pointer" }}>INITIATE GENERATION</button>
+            <button
+                onClick={handleGenerate}
+                disabled={!aiReady} // [webllm+] disable until local model is loaded
+                style={{
+                    background: aiReady ? "#0f0" : "#333",
+                    color: aiReady ? "#000" : "#666",
+                    border: "none",
+                    padding: "10px 20px",
+                    fontSize: "1.2em",
+                    cursor: aiReady ? "pointer" : "not-allowed"
+                }}
+            >
+                {aiReady ? "INITIATE GENERATION" : "AI NOT READY"}
+            </button>
           </div>
         )}
 
-        {/* LOADING MODE */}
         {mode === "GENERATING" && <div style={{ textAlign: "center" }}><h1>SYNCING KERNELS...</h1></div>}
 
-        {/* VIEW MODES */}
         {viewMode === "ARCHITECT" && worldInfo && <ArchitectView data={worldInfo} />}
 
-        {/* GAME OVER OVERLAY */}
         {gameOver && (
             <div style={{
                 position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
@@ -1033,7 +963,6 @@ const App = () => {
         {viewMode === "GAME" && (mode === "GRID" || mode === "PLATFORM") && (
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
             
-            {/* HUD PANEL - LEFT SIDE */}
             <div style={{
                 position: 'absolute', top: 0, left: '-220px', width: '200px',
                 background: 'rgba(0, 20, 0, 0.9)', border: '1px solid #0f0',
@@ -1050,7 +979,6 @@ const App = () => {
                 )) : <div style={{ color: '#444' }}>Empty</div>}
             </div>
 
-            {/* INSPECTOR OVERLAY */}
             {inspectStats && (
                 <div style={{
                     position: "absolute",
@@ -1084,7 +1012,6 @@ const App = () => {
                 onGridClick={handleInspect}
                 cursor={(targetMode && !(selectedSkill?.name === "HEAL" && cursorPos.x === playerPos.x && cursorPos.y === playerPos.y)) ? cursorPos : null}
               />
-              {/* Overlay for Invalid Target */}
               {targetMode && !isValidTarget && (
                   <div style={{
                       position: 'absolute', left: 0, right: 0, textAlign: 'center', 
@@ -1097,7 +1024,6 @@ const App = () => {
               )}
             </div>
 
-            {/* ACTION BAR */}
             {currentLevelId !== "hub" && (
                 <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
                     {PLAYER_SKILLS.map(skill => (
@@ -1155,7 +1081,6 @@ const App = () => {
         )}
       </div>
       
-      {/* FLOATING ACTION BUTTONS */}
       <div style={{ position: "absolute", bottom: "10px", right: "10px", display: "flex", flexDirection: "column", gap: "10px", alignItems: "flex-end" }}>
           <button 
               onClick={() => setShowBus(!showBus)}
