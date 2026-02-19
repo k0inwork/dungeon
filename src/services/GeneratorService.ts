@@ -2,7 +2,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { MapGenerator } from "./MapGenerator";
 import { MOCK_WORLD_DATA } from "../data/MockWorld";
-import { webLLMService } from "./WebLLMService";
+import { webLLMService } from "./WebLLMService"; // [webllm+] Import local LLM service
 
 // --- CONTEXT INJECTION (THE RULES) ---
 const BATTLE_LOGIC_CONTEXT = `
@@ -129,7 +129,7 @@ class GeneratorService {
   private ai: GoogleGenAI;
   public history: InteractionLog[] = [];
   private logIdCounter = 0;
-  private provider: 'gemini' | 'webllm' = 'gemini';
+  private provider: 'gemini' | 'webllm' = 'gemini'; // [webllm+] Toggle between cloud and local providers
 
   constructor() {
     // @ts-ignore
@@ -147,7 +147,7 @@ class GeneratorService {
   }
 
   /**
-   * Sets the AI provider to be used for generation.
+   * [webllm+] Sets the AI provider to be used for generation.
    */
   public setProvider(provider: 'gemini' | 'webllm') {
       this.provider = provider;
@@ -180,6 +180,7 @@ class GeneratorService {
     try {
       let text: string;
       if (this.provider === 'gemini') {
+          // [webllm+] Use Google Gemini Cloud API
           const result = await this.ai.models.generateContent({
             model: 'gemini-1.5-flash',
             contents: prompt,
@@ -187,6 +188,7 @@ class GeneratorService {
           });
           text = result.text;
       } else {
+          // [webllm+] Use local WebLLM provider
           // Local LLMs often need explicit JSON instructions
           const jsonPrompt = prompt + "\n\nIMPORTANT: Return ONLY valid JSON. No markdown blocks.";
           text = await webLLMService.generate(jsonPrompt);
@@ -229,12 +231,14 @@ ${code}
       try {
           let text: string;
           if (this.provider === 'gemini') {
+              // [webllm+] Repair using cloud AI
               const result = await this.ai.models.generateContent({
                 model: 'gemini-1.5-flash',
                 contents: prompt,
               });
               text = result.text;
           } else {
+              // [webllm+] Repair using local LLM
               text = await webLLMService.generate(prompt);
           }
 

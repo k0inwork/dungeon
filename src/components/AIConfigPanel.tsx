@@ -1,4 +1,5 @@
 
+// [webllm+] UI Component for configuring AI Engine (Gemini vs Local WebLLM)
 import React, { useState, useEffect } from 'react';
 import { webLLMService } from '../services/WebLLMService';
 import { generatorService } from '../services/GeneratorService';
@@ -19,6 +20,7 @@ export const AIConfigPanel: React.FC<AIConfigPanelProps> = ({ onReady }) => {
 
     useEffect(() => {
         const checkGPU = async () => {
+            // [webllm+] Check if the browser supports WebGPU on mount
             const supported = await webLLMService.isWebGPUSupported();
             setIsWebGPU(supported);
             if (supported) {
@@ -30,6 +32,7 @@ export const AIConfigPanel: React.FC<AIConfigPanelProps> = ({ onReady }) => {
     }, []);
 
     useEffect(() => {
+        // [webllm+] Sync provider selection with the Generator Service
         generatorService.setProvider(provider);
         if (provider === 'gemini') {
             onReady(true);
@@ -39,6 +42,7 @@ export const AIConfigPanel: React.FC<AIConfigPanelProps> = ({ onReady }) => {
     }, [provider, isLoaded, onReady]);
 
     const updateStorage = async () => {
+        // [webllm+] Show user how much space the models are taking
         const est = await webLLMService.getStorageEstimate();
         setStorage(est);
     };
@@ -47,6 +51,7 @@ export const AIConfigPanel: React.FC<AIConfigPanelProps> = ({ onReady }) => {
         if (!selectedModel) return;
         setIsInitializing(true);
         try {
+            // [webllm+] Trigger model download and WASM compilation
             await webLLMService.initialize(selectedModel, (report) => {
                 setProgress(report.text);
             });
@@ -104,6 +109,7 @@ export const AIConfigPanel: React.FC<AIConfigPanelProps> = ({ onReady }) => {
 
             {provider === 'webllm' && (
                 <div style={{ borderTop: '1px solid #222', paddingTop: '10px' }}>
+                    {/* [webllm+] Visual feedback on WebGPU compatibility */}
                     <div style={{ marginBottom: '10px', color: isWebGPU ? '#0f0' : '#f00' }}>
                         WebGPU Support: {isWebGPU === null ? 'Checking...' : (isWebGPU ? 'YES' : 'NO (Required for Local AI)')}
                     </div>
@@ -141,6 +147,7 @@ export const AIConfigPanel: React.FC<AIConfigPanelProps> = ({ onReady }) => {
                                 {isLoaded ? 'MODEL LOADED (READY)' : (isInitializing ? 'INITIALIZING...' : 'DOWNLOAD & INITIALIZE')}
                             </button>
 
+                            {/* [webllm+] Download status report area */}
                             {progress && (
                                 <div style={{
                                     marginTop: '10px',
@@ -155,6 +162,7 @@ export const AIConfigPanel: React.FC<AIConfigPanelProps> = ({ onReady }) => {
                                 </div>
                             )}
 
+                            {/* [webllm+] Cache info */}
                             {storage && (
                                 <div style={{ marginTop: '10px', fontSize: '0.8em', color: '#666' }}>
                                     Cache Usage: {formatBytes(storage.usage)} / {formatBytes(storage.quota)} ({storage.percent.toFixed(1)}%)

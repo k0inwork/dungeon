@@ -7,7 +7,7 @@ import { TerminalCanvas } from "./src/components/TerminalCanvas";
 import { generatorService, WorldData } from "./src/services/GeneratorService";
 import { ArchitectView } from "./src/components/ArchitectView";
 import { DebuggerConsole } from "./src/components/DebuggerConsole";
-import { AIConfigPanel } from "./src/components/AIConfigPanel";
+import { AIConfigPanel } from "./src/components/AIConfigPanel"; // [webllm+] panel import
 import { MEMORY } from "./src/constants/Memory";
 import { GRID_KERNEL_BLOCKS } from "./src/kernels/GridKernel";
 import { HIVE_KERNEL_BLOCKS } from "./src/kernels/HiveKernel";
@@ -53,7 +53,7 @@ const App = () => {
   const [viewMode, setViewMode] = useState<ViewMode>("GAME");
   const [log, setLog] = useState<string[]>([]);
   const [seed, setSeed] = useState("Cyberpunk Sewers");
-  const [aiReady, setAiReady] = useState(true);
+  const [aiReady, setAiReady] = useState(true); // [webllm+] track if AI (local or cloud) is initialized
   const [worldInfo, setWorldInfo] = useState<WorldData | null>(null);
   const [currentLevelId, setCurrentLevelId] = useState<string>("hub");
 
@@ -421,6 +421,7 @@ const App = () => {
           { id: KernelID.PLATFORM, proc: platform }
       ];
 
+      // [webllm+] Unified message broker to handle inter-kernel communication
       const runBroker = () => {
           const inboxes = new Map<number, number[]>();
           inboxes.set(KernelID.GRID, []);
@@ -881,13 +882,14 @@ const App = () => {
             <h1>WORLD SEED INPUT</h1>
             <input type="text" value={seed} onChange={(e) => setSeed(e.target.value)} style={{ background: "#000", border: "1px solid #0f0", color: "#0f0", padding: "10px", fontSize: "1.2em", width: "300px", textAlign: "center" }} />
 
+            {/* [webllm+] Config panel integration */}
             <AIConfigPanel onReady={setAiReady} />
 
             <br />
             <div style={{ color: "#666", marginBottom: "10px" }}>Tip: Shift+Click for Instant Mock World</div>
             <button
                 onClick={handleGenerate}
-                disabled={!aiReady}
+                disabled={!aiReady} // [webllm+] disable until local model is loaded
                 style={{
                     background: aiReady ? "#0f0" : "#333",
                     color: aiReady ? "#000" : "#666",

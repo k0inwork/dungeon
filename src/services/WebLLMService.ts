@@ -1,4 +1,5 @@
 
+// [webllm+] WebLLM Service to manage local LLM execution via WebGPU
 import { CreateMLCEngine, prebuiltAppConfig, MLCEngineInterface, InitProgressReport } from "@mlc-ai/web-llm";
 
 export class WebLLMService {
@@ -6,7 +7,7 @@ export class WebLLMService {
     private currentModelId: string | null = null;
 
     /**
-     * Checks if WebGPU is supported by the current browser environment.
+     * [webllm+] Checks if WebGPU is supported by the current browser environment.
      */
     public async isWebGPUSupported(): Promise<boolean> {
         if (typeof navigator === 'undefined' || !navigator.gpu) {
@@ -21,7 +22,7 @@ export class WebLLMService {
     }
 
     /**
-     * Returns a list of prebuilt models available in WebLLM.
+     * [webllm+] Returns a list of prebuilt models available in WebLLM.
      */
     public getAvailableModels() {
         return prebuiltAppConfig.model_list.map(m => ({
@@ -31,7 +32,7 @@ export class WebLLMService {
     }
 
     /**
-     * Initializes the WebLLM engine with the specified model.
+     * [webllm+] Initializes the WebLLM engine with the specified model.
      * Downloads the model if not already cached.
      */
     public async initialize(modelId: string, onProgress?: (report: InitProgressReport) => void) {
@@ -46,7 +47,7 @@ export class WebLLMService {
     }
 
     /**
-     * Generates a response for the given prompt using the local model.
+     * [webllm+] Generates a response for the given prompt using the local model.
      */
     public async generate(prompt: string): Promise<string> {
         if (!this.engine) {
@@ -63,7 +64,7 @@ export class WebLLMService {
     }
 
     /**
-     * Gets an estimate of the storage usage and quota for the current origin.
+     * [webllm+] Gets an estimate of the storage usage and quota for the current origin.
      */
     public async getStorageEstimate() {
         if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.estimate) {
