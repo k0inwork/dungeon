@@ -416,28 +416,10 @@ const App = () => {
       const hive = forthService.get("HIVE");
       const player = forthService.get("PLAYER");
       const battle = forthService.get("BATTLE");
-
-      if (!main.isReady || !hive.isReady || !player.isReady || !battle.isReady) return;
-      if (!activeKernels.has("GRID") || !activeKernels.has("HIVE") || !activeKernels.has("PLAYER") || !activeKernels.has("BATTLE")) return;
-
-      const processPackets = () => {
-          // 1. MESSAGE BROKER: Move Packets from Output -> Input
-          const kernels = [
-              { id: KernelID.GRID, proc: main },
-              { id: KernelID.HIVE, proc: hive },
-              { id: KernelID.PLAYER, proc: player },
-              { id: KernelID.BATTLE, proc: battle }
-          ];
-
-          const inboxes: Record<number, number[]> = {
-              [KernelID.GRID]: [],
-              [KernelID.HIVE]: [],
-              [KernelID.PLAYER]: [],
-              [KernelID.BATTLE]: []
-          };
-
-          kernels.forEach(k => {
       const platform = forthService.get("PLATFORM");
+
+      if (!main?.isReady || !hive?.isReady || !player?.isReady || !battle?.isReady) return;
+      if (!activeKernels.has("GRID") || !activeKernels.has("HIVE") || !activeKernels.has("PLAYER") || !activeKernels.has("BATTLE")) return;
 
       const kernels = [
           { id: KernelID.GRID, proc: main },
@@ -449,14 +431,10 @@ const App = () => {
 
       const runBroker = () => {
           const inboxes = new Map<number, number[]>();
-          inboxes.set(KernelID.GRID, []);
-          inboxes.set(KernelID.HIVE, []);
-          inboxes.set(KernelID.PLAYER, []);
-          inboxes.set(KernelID.BATTLE, []);
-          inboxes.set(KernelID.PLATFORM, []);
+          kernels.forEach(k => inboxes.set(k.id, []));
 
           kernels.forEach(k => {
-              if (!k.proc.isReady) return;
+              if (!k.proc || !k.proc.isReady) return;
               const outMem = new Int32Array(k.proc.getMemory(), MEMORY.OUTPUT_QUEUE_ADDR, 1024);
               const count = outMem[0];
               
@@ -476,8 +454,26 @@ const App = () => {
                       forthService.logPacket(header[1], header[2], header[0], header[3], header[4], header[5]);
 
                       const target = header[2];
-                      if (op === Opcode.EVT_DEATH && header[3] === 0) setGameOver(true);
-                      if (op === Opcode.EVT_MOVED && header[3] === 0) setPlayerPos({ x: header[4], y: header[5] });
+
+                      if (target === KernelID.HOST) {
+                          if (op === Opcode.EVT_DEATH && header[3] === 0) setGameOver(true);
+                          if (op === Opcode.EVT_MOVED && header[3] === 0) setPlayerPos({ x: header[4], y: header[5] });
+                          if (op === Opcode.EVT_LEVEL_TRANSITION) handleLevelTransition(header[3]);
+                      } else if (target >= 1000) {
+                          channelSubscriptions.current.get(target)?.forEach(subId => {
+                              if (subId !== header[1]) {
+                                  inboxes.get(subId)?.push(...packet);
+                              }
+                          });
+                      } else if (target === KernelID.BUS) {
+                          for (const [key, inbox] of inboxes.entries()) {
+                              if (key !== header[1]) {
+                                  inbox.push(...packet);
+                              }
+                          }
+                      } else {
+                          inboxes.get(target)?.push(...packet);
+                      }
 
                       // --- CHANNEL MULTICAST LOGIC ---
                       if (op === Opcode.SYS_CHAN_SUB) {
@@ -488,26 +484,6 @@ const App = () => {
                           channelSubscriptions.current.get(header[3])?.delete(header[1]);
                       }
 
-                      if (target >= 1000) {
-                          channelSubscriptions.current.get(target)?.forEach(subId => {
-                              if (subId !== header[1]) {
-                                  const inbox = inboxes.get(subId);
-                                  if (inbox) inbox.push(...packet);
-                              }
-                          });
-                      } else if (target === KernelID.BUS) {
-                          for (const [key, inbox] of inboxes.entries()) {
-                              if (key !== header[1]) {
-                                  inbox.push(...packet);
-                              }
-                          }
-                      }
-                      else if (target !== KernelID.HOST) {
-                          const inbox = inboxes.get(target);
-                          if (inbox) {
-                              inbox.push(...packet);
-                          }
-                      }
                       offset += packetLen;
                   }
                   outMem[0] = 0; // Clear Output Queue
@@ -515,79 +491,37 @@ const App = () => {
           });
 
           kernels.forEach(k => {
-              const inboxData = inboxes[k.id];
-              const inMem = new Int32Array(k.proc.getMemory(), MEMORY.INPUT_QUEUE_ADDR, 1024);
-              if (inboxData.length > 0) {
-                  const currentCount = inMem[0];
-                  inMem[0] = currentCount + inboxData.length;
-                  inMem.set(inboxData, currentCount + 1);
-              }
-          });
-      };
-
-      // Execution sequence:
-      // 1. Process initial commands (from handleKeyDown)
-      processPackets();
-      // 2. Run Kernels
-
-                      if (target === KernelID.HOST) {
-                          if (op === Opcode.EVT_LEVEL_TRANSITION) {
-                              handleLevelTransition(header[3]);
-                          }
-                      }
-
-                      if (target === KernelID.BUS) {
-                          for (const [key, inbox] of inboxes.entries()) {
-                              if (key !== header[1]) {
-                                  inbox.push(...packet);
-                              }
-                          }
-                      }
-                      else if (target !== KernelID.HOST) {
-                          const inbox = inboxes.get(target);
-                          if (inbox) {
-                              inbox.push(...packet);
-                          }
-                      }
-
-                      offset += packetLen;
-                  }
-                  outMem[0] = 0; // Clear Output Queue
-              }
-          });
-
-          kernels.forEach(k => {
-              if (!k.proc.isReady) return;
+              if (!k.proc || !k.proc.isReady) return;
               const inboxData = inboxes.get(k.id);
-              if (inboxData) {
+              if (inboxData && inboxData.length > 0) {
                   const inMem = new Int32Array(k.proc.getMemory(), MEMORY.INPUT_QUEUE_ADDR, 1024);
-                  if (inboxData.length > 0) {
-                      inMem[0] = inboxData.length;
-                      inMem.set(inboxData, 1);
-                  } else {
-                      inMem[0] = 0;
+                  const currentCount = inMem[0];
+                  // Append to prevent losing packets from multiple sources in the same frame
+                  if (currentCount + inboxData.length < 1024) {
+                      inMem[0] = currentCount + inboxData.length;
+                      inMem.set(inboxData, currentCount + 1);
                   }
               }
           });
       };
 
-      // 1. FIRST BROKER PASS
+      // 1. Initial process of pending commands
       runBroker();
       
-      // 2. RUN CYCLES (The Heartbeat)
+      // 2. RUN CYCLES
       player.run("PROCESS_INBOX");
       main.run("PROCESS_INBOX");
       battle.run("PROCESS_INBOX"); 
-      if (platform.isReady && activeKernels.has("PLATFORM")) {
+      if (platform?.isReady && activeKernels.has("PLATFORM")) {
           platform.run("PROCESS_INBOX");
       }
       hive.run("RUN_HIVE_CYCLE");
       main.run("RUN_ENV_CYCLE");
-      // 3. Process resulting events (updates React state immediately)
-      processPackets();
 
-      // 4. Second Pass for GRID: Process events like EVT_DEATH immediately
-      // This ensures color changes (gray rats) happen in the same frame as death.
+      // 3. Process resulting events
+      runBroker();
+
+      // 4. Immediate feedback pass
       main.run("PROCESS_INBOX");
 
       syncKernelState();
@@ -611,7 +545,6 @@ const App = () => {
       });
 
       // 2. Sync Ground Items at Player Position
-      // Read current player X, Y from Grid Kernel directly for absolute accuracy
       const gMemView = new DataView(gridProc.getMemory());
       const px = gMemView.getInt32(0x90000 + 12, true); // Entity 0 is Player
       const py = gMemView.getInt32(0x90000 + 8, true);
@@ -629,11 +562,9 @@ const App = () => {
           setGroundItems([name]);
       } else {
           setGroundItems([]);
+      }
 
-      // 3. SECOND BROKER PASS: Deliver responses emitted during cycles
-      runBroker();
-      
-      // 4. Update Inspector if active
+      // 3. Update Inspector if active
       if (inspectStats) {
           handleInspect(inspectStats.x, inspectStats.y);
       }
