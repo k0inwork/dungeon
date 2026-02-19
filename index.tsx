@@ -67,6 +67,8 @@ const App = () => {
   const [showBus, setShowBus] = useState(false);
   const [busHistory, setBusHistory] = useState<BusPacket[]>([]);
   const [filterMovement, setFilterMovement] = useState(true); // Default ON to prevent spam
+  const [busFilterCategory, setBusFilterCategory] = useState<"ALL" | "BUS" | "KERNEL" | "CHANNEL">("ALL");
+  const [busFilterValue, setBusFilterValue] = useState<string>("");
   
   // Inspector & Targeting State
   const [inspectStats, setInspectStats] = useState<EntityStats | null>(null);
@@ -122,10 +124,11 @@ const App = () => {
             updateBusHistory();
         }
     });
-  }, [showBus, filterMovement]);
+  }, [showBus, filterMovement, busFilterCategory, busFilterValue]);
 
   const updateBusHistory = () => {
       let hist = forthService.busHistory;
+
       if (filterMovement) {
           // FILTER OUT NOISE: MOVEMENT and COLLISIONS
           hist = hist.filter(p => 
@@ -134,13 +137,31 @@ const App = () => {
               p.op !== "EVT_COLLIDE"
           );
       }
+
+      if (busFilterCategory === "BUS") {
+          hist = hist.filter(p => p.targetId === KernelID.BUS);
+      } else if (busFilterCategory === "KERNEL") {
+          if (busFilterValue) {
+              hist = hist.filter(p => p.target === busFilterValue || p.sender === busFilterValue);
+          } else {
+              // All Kernel events (target < 1000 and != BUS)
+              hist = hist.filter(p => p.targetId < 1000 && p.targetId !== KernelID.BUS);
+          }
+      } else if (busFilterCategory === "CHANNEL") {
+          if (busFilterValue) {
+              hist = hist.filter(p => p.target === busFilterValue || String(p.targetId) === busFilterValue);
+          } else {
+              hist = hist.filter(p => p.targetId >= 1000);
+          }
+      }
+
       setBusHistory([...hist]);
   };
 
-  // Update Bus history immediately when opening sidebar
+  // Update Bus history immediately when opening sidebar or changing filters
   useEffect(() => {
       if (showBus) updateBusHistory();
-  }, [showBus, filterMovement]);
+  }, [showBus, filterMovement, busFilterCategory, busFilterValue]);
 
   // --- CONSOLE INTERCEPTOR ---
   // Captures browser errors and displays them in the game terminal
@@ -878,8 +899,50 @@ const App = () => {
               <span>KERNEL BUS MONITOR</span>
           </div>
           
-          <div style={{ padding: '10px', borderBottom: '1px solid #333' }}>
-              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '0.9em' }}>
+          <div style={{ padding: '10px', borderBottom: '1px solid #333', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '5px' }}>
+                  <select
+                      value={busFilterCategory}
+                      onChange={(e) => {
+                          setBusFilterCategory(e.target.value as any);
+                          setBusFilterValue("");
+                      }}
+                      style={{ flex: 1, background: '#000', color: '#0f0', border: '1px solid #0f0', fontSize: '0.8em', padding: '2px' }}
+                  >
+                      <option value="ALL">ALL EVENTS</option>
+                      <option value="BUS">BUS ONLY</option>
+                      <option value="KERNEL">KERNELS</option>
+                      <option value="CHANNEL">CHANNELS</option>
+                  </select>
+
+                  {busFilterCategory === 'KERNEL' && (
+                      <select
+                          value={busFilterValue}
+                          onChange={(e) => setBusFilterValue(e.target.value)}
+                          style={{ flex: 1, background: '#000', color: '#0f0', border: '1px solid #0f0', fontSize: '0.8em', padding: '2px' }}
+                      >
+                          <option value="">(ALL KERNELS)</option>
+                          {Object.keys(KernelID).filter(k => isNaN(Number(k)) && k !== 'BUS').map(k => (
+                              <option key={k} value={k}>{k}</option>
+                          ))}
+                      </select>
+                  )}
+
+                  {busFilterCategory === 'CHANNEL' && (
+                      <select
+                          value={busFilterValue}
+                          onChange={(e) => setBusFilterValue(e.target.value)}
+                          style={{ flex: 1, background: '#000', color: '#0f0', border: '1px solid #0f0', fontSize: '0.8em', padding: '2px' }}
+                      >
+                          <option value="">(ALL CHANNELS)</option>
+                          {Array.from(forthService.channelNames.entries()).map(([id, name]) => (
+                              <option key={id} value={name}>{name} ({id})</option>
+                          ))}
+                      </select>
+                  )}
+              </div>
+
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer', fontSize: '0.8em' }}>
                   <input 
                       type="checkbox" 
                       checked={filterMovement} 
@@ -893,10 +956,17 @@ const App = () => {
           <div style={{ flex: 1, overflowY: 'auto', padding: '10px', fontSize: '11px', fontFamily: 'monospace' }}>
               {busHistory.map((p, i) => (
                   <div key={i} style={{ marginBottom: '8px', borderBottom: '1px solid #333', paddingBottom: '4px' }}>
-                      <div style={{ color: '#666' }}>{p.timestamp}</div>
-                      <div><span style={{color: 'cyan'}}>{p.sender}</span> &gt; <span style={{color: 'magenta'}}>{p.target}</span></div>
-                      <div style={{ color: 'white' }}>{p.op}</div>
-                      <div style={{ color: '#888' }}>{p.payload}</div>
+                      <div style={{ color: '#666', display: 'flex', justifyContent: 'space-between' }}>
+                          <span>{p.timestamp}</span>
+                          <span style={{ color: '#444' }}>OP:{p.opcode}</span>
+                      </div>
+                      <div>
+                        <span style={{color: '#0af'}}>{p.sender}</span>
+                        <span style={{color: '#666'}}> &gt; </span>
+                        <span style={{color: p.targetId >= 1000 ? '#f0f' : '#fa0'}}>{p.target}</span>
+                      </div>
+                      <div style={{ color: 'white', fontWeight: 'bold', marginTop: '2px' }}>{p.op}</div>
+                      <div style={{ color: '#888', background: 'rgba(255,255,255,0.05)', padding: '2px 4px', borderRadius: '2px', marginTop: '2px' }}>{p.payload}</div>
                   </div>
               ))}
           </div>
