@@ -1,6 +1,7 @@
 
 import * as acorn from "acorn";
 import { KernelID, VSO_REGISTRY, hashChannel } from "../types/Protocol";
+import { forthService } from "../services/WaForthService";
 
 // --- TYPES ---
 interface ASTNode {
@@ -345,6 +346,8 @@ export class AetherTranspiler {
                 channelId = hashChannel(chanName);
                 if (KernelID[upName] !== undefined) {
                     channelId = KernelID[upName] as number;
+                } else {
+                    forthService.registerChannel(chanName);
                 }
             }
             const callback = node.arguments[0];
@@ -833,6 +836,7 @@ export class AetherTranspiler {
                         this.emit(`  K_${name}`);
                     } else {
                         const hash = hashChannel(arg.value);
+                        forthService.registerChannel(arg.value);
                         this.emit(`  ${hash} ( Channel: ${arg.value} )`);
                     }
                 } else if (arg) {
@@ -871,6 +875,7 @@ export class AetherTranspiler {
                     channelId = KernelID[upName] as number;
                 } else {
                     channelId = hashChannel(chanName);
+                    forthService.registerChannel(chanName);
                 }
 
                 if (prop === "ON") {

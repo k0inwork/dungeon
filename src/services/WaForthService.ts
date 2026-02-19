@@ -1,6 +1,6 @@
 
 import WAForthPkg from "waforth";
-import { KernelID, Opcode, PACKET_SIZE_INTS, VSO_REGISTRY } from "../types/Protocol";
+import { KernelID, Opcode, PACKET_SIZE_INTS, VSO_REGISTRY, hashChannel } from "../types/Protocol";
 
 const WAForth = (WAForthPkg as any).default || WAForthPkg;
 
@@ -8,7 +8,10 @@ export interface BusPacket {
   timestamp: string;
   sender: string;
   target: string;
+  senderId: number;
+  targetId: number;
   op: string;
+  opcode: number;
   payload: string;
 }
 
@@ -273,6 +276,9 @@ class ForthProcessManager {
   // Message Bus History
   busHistory: BusPacket[] = [];
   busListeners: Set<() => void> = new Set();
+
+  // Channel Name Registry
+  channelNames: Map<number, string> = new Map();
   
   // Global Log Bridge (For UI Chat)
   globalLogListeners: Set<(msg: string) => void> = new Set();
@@ -316,12 +322,22 @@ class ForthProcessManager {
       this.globalLogListeners.forEach(cb => cb(msg));
   }
 
+  registerChannel(name: string) {
+      const id = hashChannel(name);
+      if (!this.channelNames.has(id)) {
+          this.channelNames.set(id, name);
+      }
+  }
+
   logPacket(senderId: number, targetId: number, op: number, p1: number, p2: number, p3: number) {
       const packet: BusPacket = {
           timestamp: new Date().toLocaleTimeString(),
-          sender: KernelID[senderId] || String(senderId),
-          target: KernelID[targetId] || String(targetId),
+          sender: KernelID[senderId] || this.channelNames.get(senderId) || String(senderId),
+          target: KernelID[targetId] || this.channelNames.get(targetId) || String(targetId),
+          senderId,
+          targetId,
           op: Opcode[op] || String(op),
+          opcode: op,
           payload: `${p1}, ${p2}, ${p3}`
       };
       
