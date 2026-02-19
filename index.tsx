@@ -5,6 +5,7 @@ import { forthService, BusPacket } from "./src/services/WaForthService";
 import { PlatformerPhysics } from "./src/systems/PlatformerPhysics";
 import { TerminalCanvas } from "./src/components/TerminalCanvas";
 import { generatorService, WorldData } from "./src/services/GeneratorService";
+import { AIConfig } from "./src/components/AIConfig";
 import { ArchitectView } from "./src/components/ArchitectView";
 import { DebuggerConsole } from "./src/components/DebuggerConsole";
 import { MEMORY } from "./src/constants/Memory";
@@ -920,12 +921,14 @@ const App = () => {
         
         {/* BOOT MODE */}
         {mode === "BOOT" && (
-          <div style={{ textAlign: "center" }}>
+          <div style={{ textAlign: "center", overflowY: 'auto', maxHeight: '100%' }}>
             <h1>WORLD SEED INPUT</h1>
             <input type="text" value={seed} onChange={(e) => setSeed(e.target.value)} style={{ background: "#000", border: "1px solid #0f0", color: "#0f0", padding: "10px", fontSize: "1.2em", width: "300px", textAlign: "center" }} />
             <br /><br />
             <div style={{ color: "#666", marginBottom: "10px" }}>Tip: Shift+Click for Instant Mock World</div>
             <button onClick={handleGenerate} style={{ background: "#0f0", color: "#000", border: "none", padding: "10px 20px", fontSize: "1.2em", cursor: "pointer" }}>INITIATE GENERATION</button>
+
+            <AIConfig />
           </div>
         )}
 
