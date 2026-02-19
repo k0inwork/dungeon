@@ -225,6 +225,14 @@ const App = () => {
         platProc.run("INIT_PLATFORMER");
     }
 
+    const levelIndex = ["hub", "platformer_1", "roguelike", "platformer_2", "platformer_3", "main_dungeon"].indexOf(level.id);
+    if (levelIndex !== -1) {
+        mainProc.run(`${levelIndex} SET_LEVEL_ID`);
+        if (platProc.isReady) {
+            platProc.run(`${levelIndex} SET_LEVEL_ID`);
+        }
+    }
+
     level.map_layout.forEach((row: string, y: number) => {
       if (y >= MEMORY.GRID_HEIGHT) return;
       for (let x = 0; x < MEMORY.GRID_WIDTH; x++) {
@@ -233,7 +241,7 @@ const App = () => {
         let type = 0;
         let charCode = char.charCodeAt(0);
 
-        const isPortalPart = char === '[' || char === ']' || char === 'R' || char === 'P';
+        const isPortalPart = char === '[' || char === ']' || char === 'R' || char === 'P' || char === 'U' || char === '>' || char === 'X';
         const terrain = level.terrain_legend.find((t: any) => t.symbol === char);
         if (terrain) {
           color = terrain.color;
@@ -282,7 +290,8 @@ const App = () => {
         platformerRef.current.configure(level.platformer_config);
     }
 
-    if (level.id === "platform_dungeon") {
+    const platformerLevels = ["platformer_1", "platformer_2", "platformer_3"];
+    if (platformerLevels.includes(level.id)) {
         switchMode("PLATFORM");
     } else {
         switchMode("GRID");
@@ -292,7 +301,7 @@ const App = () => {
   const handleLevelTransition = (targetLevelIdx: number) => {
       if (!worldInfo || !worldInfo.levels) return;
 
-      const levelIds = ["hub", "rogue_dungeon", "platform_dungeon"];
+      const levelIds = ["hub", "platformer_1", "roguelike", "platformer_2", "platformer_3", "main_dungeon"];
       const targetId = levelIds[targetLevelIdx];
       const nextLevel = worldInfo.levels[targetId];
 

@@ -24,6 +24,12 @@ let gravity = 5000;
 let jump_force = -75000;
 let move_speed = 20000;
 
+let CURRENT_LEVEL_ID = 0;
+
+function set_level_id(id) {
+    CURRENT_LEVEL_ID = id;
+}
+
 function calc_idx(x, y) { return (y * MAP_WIDTH + x); }
 
 function get_collision(x, y) {
@@ -118,11 +124,22 @@ function update_physics() {
     if (player_x < 0) player_x = 0;
     if (player_y < 0) player_y = 0;
 
-    // Win condition: reach bottom-left area after falling
-    if (player_x <= 2 * 65536) {
-        if (player_y >= 17 * 65536) {
-           bus_send(EVT_LEVEL_TRANSITION, K_PLATFORM, K_HOST, 0, 0, 0); // Back to Hub
-           player_x = 5 * 65536; // Reset pos
+    // Check for Exit
+    let px = (player_x + 32768) / 65536;
+    let py = (player_y + 32768) / 65536;
+    let pidx = calc_idx(px, py);
+    let packed = TERRAIN_MAP[pidx];
+    let char = packed & 255;
+
+    if (char == 62 || char == 88) { // '>' or 'X'
+        let target = -1;
+        if (CURRENT_LEVEL_ID == 1) { target = 2; } // P1 -> Roguelike (Index 2)
+        if (CURRENT_LEVEL_ID == 3) { target = 5; } // P2 -> Main Dungeon (Index 5)
+        if (CURRENT_LEVEL_ID == 4) { target = 0; } // P3 -> Hub (Index 0)
+
+        if (target != -1) {
+            bus_send(EVT_LEVEL_TRANSITION, K_PLATFORM, K_HOST, target, 0, 0);
+            player_x = 5 * 65536; // Reset pos
         }
     }
 
@@ -177,6 +194,7 @@ export const PLATFORM_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.PLATFORM),
   ": RUN_PLATFORM_CYCLE PROCESS_INBOX UPDATE_PHYSICS RENDER ;",
+  ": SET_LEVEL_ID SET_LEVEL_ID ;",
   ": INIT_PLATFORMER INIT_PLATFORMER ;",
   ": CMD_JUMP JUMP_PLAYER ;",
   ": CMD_MOVE ( dir -- ) MOVE_PLAYER ;"

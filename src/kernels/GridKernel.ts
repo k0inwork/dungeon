@@ -20,6 +20,11 @@ const TERRAIN_MAP   = new Uint32Array(0x40000);
 const VRAM          = new Uint32Array(0x80000);
 
 let ENTITY_COUNT = 0;
+let CURRENT_LEVEL_ID = 0;
+
+function set_level_id(id) {
+    CURRENT_LEVEL_ID = id;
+}
 
 // 2. UTILS
 function calc_idx(x, y) { return (y * MAP_WIDTH + x); }
@@ -156,13 +161,22 @@ function move_entity(id, dx, dy) {
   if (id == 0) {
       let packed = TERRAIN_MAP[ti];
       let char = packed & 255;
-      if (char == 82) { // 'R'
+
+      if (char == 80) { // 'P' -> From Hub to Platformer 1 (Index 1)
           bus_send(EVT_LEVEL_TRANSITION, K_GRID, K_HOST, 1, 0, 0);
           return;
       }
-      if (char == 80) { // 'P'
-          bus_send(EVT_LEVEL_TRANSITION, K_GRID, K_HOST, 2, 0, 0);
-          return;
+
+      if (char == 62) { // '>' -> Exit Symbol
+          let target = -1;
+          if (CURRENT_LEVEL_ID == 2) { // Roguelike Mid
+              if (tx < 10) { target = 3; } // Left exit -> Platformer 2 (Index 3)
+              else { target = 4; }         // Right exit -> Platformer 3 (Index 4)
+          }
+          if (target != -1) {
+              bus_send(EVT_LEVEL_TRANSITION, K_GRID, K_HOST, target, 0, 0);
+              return;
+          }
       }
   }
 
