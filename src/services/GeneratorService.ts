@@ -2,6 +2,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { MapGenerator } from "./MapGenerator";
 import { MOCK_WORLD_DATA } from "../data/MockWorld";
+import { webLLMService } from "./WebLLMService";
 
 // --- CONTEXT INJECTION (THE RULES) ---
 const BATTLE_LOGIC_CONTEXT = `
@@ -120,13 +121,17 @@ export interface WorldData {
   levels?: Record<string, LevelData>;
 }
 
+/**
+ * Service responsible for generating game worlds using AI.
+ * Supports both Google Gemini (cloud) and WebLLM (local).
+ */
 class GeneratorService {
   private ai: GoogleGenAI;
   public history: InteractionLog[] = [];
   private logIdCounter = 0;
+  private provider: 'gemini' | 'webllm' = 'gemini';
 
   constructor() {
-    // Vite uses import.meta.env for environment variables
     // @ts-ignore
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
     if (apiKey) {
@@ -139,6 +144,13 @@ class GeneratorService {
         }
       } as any;
     }
+  }
+
+  /**
+   * Sets the AI provider to be used for generation.
+   */
+  public setProvider(provider: 'gemini' | 'webllm') {
+      this.provider = provider;
   }
 
   private log(phase: string, prompt: string, response: string) {
@@ -161,14 +173,25 @@ class GeneratorService {
       return text.replace(/^```\w*\s*/, '').replace(/\s*```$/, '');
   }
 
+  /**
+   * Internal helper to call the selected AI provider.
+   */
   private async callAI(prompt: string, phaseName: string): Promise<any> {
     try {
-      const result = await this.ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: prompt,
-        config: { responseMimeType: "application/json" }
-      });
-      const text = result.text;
+      let text: string;
+      if (this.provider === 'gemini') {
+          const result = await this.ai.models.generateContent({
+            model: 'gemini-1.5-flash',
+            contents: prompt,
+            config: { responseMimeType: "application/json" }
+          });
+          text = result.text;
+      } else {
+          // Local LLMs often need explicit JSON instructions
+          const jsonPrompt = prompt + "\n\nIMPORTANT: Return ONLY valid JSON. No markdown blocks.";
+          text = await webLLMService.generate(jsonPrompt);
+      }
+
       if (!text) throw new Error("Empty response");
       
       this.log(phaseName, prompt, text);
@@ -186,6 +209,9 @@ class GeneratorService {
     }
   }
 
+  /**
+   * Uses AI to repair Forth code that failed to compile.
+   */
   async repairForthCode(code: string, error: string): Promise<string> {
       const prompt = `
 Role: Forth Expert / WAForth Compiler.
@@ -201,11 +227,17 @@ CODE:
 ${code}
 `;
       try {
-          const result = await this.ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
-            contents: prompt,
-          });
-          const text = result.text;
+          let text: string;
+          if (this.provider === 'gemini') {
+              const result = await this.ai.models.generateContent({
+                model: 'gemini-1.5-flash',
+                contents: prompt,
+              });
+              text = result.text;
+          } else {
+              text = await webLLMService.generate(prompt);
+          }
+
           this.log("DEBUG_REPAIR", prompt, text);
           return this.cleanCode(text);
       } catch (e) {
@@ -241,6 +273,9 @@ ${code}
     return mockData;
   }
 
+  /**
+   * Multi-phase world generation process.
+   */
   async generateWorld(seed: string): Promise<WorldData> {
     // 1. PHASE: THEME (LORE)
     const themeData = await this.callAI(`
@@ -352,17 +387,14 @@ ${code}
     `, "PHASE 5: LEVEL");
 
     // --- FALLBACK SANITIZATION ---
-    // Ensure the terrain legend has at least a Wall and a Floor, otherwise the MapGenerator will produce invisible maps.
     if (!levelData.active_level.terrain_legend) {
         levelData.active_level.terrain_legend = [];
     }
     const legend = levelData.active_level.terrain_legend;
     
-    // Check for Floor
     if (!legend.find((t: any) => t.type === "FLOOR")) {
        legend.push({ symbol: ".", name: "Standard Floor", type: "FLOOR", color: 0x444444, passable: true, description: "Default ground." });
     }
-    // Check for Wall
     if (!legend.find((t: any) => t.type === "WALL")) {
        legend.push({ symbol: "#", name: "Standard Wall", type: "WALL", color: 0x888888, passable: false, description: "Default barrier." });
     }

@@ -40,7 +40,8 @@ struct RpgEntity {
     level,
     exp,
     state,
-    targetId
+    targetId,
+    invItem
 }
 let hive_entities = new Array(HiveEntity, MAX_ENTITIES, 0x90000);
 export hive_entities;
