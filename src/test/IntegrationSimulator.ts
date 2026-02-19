@@ -6,6 +6,7 @@ import { MEMORY } from "../constants/Memory";
 export class IntegrationSimulator {
     kernels: Map<number, KernelTestRunner> = new Map();
     busLog: string[] = [];
+    channelSubscriptions: Map<number, Set<number>> = new Map();
 
     addKernel(id: number, name: string, runner: KernelTestRunner) {
         this.kernels.set(id, runner);
@@ -44,37 +45,75 @@ export class IntegrationSimulator {
         const inboxes: Record<number, number[]> = {};
         this.kernels.forEach((_, id) => inboxes[id] = []);
 
-        // 1. HARVEST
+        const pendingPackets: { senderId: number, data: Int32Array }[] = [];
+
+        // 1. HARVEST & REGISTER SUBSCRIPTIONS
         this.kernels.forEach((k, id) => {
             const mem = new Int32Array(k.getMemory());
             const outAddr = MEMORY.OUTPUT_QUEUE_ADDR / 4;
             const count = mem[outAddr];
 
             if (count > 0) {
-                const data = mem.subarray(outAddr + 1, outAddr + 1 + count);
+                const data = new Int32Array(mem.subarray(outAddr + 1, outAddr + 1 + count));
+                pendingPackets.push({ senderId: id, data });
+
+                // Pre-scan for subscriptions to ensure they are active for messages in the same tick
                 let offset = 0;
                 while (offset < count) {
                     const op = data[offset];
-                    const target = data[offset + 2];
-                    const packetLen = PACKET_SIZE_INTS;
-                    const packet = data.subarray(offset, offset + packetLen);
-
-                    // Logging for Trace
-                    const opName = Opcode[op] || op;
-                    const senderName = KernelID[id] || id;
-                    const targetName = KernelID[target] || target;
-                    this.busLog.push(`[BUS] ${senderName} -> ${targetName}: ${opName} (${data[offset+3]}, ${data[offset+4]}, ${data[offset+5]})`);
-
-                    if (target === KernelID.BUS) {
-                        Object.keys(inboxes).forEach(tid => {
-                            if (Number(tid) !== id) inboxes[Number(tid)].push(...packet);
-                        });
-                    } else if (inboxes[target]) {
-                        inboxes[target].push(...packet);
+                    console.log(`[SIM] Pre-scan Kernel ${id} Packet at offset ${offset}: Op=${op} Target=${data[offset+2]} P1=${data[offset+3]}`);
+                    if (op === Opcode.SYS_CHAN_SUB) {
+                        const chanId = data[offset + 3];
+                        console.log(`[SIM] Registering SUB: Kernel ${id} to Channel ${chanId}`);
+                        if (!this.channelSubscriptions.has(chanId)) this.channelSubscriptions.set(chanId, new Set());
+                        this.channelSubscriptions.get(chanId)!.add(id);
+                    } else if (op === Opcode.SYS_CHAN_UNSUB) {
+                        this.channelSubscriptions.get(data[offset + 3])?.delete(id);
                     }
-                    offset += packetLen;
+                    offset += PACKET_SIZE_INTS;
                 }
                 mem[outAddr] = 0; // Clear
+            }
+        });
+
+        // 2. ROUTE MESSAGES
+        pendingPackets.forEach(({ senderId, data }) => {
+            let offset = 0;
+            const count = data.length;
+            while (offset < count) {
+                const op = data[offset];
+                const target = data[offset + 2];
+                const packet = data.subarray(offset, offset + PACKET_SIZE_INTS);
+
+                // Skip system packets (already handled in pass 1)
+                if (op === Opcode.SYS_CHAN_SUB || op === Opcode.SYS_CHAN_UNSUB) {
+                    offset += PACKET_SIZE_INTS;
+                    continue;
+                }
+
+                // Logging
+                const opName = Opcode[op] || op;
+                const senderName = KernelID[senderId] || senderId;
+                const targetName = KernelID[target] || target;
+                const msg = `[BUS] ${senderName} -> ${targetName}: ${opName} (${data[offset+3]}, ${data[offset+4]}, ${data[offset+5]})`;
+                this.busLog.push(msg);
+
+                if (target >= 1000) {
+                    const subs = Array.from(this.channelSubscriptions.get(target) || []);
+                    this.channelSubscriptions.get(target)?.forEach(subId => {
+                        if (subId !== senderId) {
+                            const inbox = inboxes[subId];
+                            if (inbox) inbox.push(...packet);
+                        }
+                    });
+                } else if (target === KernelID.BUS) {
+                    Object.keys(inboxes).forEach(tid => {
+                        if (Number(tid) !== senderId) inboxes[Number(tid)].push(...packet);
+                    });
+                } else if (inboxes[target]) {
+                    inboxes[target].push(...packet);
+                }
+                offset += PACKET_SIZE_INTS;
             }
         });
 

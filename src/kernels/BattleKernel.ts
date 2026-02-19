@@ -77,7 +77,7 @@ function skill_basic_attack(srcId, tgtId) {
     tgt.hp -= dmg;
     
     log_combat(srcId, tgtId, dmg, "Attack");
-    Bus.send(EVT_DAMAGE, K_BATTLE, K_BUS, tgtId, dmg, 0);
+    Chan("BUS") <- [EVT_DAMAGE, tgtId, dmg, 0];
     
     return tgt.hp;
 }
@@ -92,7 +92,7 @@ function skill_heavy_smash(srcId, tgtId) {
     tgt.hp -= dmg;
     
     log_combat(srcId, tgtId, dmg, "SMASH");
-    Bus.send(EVT_DAMAGE, K_BATTLE, K_BUS, tgtId, dmg, 2); // Type 2 = Crit/Heavy
+    Chan("BUS") <- [EVT_DAMAGE, tgtId, dmg, 2]; // Type 2 = Crit/Heavy
     
     return tgt.hp;
 }
@@ -104,7 +104,7 @@ function skill_heal_self(srcId) {
     if (src.hp > src.maxHp) { src.hp = src.maxHp; }
     
     Log("You HEAL for "); Log(amount); Log(" HP");
-    Bus.send(EVT_DAMAGE, K_BATTLE, K_BUS, srcId, -amount, 4); // Negative Damage = Heal
+    Chan("BUS") <- [EVT_DAMAGE, srcId, -amount, 4]; // Negative Damage = Heal
 }
 
 function skill_fireball(srcId, tgtId) {
@@ -118,7 +118,7 @@ function skill_fireball(srcId, tgtId) {
     tgt.hp -= dmg;
     
     log_combat(srcId, tgtId, dmg, "FIREBALL");
-    Bus.send(EVT_DAMAGE, K_BATTLE, K_BUS, tgtId, dmg, 1); // Type 1 = Thermal
+    Chan("BUS") <- [EVT_DAMAGE, tgtId, dmg, 1]; // Type 1 = Thermal
     
     return tgt.hp;
 }
@@ -157,7 +157,7 @@ function execute_skill(srcId, tgtId, skillId) {
     if (remainingHp <= 0) {
         if (tgt.state == 0) { // Only die once
             tgt.state = 1; // Dead
-            Bus.send(EVT_DEATH, K_BATTLE, K_BUS, tgtId, tgt.invItem, 0);
+            Chan("BUS") <- [EVT_DEATH, tgtId, tgt.invItem, 0];
             Log("Entity Died:");
             Log(tgtId);
             if (tgtId == 0) Log("GAME OVER");
@@ -165,20 +165,26 @@ function execute_skill(srcId, tgtId, skillId) {
     }
 }
 
-function handle_events() {
-    if (M_OP == EVT_SPAWN) {
-        // M_P1 = ID, M_P2 = Type
-        init_stats(M_P1, M_P2);
+function on_npc_sync(opcode, sender, p1, p2, p3) {
+    if (opcode == EVT_SPAWN) {
+        init_stats(p1, p2);
 
         // Assign Inventory for Testing
-        let e = get_rpg_ptr(M_P1);
-        if (M_P2 == 2) { // Big Rats / Aggressive
+        let e = get_rpg_ptr(p1);
+        if (p2 == 2) { // Big Rats / Aggressive
              e.invItem = 2001;
-        } else if (M_P2 == 1) { // Regular Rats / Passive
+        } else if (p2 == 1) { // Regular Rats / Passive
              e.invItem = 2003;
         }
     }
-    
+}
+
+function init_battle() {
+    Log("[BATTLE] Battle Kernel Initialized");
+    Chan("npc_sync").on(on_npc_sync);
+}
+
+function handle_events() {
     if (M_OP == CMD_ATTACK) {
         // M_P1 = Attacker, M_P2 = Target, M_P3 = SkillID
         execute_skill(M_P1, M_P2, M_P3);

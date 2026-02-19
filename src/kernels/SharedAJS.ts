@@ -51,6 +51,7 @@ const IN_COUNT = new Uint32Array(0x400);
 const OUT_COUNT = new Uint32Array(0x10400);
 
 function bus_send(op, sender, target, p1, p2, p3) {
+    Log("[BUS] Sending packet...");
     OUTBOX[OUT_PTR] = op;
     OUTBOX[OUT_PTR + 1] = sender;
     OUTBOX[OUT_PTR + 2] = target;
