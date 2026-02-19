@@ -349,7 +349,8 @@ function run_env_cycle() {
 export const GRID_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.GRID),
-  ": RUN_GRID_CYCLE PROCESS_INBOX RUN_ENV_CYCLE ;"
+  ": RUN_GRID_CYCLE PROCESS_INBOX RUN_ENV_CYCLE ;",
+  ": SET_LEVEL_ID SET_LEVEL_ID ;"
 ];
 
 export const GRID_AJS_SOURCE = AJS_LOGIC;

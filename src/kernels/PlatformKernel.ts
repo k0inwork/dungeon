@@ -50,73 +50,73 @@ function init_platformer() {
     Log("[PLATFORM] Kernel Ready (v4)");
 }
 
-function load_tile(lx, ly, lcolor, lchar, ltype) {
-    let li = calc_idx(lx, ly);
-    TERRAIN_MAP[li] = (lcolor << 8) | lchar;
-    COLLISION_MAP[li] = ltype;
+function load_tile(x, y, color, char, type) {
+    let i = calc_idx(x, y);
+    TERRAIN_MAP[i] = (color << 8) | char;
+    COLLISION_MAP[i] = type;
 }
 
 function update_physics() {
     player_vy = player_vy + gravity;
     player_vx = (player_vx * 8) / 10; // friction
 
-    let up_nx = player_x + player_vx;
-    let up_ny = player_y + player_vy;
+    let nx = player_x + player_vx;
+    let ny = player_y + player_vy;
 
     // Player bounding box with small insets to prevent corner-snagging
-    let up_lx = (player_x + 4000) / 65536;
-    let up_rx = (player_x + 61536) / 65536;
+    let lx = (player_x + 4000) / 65536;
+    let rx = (player_x + 61536) / 65536;
 
     // 1. Vertical Collision (check both left and right edges)
-    let up_by_foot = (up_ny + 65535) / 65536;
-    let up_by_head = up_ny / 65536;
-    let up_by_mid_travel = (player_y + (player_vy / 2) + 65535) / 65536;
+    let by_foot = (ny + 65535) / 65536;
+    let by_head = ny / 65536;
+    let by_mid_travel = (player_y + (player_vy / 2) + 65535) / 65536;
 
     if (player_vy > 0) {
         // Check foot AND mid-point of travel to prevent tunneling
-        if (get_collision(up_lx, up_by_foot) || get_collision(up_rx, up_by_foot) || get_collision(up_lx, up_by_mid_travel) || get_collision(up_rx, up_by_mid_travel)) {
+        if (get_collision(lx, by_foot) || get_collision(rx, by_foot) || get_collision(lx, by_mid_travel) || get_collision(rx, by_mid_travel)) {
             // If we hit mid_travel but not by_foot, we should snap to the mid_travel platform
-            if (get_collision(up_lx, up_by_mid_travel) || get_collision(up_rx, up_by_mid_travel)) {
-                if (get_collision(up_lx, up_by_foot) == 0 && get_collision(up_rx, up_by_foot) == 0) {
-                    up_by_foot = up_by_mid_travel;
+            if (get_collision(lx, by_mid_travel) || get_collision(rx, by_mid_travel)) {
+                if (get_collision(lx, by_foot) == 0 && get_collision(rx, by_foot) == 0) {
+                    by_foot = by_mid_travel;
                 }
             }
             player_vy = 0;
-            player_y = (up_by_foot - 1) * 65536;
-            up_ny = player_y;
+            player_y = (by_foot - 1) * 65536;
+            ny = player_y;
         } else {
-            player_y = up_ny;
+            player_y = ny;
         }
     } else if (player_vy < 0) {
-        if (get_collision(up_lx, up_by_head) || get_collision(up_rx, up_by_head) || get_collision(up_lx, up_by_mid_travel) || get_collision(up_rx, up_by_mid_travel)) {
+        if (get_collision(lx, by_head) || get_collision(rx, by_head) || get_collision(lx, by_mid_travel) || get_collision(rx, by_mid_travel)) {
             player_vy = 0;
-            player_y = (up_by_head + 1) * 65536;
-            up_ny = player_y;
+            player_y = (by_head + 1) * 65536;
+            ny = player_y;
         } else {
-            player_y = up_ny;
+            player_y = ny;
         }
     } else {
-        player_y = up_ny;
+        player_y = ny;
     }
 
     // 2. Horizontal Collision (using updated Y)
-    let up_h_rx = (up_nx + 63536) / 65536;
-    let up_h_lx = (up_nx + 2000) / 65536;
-    let up_pyy = player_y / 65536;
+    let h_rx = (nx + 63536) / 65536;
+    let h_lx = (nx + 2000) / 65536;
+    let pyy = player_y / 65536;
 
     if (player_vx > 0) {
-        if (get_collision(up_h_rx, up_pyy)) {
+        if (get_collision(h_rx, pyy)) {
             player_vx = 0;
-            player_x = (up_h_rx - 1) * 65536;
+            player_x = (h_rx - 1) * 65536;
         } else {
-            player_x = up_nx;
+            player_x = nx;
         }
     } else if (player_vx < 0) {
-        if (get_collision(up_h_lx, up_pyy)) {
+        if (get_collision(h_lx, pyy)) {
             player_vx = 0;
-            player_x = (up_h_lx + 1) * 65536;
+            player_x = (h_lx + 1) * 65536;
         } else {
-            player_x = up_nx;
+            player_x = nx;
         }
     }
 
@@ -125,9 +125,9 @@ function update_physics() {
     if (player_y < 0) player_y = 0;
 
     // Check for Exit
-    let exit_pxx = (player_x + 32768) / 65536;
-    let exit_pyy = (player_y + 32768) / 65536;
-    let exit_idx = calc_idx(exit_pxx, exit_pyy);
+    let exit_px = (player_x + 32768) / 65536;
+    let exit_py = (player_y + 32768) / 65536;
+    let exit_idx = calc_idx(exit_px, exit_py);
     let exit_packed = TERRAIN_MAP[exit_idx];
     let exit_char = exit_packed & 255;
 
@@ -156,9 +156,9 @@ function render() {
     }
 
     // 2. Draw Player '@'
-    let ren_pxx = player_x / 65536;
-    let ren_pyy = player_y / 65536;
-    let ren_pidx = calc_idx(ren_pxx, ren_pyy);
+    let ren_px = player_x / 65536;
+    let ren_py = player_y / 65536;
+    let ren_pidx = calc_idx(ren_px, ren_py);
     if (ren_pidx >= 0) {
         if (ren_pidx < 800) {
             VRAM[ren_pidx] = (0x00FF00 << 8) | 64; // Green '@'
@@ -171,16 +171,16 @@ function move_player(m_dir) {
 }
 
 function jump_player() {
-    let j_bx = player_x / 65536;
-    let j_by = (player_y / 65536) + 1;
-    if (get_collision(j_bx, j_by) != 0) {
+    let bx = player_x / 65536;
+    let by = (player_y / 65536) + 1;
+    if (get_collision(bx, by) != 0) {
         player_vy = jump_force;
     }
 }
 
-function on_platform_request(p_op, p_sender, p_p1, p_p2, p_p3) {
-    if (p_op == REQ_MOVE) { move_player(p_p1); }
-    if (p_op == CMD_INTERACT) { jump_player(); }
+function on_platform_request(op, sender, p1, p2, p3) {
+    if (op == REQ_MOVE) { move_player(p1); }
+    if (op == CMD_INTERACT) { jump_player(); }
 }
 
 function handle_events() {

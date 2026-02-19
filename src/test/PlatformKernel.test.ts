@@ -55,7 +55,14 @@ describe('PlatformKernel Logic Tests', () => {
 
   test('Win Condition (Bottom-Left)', () => {
     runner.proc.run('INIT_PLATFORMER');
-    // Teleport to bottom-left
+    // Set level to 1 (P1)
+    runner.proc.run('1 SET_LEVEL_ID');
+    // Teleport to bottom-left where the exit is in PLATFORMER_1 layout
+    // PLATFORMER_1 layout has '>' at (39, 7)
+    // Wait, my test was using (1, 18).
+    // Let's place an exit tile manually at (1, 18).
+    runner.proc.run('1 18 0 62 0 LOAD_TILE');
+
     runner.proc.run('1 65536 * PLAYER_X !');
     runner.proc.run('18 65536 * PLAYER_Y !');
     runner.proc.run('UPDATE_PHYSICS');
