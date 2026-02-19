@@ -36,22 +36,8 @@ export enum Opcode {
     
     // --- SYSTEM (900+) ---
     SYS_LOG = 901,
-    SYS_CHAN_SUB = 910,   // [SYS_CHAN_SUB, Sender, HOST, ChannelID, 0, 0]
-    SYS_CHAN_UNSUB = 911, // [SYS_CHAN_UNSUB, Sender, HOST, ChannelID, 0, 0]
     SYS_ERROR = 999,
     SYS_BLOB = 1000     // [SYS_BLOB, Sender, Target, Len, RealOp, 0] + [Data...]
-}
-
-/**
- * Deterministically hashes a channel name to a numeric ID.
- * IDs are in the range [1000, 65535].
- */
-export function hashChannel(name: string): number {
-    let hash = 5381;
-    for (let i = 0; i < name.length; i++) {
-        hash = ((hash << 5) + hash) + name.charCodeAt(i);
-    }
-    return 1000 + (Math.abs(hash | 0) % 64536);
 }
 
 export interface MessagePacket {

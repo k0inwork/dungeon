@@ -23,7 +23,6 @@ function Random() {
 function init_hive() {
     HIVE_ENT_COUNT = 0;
     Log("[HIVE] Memory Reset");
-    Chan("npc_sync").on(on_npc_sync);
 }
 
 // 2. LOGIC
@@ -67,25 +66,6 @@ function set_hive_type(id, type) {
   ent.type = type;
 }
 
-function on_npc_sync(opcode, sender, arg1, arg2, arg3) {
-  if (opcode == EVT_MOVED) {
-     update_hive_entity(arg1, arg2, arg3);
-     if (arg1 == 0) {
-         LAST_PLAYER_X = arg2;
-         LAST_PLAYER_Y = arg3;
-     }
-  }
-
-  if (opcode == EVT_SPAWN) {
-      set_hive_type(arg1, arg2);
-      if (arg2 == 2) { Log("[HIVE] Aggressive Entity Registered"); }
-  }
-
-  if (opcode == EVT_DEATH) {
-      set_hive_type(arg1, 3); // Mark as loot/dead to stop processing
-  }
-}
-
 function rand_dir_x() {
   let r = Random();
   let m = r % 4;
@@ -123,11 +103,11 @@ function decide_action(id) {
       let dist = dx + dy;
       
       if (dist < 10) {
-         Chan("GRID") <- [REQ_PATH_STEP, id, LAST_PLAYER_X, LAST_PLAYER_Y];
+         Bus.send(REQ_PATH_STEP, K_HIVE, K_GRID, id, LAST_PLAYER_X, LAST_PLAYER_Y);
       } else {
          let rdx = rand_dir_x();
          let rdy = rand_dir_y();
-         Chan("GRID") <- [REQ_MOVE, id, rdx, rdy];
+         Bus.send(REQ_MOVE, K_HIVE, K_GRID, id, rdx, rdy);
       }
   } else {
       let r = Random();
@@ -135,18 +115,35 @@ function decide_action(id) {
       if (m < 50) {
          let rdx = rand_dir_x();
          let rdy = rand_dir_y();
-         Chan("GRID") <- [REQ_MOVE, id, rdx, rdy];
+         Bus.send(REQ_MOVE, K_HIVE, K_GRID, id, rdx, rdy);
       }
   }
 }
 
 function handle_events() {
+  if (M_OP == EVT_MOVED) {
+     update_hive_entity(M_P1, M_P2, M_P3);
+     if (M_P1 == 0) {
+         LAST_PLAYER_X = M_P2;
+         LAST_PLAYER_Y = M_P3;
+     }
+  }
+
+  if (M_OP == EVT_SPAWN) {
+      set_hive_type(M_P1, M_P2);
+      if (M_P2 == 2) { Log("[HIVE] Aggressive Entity Registered"); }
+  }
+
+  if (M_OP == EVT_DEATH) {
+      set_hive_type(M_P1, 3); // Mark as loot/dead to stop processing
+  }
+
   if (M_OP == EVT_COLLIDE) {
      if (M_P3 == 1) {
         if (M_P1 > 0) {
             if (M_P2 == 0) {
                Log("Enemy Attacks Player!");
-               Chan("BUS") <- [CMD_ATTACK, M_P1, M_P2, 0];
+               Bus.send(CMD_ATTACK, K_HIVE, K_BUS, M_P1, M_P2, 0);
             }
         }
      }

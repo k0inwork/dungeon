@@ -87,8 +87,6 @@ const App = () => {
   const localBufferRef = useRef(new Uint32Array(MEMORY.GRID_WIDTH * MEMORY.GRID_HEIGHT));
   const logContainerRef = useRef<HTMLDivElement>(null);
 
-  const channelSubscriptions = useRef<Map<number, Set<number>>>(new Map());
-
   // Increased log size to 100
   const addLog = (msg: string) => setLog(prev => [msg, ...prev].slice(0, 100));
 
@@ -458,23 +456,14 @@ const App = () => {
                       if (op === Opcode.EVT_DEATH && header[3] === 0) setGameOver(true);
                       if (op === Opcode.EVT_MOVED && header[3] === 0) setPlayerPos({ x: header[4], y: header[5] });
 
-                      // --- CHANNEL MULTICAST LOGIC ---
-                      if (op === Opcode.SYS_CHAN_SUB) {
-                          const chanId = header[3];
-                          if (!channelSubscriptions.current.has(chanId)) channelSubscriptions.current.set(chanId, new Set());
-                          channelSubscriptions.current.get(chanId)!.add(header[1]);
-                      } else if (op === Opcode.SYS_CHAN_UNSUB) {
-                          channelSubscriptions.current.get(header[3])?.delete(header[1]);
+                      if (target === KernelID.HOST) {
+                          if (op === Opcode.EVT_LEVEL_TRANSITION) {
+                              handleLevelTransition(header[3]);
+                          }
                       }
 
-                      if (target >= 1000) {
-                          channelSubscriptions.current.get(target)?.forEach(subId => {
-                              if (subId !== header[1]) {
-                                  const inbox = inboxes.get(subId);
-                                  if (inbox) inbox.push(...packet);
-                              }
-                          });
-                      } else if (target === KernelID.BUS) {
+                      // Route packets to correct inboxes
+                      if (target === KernelID.BUS) {
                           for (const [key, inbox] of inboxes.entries()) {
                               if (key !== header[1]) {
                                   inbox.push(...packet);
@@ -487,34 +476,6 @@ const App = () => {
                               inbox.push(...packet);
                           }
                       }
-                      offset += packetLen;
-                  }
-                  outMem[0] = 0; // Clear Output Queue
-              }
-          });
-
-          kernels.forEach(k => {
-              if (!k.proc.isReady) return;
-              const inboxData = inboxes[k.id];
-              const inMem = new Int32Array(k.proc.getMemory(), MEMORY.INPUT_QUEUE_ADDR, 1024);
-              if (inboxData.length > 0) {
-                  const currentCount = inMem[0];
-                  inMem[0] = currentCount + inboxData.length;
-                  inMem.set(inboxData, currentCount + 1);
-              }
-          });
-      };
-
-      // Execution sequence:
-      // 1. Process initial commands (from handleKeyDown)
-      processPackets();
-      // 2. Run Kernels
-
-                      if (target === KernelID.HOST) {
-                          if (op === Opcode.EVT_LEVEL_TRANSITION) {
-                              handleLevelTransition(header[3]);
-                          }
-                      }
 
                       offset += packetLen;
                   }
@@ -523,7 +484,19 @@ const App = () => {
           });
 
           // 2. Distribute packets to target kernels
-
+          kernels.forEach(k => {
+              if (!k.proc.isReady) return;
+              const inboxData = inboxes.get(k.id);
+              if (inboxData) {
+                  const inMem = new Int32Array(k.proc.getMemory(), MEMORY.INPUT_QUEUE_ADDR, 1024);
+                  if (inboxData.length > 0) {
+                      const currentCount = inMem[0];
+                      inMem[0] = currentCount + inboxData.length;
+                      inMem.set(inboxData, currentCount + 1);
+                  }
+              }
+          });
+      };
 
       // 1. FIRST BROKER PASS: Deliver initial commands
       runBroker();

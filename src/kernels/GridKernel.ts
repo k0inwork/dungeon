@@ -117,8 +117,8 @@ function spawn_entity(x, y, color, char, type) {
       COLLISION_MAP[i] = 1;
   }
   
-  Chan("npc_sync") <- [EVT_SPAWN, ENTITY_COUNT, type, 0];
-  Chan("npc_sync") <- [EVT_MOVED, ENTITY_COUNT, x, y];
+  bus_send(EVT_SPAWN, K_GRID, K_BUS, ENTITY_COUNT, type, 0);
+  bus_send(EVT_MOVED, K_GRID, K_BUS, ENTITY_COUNT, x, y);
   ENTITY_COUNT++;
 }
 
@@ -186,7 +186,7 @@ function move_entity(id, dx, dy) {
   ENTITY_MAP[ti] = id + 1;
 
   redraw_cell(tx, ty, ent.color, ent.char);
-  Chan("npc_sync") <- [EVT_MOVED, id, tx, ty];
+  bus_send(EVT_MOVED, K_GRID, K_BUS, id, tx, ty);
 }
 
 function kill_entity(id, itemId) {

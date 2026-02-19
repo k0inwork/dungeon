@@ -65,7 +65,7 @@ function handle_events() {
              Log("Blocked by Wall.");
           } else {
              Log("Player Hits Enemy! Attacking...");
-             Chan("BUS") <- [CMD_ATTACK, 0, M_P2, 0];
+             Bus.send(CMD_ATTACK, K_PLAYER, K_BUS, 0, M_P2, 0);
           }
       }
   }
@@ -79,7 +79,7 @@ function handle_events() {
   
   if (M_OP == CMD_INTERACT) {
       Log("Using Heavy Smash!");
-      Chan("BUS") <- [CMD_ATTACK, 0, 1, 1];
+      Bus.send(CMD_ATTACK, K_PLAYER, K_BUS, 0, 1, 1);
   }
 }
 

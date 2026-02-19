@@ -26,10 +26,7 @@ export const BLOCK_CORE_POLYFILLS = `
 ( 2. NIP - Drop item below top )
 : NIP ( n1 n2 -- n2 ) SWAP DROP ;
 
-( 3. CELLS - Convert to byte offset )
-: CELLS ( n -- n*4 ) 4 * ;
-
-( 4. -ROT - Rotate stack backwards: n1 n2 n3 -- n3 n1 n2 )
+( 3. -ROT - Rotate stack backwards: n1 n2 n3 -- n3 n1 n2 )
 : -ROT ( n1 n2 n3 -- n3 n1 n2 ) ROT ROT ;
 
 ( 4. CMOVE - Copy characters from src to dest )
@@ -79,15 +76,16 @@ ${generateForthProtocolBlock()}
 `;
 
 export const BLOCK_MSG_REGISTERS = `
+( --- MESSAGE REGISTERS --- )
 VARIABLE M_OP
 VARIABLE M_SENDER
 VARIABLE M_TARGET
 VARIABLE M_P1
 VARIABLE M_P2
 VARIABLE M_P3
-VARIABLE LAST_PLAYER_X
-VARIABLE LAST_PLAYER_Y
 
+( Takes 6 values from stack and stores in registers )
+( Stack: op sender target p1 p2 p3 -- )
 : UNPACK_MSG
   M_P3 !
   M_P2 !
@@ -104,21 +102,19 @@ VARIABLE STR_PTR
 STR_BUF_START STR_PTR !
 
 ( Append string to circular buffer to ensure it persists for JS call )
-( FIXED v1.12: Corrected CMOVE argument order )
+( FIXED v1.11: Now returns Dest Len correctly for JS_LOG )
 : S+ ( addr len -- dest len )
   ( Check bounds: Reset to start if buffer full )
   DUP STR_PTR @ + STR_BUF_END > IF STR_BUF_START STR_PTR ! THEN
   
   STR_PTR @ >R       ( Save Dest to R-stack )
+  2DUP R@ -ROT CMOVE ( Copy from Addr to Dest )
   
-  ( src=addr dest=R@ u=len )
-  OVER R@ 2 PICK CMOVE
-
-  ( Update Pointer )
-  DUP STR_PTR +!
+  DUP STR_PTR +!     ( Advance Ptr by Len )
   
-  ( Return dest len )
-  NIP R> SWAP
+  NIP                ( addr len -- len )
+  R>                 ( len dest )
+  SWAP               ( dest len )
 ;
 
 ( Convert Number to String )

@@ -24,10 +24,6 @@ describe('Integration: Loot Drop', () => {
 
     // Initialize Kernels
     grid.run('INIT_MAP');
-    battle.run('INIT_BATTLE');
-
-    // Process SUB packets generated during boot/init
-    sim.tick();
   });
 
   test('Rat drops loot on death', () => {

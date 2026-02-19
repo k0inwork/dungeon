@@ -1,6 +1,6 @@
 
 import * as acorn from "acorn";
-import { KernelID, VSO_REGISTRY, hashChannel } from "../types/Protocol";
+import { KernelID, VSO_REGISTRY } from "../types/Protocol";
 
 // --- TYPES ---
 interface ASTNode {
@@ -21,27 +21,14 @@ interface StructDef {
     size: number;
 }
 
-// Variables that are defined as VARIABLE in Forth firmware
-// and must be fetched (@) when used as R-values.
-const KNOWN_VARIABLES = new Set([
+// Variables that are defined as VARIABLE in Forth and must be fetched (@) when used as R-values
+const KNOWN_GLOBALS = new Set([
+  "ENTITY_COUNT", "HIVE_ENT_COUNT", "RNG_SEED",
+  "PLAYER_HP", "PLAYER_GOLD",
+  "LAST_PLAYER_X", "LAST_PLAYER_Y",
   "M_OP", "M_SENDER", "M_TARGET", "M_P1", "M_P2", "M_P3",
-  "OUT_PTR", "STR_PTR", "LAST_PLAYER_X", "LAST_PLAYER_Y"
+  "OUT_PTR"
 ]);
-
-// Constants that are defined in Forth firmware and should be used as-is.
-const KNOWN_CONSTANTS = new Set([
-  "IN_COUNT", "OUT_COUNT",
-  "INPUT_QUEUE", "OUTPUT_QUEUE", "INBOX", "OUTBOX",
-  "STR_BUF_START", "STR_BUF_END", "TEMP_VSO_BUFFER",
-
-  "REQ_MOVE", "REQ_TELEPORT", "REQ_TERRAIN", "REQ_PATH_STEP",
-  "EVT_MOVED", "EVT_COLLIDE", "EVT_SPAWN", "EVT_DAMAGE", "EVT_DEATH", "EVT_ITEM_GET", "EVT_LEVEL_TRANSITION",
-  "CMD_INTERACT", "CMD_SPEAK", "CMD_ATTACK", "CMD_KILL", "CMD_PICKUP",
-  "SYS_LOG", "SYS_CHAN_SUB", "SYS_CHAN_UNSUB", "SYS_ERROR", "SYS_BLOB",
-  "K_HOST", "K_GRID", "K_PLAYER", "K_HIVE", "K_BATTLE", "K_PLATFORM", "K_BUS"
-]);
-
-const KNOWN_GLOBALS = new Set([...KNOWN_VARIABLES, ...KNOWN_CONSTANTS]);
 
 export class AetherTranspiler {
   private static scopes: Scope[] = [];
@@ -59,7 +46,6 @@ export class AetherTranspiler {
   private static exportedArrays: Map<string, string> = new Map(); // StructName -> VarName (Local)
   private static localStructs: Set<string> = new Set();
   private static functionReturnTypes: Map<string, string> = new Map();
-  private static channelSubscriptions: Map<number, ASTNode> = new Map();
 
   // Shared across transpile() calls for different kernels
   private static globalExportRegistry: Map<string, { owner: number, varName: string, typeId: number, sizeBytes: number, fields: Map<string, number> }> = new Map();
@@ -122,14 +108,10 @@ export class AetherTranspiler {
     this.exportedArrays = new Map();
     this.localStructs = new Set();
     this.functionReturnTypes = new Map();
-    this.channelSubscriptions = new Map();
 
     if (!jsCode || !jsCode.trim()) {
         return "";
     }
-
-    // Ensure we are in DECIMAL mode for literal addresses emitted by transpiler
-    this.emit("DECIMAL");
 
     // Pre-Process Struct Definitions (ACORN doesn't handle "struct")
     // Syntax: struct Name { field1, field2 }
@@ -141,9 +123,6 @@ export class AetherTranspiler {
       this.analyzeScopes(ast as ASTNode);
       this.emitGlobals();
       this.compileNode(ast as ASTNode);
-      this.emitSubscriptionWord();
-      // [AJS-CHANNELS] Automatically call initialization word at the end of transpilation
-      this.emit("AJS_INIT_CHANNELS");
       return this.output.join("\n");
     } catch (e: any) {
       console.error("Transpilation Failed:", e);
@@ -332,26 +311,8 @@ export class AetherTranspiler {
       }
     }
     
-    if (node.type === "CallExpression" && node.callee.type === "MemberExpression") {
-        const prop = node.callee.property.name.toUpperCase();
-        if (prop === "ON" && node.callee.object.type === "CallExpression" && node.callee.object.callee.name === "Chan") {
-            const chanName = node.callee.object.arguments[0].value;
-            const hash = hashChannel(chanName);
-            const callback = node.arguments[0];
-            this.channelSubscriptions.set(hash, callback);
-        }
-    }
-
-    // Generic children traversal for analyzeScopes
-    for (const key in node) {
-        const child = node[key];
-        if (child && typeof child === "object" && child.type) {
-            this.analyzeScopes(child);
-        } else if (Array.isArray(child)) {
-            child.forEach(c => {
-                if (c && typeof c === "object" && c.type) this.analyzeScopes(c);
-            });
-        }
+    if (node.body && Array.isArray(node.body)) {
+      node.body.forEach((child: any) => this.analyzeScopes(child));
     }
   }
 
@@ -428,10 +389,6 @@ export class AetherTranspiler {
   private static emitGlobals() {
     this.emit("( --- AETHER AUTO-GLOBALS --- )");
 
-    // 0. Channel Initialization Flag
-    this.emit("VARIABLE CHANNELS_INITED");
-    this.emit("0 CHANNELS_INITED !");
-
     // 1. Emit simple constants first
     this.globalConsts.forEach((init, name) => {
       if (this.isStructArray(name)) return;
@@ -452,7 +409,6 @@ export class AetherTranspiler {
 
     // 2. Emit Top-Level Variables (including struct arrays)
     this.globalVars.forEach(v => {
-      if (KNOWN_GLOBALS.has(v)) return; // Skip firmware globals
       if (this.isStructArray(v)) {
           const structName = this.getStructType(v);
           const count = this.structArrayCounts.get(v) || 0;
@@ -526,24 +482,18 @@ export class AetherTranspiler {
 
       case "FunctionDeclaration":
         const name = node.id.name.toUpperCase();
-        const forthName = this.sanitizeName(name);
         const scope = this.scopes.find(s => s.functionName === name);
         this.currentScope = scope || null;
         
-        this.emit(`\n: ${forthName} `);
+        this.emit(`\n: ${name} ( ${scope?.args.join(' ')} -- )`);
         
         if (scope && scope.args.length > 0) {
             [...scope.args].reverse().forEach(arg => {
                 this.emit(`  LV_${name}_${arg} !`);
             });
         }
-
         
         this.compileNode(node.body);
-
-        if (name === "HANDLE_EVENTS") {
-            this.emitChannelHandlers();
-        }
         
         this.emit(`;`);
         this.currentScope = null;
@@ -812,23 +762,6 @@ export class AetherTranspiler {
             const funcName = node.callee.name;
             const func = funcName.toUpperCase();
 
-            if (func === "CHAN") {
-                const arg = node.arguments[0];
-                if (arg && arg.type === "Literal" && typeof arg.value === "string") {
-                    const name = arg.value.toUpperCase();
-                    // Check if it's a known Kernel name
-                    if (KernelID[name] !== undefined) {
-                        this.emit(`  K_${name}`);
-                    } else {
-                        const hash = hashChannel(arg.value);
-                        this.emit(`  ${hash} ( Channel: ${arg.value} )`);
-                    }
-                } else if (arg) {
-                    this.compileNode(arg);
-                }
-                return;
-            }
-
             // --- EXPORTED STRUCT ARRAY ACCESS: NPC(id) ---
             const globalEntry = AetherTranspiler.globalExportRegistry.get(funcName);
             if (globalEntry) {
@@ -840,27 +773,6 @@ export class AetherTranspiler {
                     this.emit(`  ${globalEntry.typeId} JS_SYNC_OBJECT`);
                 }
                 return;
-            }
-        }
-
-        if (node.callee.type === "MemberExpression") {
-            const prop = node.callee.property.name.toUpperCase();
-
-            // Handle Chan("name").on(...) and Chan("name").send(...)
-            if (node.callee.object.type === "CallExpression" && node.callee.object.callee.name === "Chan") {
-                const chanName = node.callee.object.arguments[0].value;
-                const hash = hashChannel(chanName);
-
-                if (prop === "ON") {
-                    this.emit(`  ( Subscribed to Channel: ${chanName} )`);
-                    return;
-                } else if (prop === "LEAVE") {
-                    this.emit(`  SYS_CHAN_UNSUB ${this.currentKernelId} K_HOST ${hash} 0 0 BUS_SEND ( UNSUB FROM ${chanName} )`);
-                    return;
-                } else if (prop === "SEND") {
-                    this.compileChannelSend(hash, node.arguments[0]);
-                    return;
-                }
             }
         }
 
@@ -906,10 +818,9 @@ export class AetherTranspiler {
                     this.emit(`  .N`);
                 }
             }
-            else this.emit(`  ${this.sanitizeName(func)}`);
+            else this.emit(`  ${func}`);
         } 
         else if (node.callee.type === "MemberExpression") {
-            const prop = node.callee.property.name.toUpperCase();
             // Ensure object has a name (Identifier)
             if (node.callee.object.type === "Identifier") {
                 const obj = node.callee.object.name.toUpperCase();
@@ -934,13 +845,6 @@ export class AetherTranspiler {
         break;
 
       case "BinaryExpression":
-        // Handle Go-like Channel Send: chan <- [op, p1, p2, p3]
-        // Acorn parses this as: chan < -[array]
-        if (node.operator === "<" && node.right.type === "UnaryExpression" && node.right.operator === "-") {
-            this.compileChannelSend(node.left, node.right.argument);
-            return;
-        }
-
         this.compileNode(node.left);
         this.compileNode(node.right);
         const opMap: Record<string, string> = {
@@ -988,14 +892,8 @@ export class AetherTranspiler {
         }
 
         // 4. Known Global Variable (Automatic Dereference)
-        if (KNOWN_VARIABLES.has(upName)) {
+        if (KNOWN_GLOBALS.has(upName)) {
             this.emit(`  ${upName} @`);
-            return;
-        }
-
-        // 5. Known Global Constant (No Dereference)
-        if (KNOWN_CONSTANTS.has(upName)) {
-            this.emit(`  ${upName}`);
             return;
         }
 
@@ -1094,85 +992,14 @@ export class AetherTranspiler {
     return null;
   }
 
-  /** [AJS-CHANNELS] Compiles a channel send operation (chan.send([...] or chan <- [...]) */
-  private static compileChannelSend(target: any, argsNode: any) {
-      if (argsNode.type !== "ArrayExpression") {
-          this.emit(`  ( ERROR: Channel send expects array [op, p1, p2, p3] )`);
-          return;
-      }
-
-      const elements = argsNode.elements;
-      // BUS_SEND expects: op sender target p1 p2 p3
-      this.compileNode(elements[0] || { type: "Literal", value: 0 }); // op
-      this.emit(`  ${this.currentKernelId} ( Sender )`);
-      if (typeof target === "number") {
-          this.emit(`  ${target} ( Target Channel )`);
-      } else {
-          this.compileNode(target);
-      }
-      this.compileNode(elements[1] || { type: "Literal", value: 0 }); // p1
-      this.compileNode(elements[2] || { type: "Literal", value: 0 }); // p2
-      this.compileNode(elements[3] || { type: "Literal", value: 0 }); // p3
-      this.emit(`  BUS_SEND`);
-  }
-
-  /** [AJS-CHANNELS] Emits code within HANDLE_EVENTS to dispatch channel messages to registered callbacks */
-  private static emitChannelHandlers() {
-      if (this.channelSubscriptions.size === 0) return;
-      this.emit("( --- [AJS-CHANNELS] EVENT DISPATCHERS --- )");
-      this.channelSubscriptions.forEach((callback, hash) => {
-          this.emit(`  M_TARGET @ ${hash} = IF`);
-          if (callback.type === "ArrowFunctionExpression" || callback.type === "FunctionExpression") {
-              this.compileNode(callback.body);
-          } else if (callback.type === "Identifier") {
-              const funcName = callback.name.toUpperCase();
-              const forthName = this.sanitizeName(funcName);
-              const scope = this.scopes.find(s => s.functionName === funcName);
-
-              if (scope && scope.args.length === 5) {
-                  // [AJS-CHANNELS] Modern 5-arg callback: opcode, sender, p1, p2, p3
-                  this.emit(`  M_OP @ M_SENDER @ M_P1 @ M_P2 @ M_P3 @ ${forthName}`);
-              } else if (scope && scope.args.length === 4) {
-                  // [AJS-CHANNELS] Legacy 4-arg callback: opcode, p1, p2, p3
-                  this.emit(`  M_OP @ M_P1 @ M_P2 @ M_P3 @ ${forthName}`);
-              } else {
-                  this.emit(`  ${forthName}`);
-              }
-          }
-          this.emit(`  THEN`);
-      });
-  }
-
-  /** [AJS-CHANNELS] Emits the AJS_INIT_CHANNELS word which sends SUB packets for all registered channels */
-  private static emitSubscriptionWord() {
-      this.emit("\n: AJS_INIT_CHANNELS");
-      // [AJS-CHANNELS] Avoid complex logic in this word to ensure it works across all Forth environments
-      this.channelSubscriptions.forEach((_, hash) => {
-          this.emit(`  SYS_CHAN_SUB ${this.currentKernelId} K_HOST ${hash} 0 0 BUS_SEND`);
-      });
-      this.emit(";");
-  }
-
-  private static sanitizeName(name: string): string {
-      if (name.length <= 31) return name;
-      // Deterministic hash for long names
-      let hash = 0;
-      for (let i = 0; i < name.length; i++) {
-          hash = ((hash << 5) - hash) + name.charCodeAt(i);
-          hash |= 0;
-      }
-      const suffix = Math.abs(hash).toString(36).toUpperCase();
-      return name.substring(0, 31 - suffix.length - 1) + "_" + suffix;
-  }
-
   private static resolveVar(name: string): string {
     const upName = name.toUpperCase();
     if (this.currentScope) {
         if (this.currentScope.args.includes(upName) || this.currentScope.variables.has(upName)) {
-            return this.sanitizeName(`LV_${this.currentScope.functionName}_${upName}`);
+            return `LV_${this.currentScope.functionName}_${upName}`;
         }
     }
-    return this.sanitizeName(upName);
+    return upName;
   }
 
   private static emit(str: string) {
