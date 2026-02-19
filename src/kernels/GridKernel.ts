@@ -72,6 +72,8 @@ function init_map() {
         y++;
     }
     ENTITY_COUNT = 0;
+    Chan().on(on_grid_request);
+    Chan("BUS").on(on_grid_request);
     Log("[GRID] Map Initialized (AJS v7.0)");
 }
 
@@ -311,16 +313,19 @@ function move_towards(id, tx, ty) {
     }
 }
 
+function on_grid_request(op, sender, p1, p2, p3) {
+    if (op == REQ_MOVE) { move_entity(p1, p2, p3); }
+    if (op == REQ_PATH_STEP) { move_towards(p1, p2, p3); }
+    if (op == EVT_DEATH) { kill_entity(p1, p2); }
+    if (op == CMD_PICKUP) { try_pickup(p1, p2, p3); }
+}
+
 function handle_events() {
-  if (M_TARGET == K_GRID || M_TARGET == K_BUS || M_TARGET == 0) {
-     if (M_OP == REQ_MOVE) { move_entity(M_P1, M_P2, M_P3); }
-     if (M_OP == REQ_PATH_STEP) { move_towards(M_P1, M_P2, M_P3); }
-     if (M_OP == EVT_DEATH) { kill_entity(M_P1, M_P2); }
-     if (M_OP == CMD_PICKUP) { try_pickup(M_P1, M_P2, M_P3); }
-  }
+    // Channel listeners are injected here
 }
 
 ${STANDARD_AJS_POSTAMBLE}
+
 
 function run_env_cycle() {
     // Empty for now

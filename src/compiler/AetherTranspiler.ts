@@ -335,10 +335,20 @@ export class AetherTranspiler {
     if (node.type === "CallExpression" && node.callee.type === "MemberExpression") {
         const prop = node.callee.property.name.toUpperCase();
         if (prop === "ON" && node.callee.object.type === "CallExpression" && node.callee.object.callee.name === "Chan") {
-            const chanName = node.callee.object.arguments[0].value;
-            const hash = hashChannel(chanName);
+            const chanNameArg = node.callee.object.arguments[0];
+            let channelId;
+            if (!chanNameArg) {
+                channelId = this.currentKernelId;
+            } else {
+                const chanName = chanNameArg.value;
+                const upName = chanName.toUpperCase();
+                channelId = hashChannel(chanName);
+                if (KernelID[upName] !== undefined) {
+                    channelId = KernelID[upName] as number;
+                }
+            }
             const callback = node.arguments[0];
-            this.channelSubscriptions.set(hash, callback);
+            this.channelSubscriptions.set(channelId, callback);
         }
     }
 
@@ -814,7 +824,9 @@ export class AetherTranspiler {
 
             if (func === "CHAN") {
                 const arg = node.arguments[0];
-                if (arg && arg.type === "Literal" && typeof arg.value === "string") {
+                if (!arg) {
+                    this.emit(`  ${this.currentKernelId} ( Self Channel )`);
+                } else if (arg.type === "Literal" && typeof arg.value === "string") {
                     const name = arg.value.toUpperCase();
                     // Check if it's a known Kernel name
                     if (KernelID[name] !== undefined) {
@@ -848,17 +860,27 @@ export class AetherTranspiler {
 
             // Handle Chan("name").on(...) and Chan("name").send(...)
             if (node.callee.object.type === "CallExpression" && node.callee.object.callee.name === "Chan") {
-                const chanName = node.callee.object.arguments[0].value;
-                const hash = hashChannel(chanName);
+                const chanNameArg = node.callee.object.arguments[0];
+                const chanName = chanNameArg ? chanNameArg.value : "Self";
+                const upName = chanNameArg ? chanName.toUpperCase() : null;
+
+                let channelId;
+                if (!chanNameArg) {
+                    channelId = this.currentKernelId;
+                } else if (KernelID[upName] !== undefined) {
+                    channelId = KernelID[upName] as number;
+                } else {
+                    channelId = hashChannel(chanName);
+                }
 
                 if (prop === "ON") {
                     this.emit(`  ( Subscribed to Channel: ${chanName} )`);
                     return;
                 } else if (prop === "LEAVE") {
-                    this.emit(`  SYS_CHAN_UNSUB ${this.currentKernelId} K_HOST ${hash} 0 0 BUS_SEND ( UNSUB FROM ${chanName} )`);
+                    this.emit(`  SYS_CHAN_UNSUB ${this.currentKernelId} K_HOST ${channelId} 0 0 BUS_SEND ( UNSUB FROM ${chanName} )`);
                     return;
                 } else if (prop === "SEND") {
-                    this.compileChannelSend(hash, node.arguments[0]);
+                    this.compileChannelSend(channelId, node.arguments[0]);
                     return;
                 }
             }
