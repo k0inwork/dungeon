@@ -24,6 +24,8 @@ function init_hive() {
     HIVE_ENT_COUNT = 0;
     Log("[HIVE] Memory Reset");
     Chan("npc_sync").on(on_npc_sync);
+    Chan().on(on_bus_event);
+    Chan("BUS").on(on_bus_event);
 }
 
 // 2. LOGIC
@@ -140,17 +142,21 @@ function decide_action(id) {
   }
 }
 
-function handle_events() {
-  if (M_OP == EVT_COLLIDE) {
-     if (M_P3 == 1) {
-        if (M_P1 > 0) {
-            if (M_P2 == 0) {
+function on_bus_event(op, sender, p1, p2, p3) {
+  if (op == EVT_COLLIDE) {
+     if (p3 == 1) {
+        if (p1 > 0) {
+            if (p2 == 0) {
                Log("Enemy Attacks Player!");
-               Chan("BUS") <- [CMD_ATTACK, M_P1, M_P2, 0];
+               Chan("BUS") <- [CMD_ATTACK, p1, p2, 0];
             }
         }
      }
   }
+}
+
+function handle_events() {
+    // Channel listeners are injected here
 }
 
 ${STANDARD_AJS_POSTAMBLE}

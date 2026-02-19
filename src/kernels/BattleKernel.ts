@@ -58,13 +58,13 @@ function init_stats(id, type) {
 
 // --- SKILL SCRIPTS ---
 
-function log_combat(srcId, tgtId, dmg, label) {
+function log_combat(srcId, tgtId, dmg) {
     if (srcId == 0) {
-        Log("You use "); Log(label);
-        Log(" on enemy: "); Log(dmg); Log(" dmg");
+        Log("You deal damage:"); Log(dmg);
     } else {
         Log("Enemy hits YOU for "); Log(dmg); Log(" dmg");
     }
+    Chan("combat_events") <- [EVT_DAMAGE, srcId, tgtId, dmg];
 }
 
 function skill_basic_attack(srcId, tgtId) {
@@ -76,7 +76,7 @@ function skill_basic_attack(srcId, tgtId) {
     
     tgt.hp -= dmg;
     
-    log_combat(srcId, tgtId, dmg, "Attack");
+    log_combat(srcId, tgtId, dmg);
     Chan("BUS") <- [EVT_DAMAGE, tgtId, dmg, 0];
     
     return tgt.hp;
@@ -91,7 +91,7 @@ function skill_heavy_smash(srcId, tgtId) {
     
     tgt.hp -= dmg;
     
-    log_combat(srcId, tgtId, dmg, "SMASH");
+    log_combat(srcId, tgtId, dmg);
     Chan("BUS") <- [EVT_DAMAGE, tgtId, dmg, 2]; // Type 2 = Crit/Heavy
     
     return tgt.hp;
@@ -179,16 +179,22 @@ function on_npc_sync(opcode, sender, p1, p2, p3) {
     }
 }
 
+function on_battle_request(op, sender, p1, p2, p3) {
+    if (op == CMD_ATTACK) {
+        // p1 = Attacker, p2 = Target, p3 = SkillID
+        execute_skill(p1, p2, p3);
+    }
+}
+
 function init_battle() {
     Log("[BATTLE] Battle Kernel Initialized");
     Chan("npc_sync").on(on_npc_sync);
+    Chan().on(on_battle_request);
+    Chan("BUS").on(on_battle_request);
 }
 
 function handle_events() {
-    if (M_OP == CMD_ATTACK) {
-        // M_P1 = Attacker, M_P2 = Target, M_P3 = SkillID
-        execute_skill(M_P1, M_P2, M_P3);
-    }
+    // Channel listeners are injected here
 }
 
 ${STANDARD_AJS_POSTAMBLE}

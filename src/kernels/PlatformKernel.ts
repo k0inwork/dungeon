@@ -39,6 +39,8 @@ function init_platformer() {
     player_y = 2 * 65536;
     player_vx = 0;
     player_vy = 0;
+    Chan().on(on_platform_request);
+    Chan("BUS").on(on_platform_request);
     Log("[PLATFORM] Kernel Ready (v4)");
 }
 
@@ -159,9 +161,13 @@ function jump_player() {
     }
 }
 
+function on_platform_request(op, sender, p1, p2, p3) {
+    if (op == REQ_MOVE) { move_player(p1); }
+    if (op == CMD_INTERACT) { jump_player(); }
+}
+
 function handle_events() {
-    if (M_OP == 101) { move_player(M_P1); }
-    if (M_OP == 301) { jump_player(); }
+    // Channel listeners are injected here
 }
 
 ${STANDARD_AJS_POSTAMBLE}
