@@ -85,6 +85,8 @@ const App = () => {
   const localBufferRef = useRef(new Uint32Array(MEMORY.GRID_WIDTH * MEMORY.GRID_HEIGHT));
   const logContainerRef = useRef<HTMLDivElement>(null);
 
+  const channelSubscriptions = useRef<Map<number, Set<number>>>(new Map());
+
   // Increased log size to 100
   const addLog = (msg: string) => setLog(prev => [msg, ...prev].slice(0, 100));
 
@@ -477,14 +479,34 @@ const App = () => {
                       if (op === Opcode.EVT_DEATH && header[3] === 0) setGameOver(true);
                       if (op === Opcode.EVT_MOVED && header[3] === 0) setPlayerPos({ x: header[4], y: header[5] });
 
-                      if (target === KernelID.BUS) {
-                          Object.keys(inboxes).forEach(keyStr => {
-                              const key = Number(keyStr);
-                              if (key !== header[1]) inboxes[key].push(...packet);
-                          });
+                      // --- CHANNEL MULTICAST LOGIC ---
+                      if (op === Opcode.SYS_CHAN_SUB) {
+                          const chanId = header[3];
+                          if (!channelSubscriptions.current.has(chanId)) channelSubscriptions.current.set(chanId, new Set());
+                          channelSubscriptions.current.get(chanId)!.add(header[1]);
+                      } else if (op === Opcode.SYS_CHAN_UNSUB) {
+                          channelSubscriptions.current.get(header[3])?.delete(header[1]);
                       }
-                      else if (target !== KernelID.HOST && inboxes[target]) {
-                          inboxes[target].push(...packet);
+
+                      if (target >= 1000) {
+                          channelSubscriptions.current.get(target)?.forEach(subId => {
+                              if (subId !== header[1]) {
+                                  const inbox = inboxes.get(subId);
+                                  if (inbox) inbox.push(...packet);
+                              }
+                          });
+                      } else if (target === KernelID.BUS) {
+                          for (const [key, inbox] of inboxes.entries()) {
+                              if (key !== header[1]) {
+                                  inbox.push(...packet);
+                              }
+                          }
+                      }
+                      else if (target !== KernelID.HOST) {
+                          const inbox = inboxes.get(target);
+                          if (inbox) {
+                              inbox.push(...packet);
+                          }
                       }
                       offset += packetLen;
                   }

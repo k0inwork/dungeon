@@ -24,10 +24,13 @@ export class KernelTestRunner {
     const logStart = this.proc.outputLog.length;
     this.proc.run(cmd);
 
-    // Extract new STDOUT entries
+    // Extract new entries (including direct JS_LOG calls which don't have [STDOUT] prefix)
     const newLogs = this.proc.outputLog.slice(logStart)
-        .filter(l => l.includes("[STDOUT]"))
-        .map(l => l.split("[STDOUT] ")[1])
+        .map(l => {
+            if (l.includes("[STDOUT] ")) return l.split("[STDOUT] ")[1];
+            // JS_LOG entries look like: [HIVE 15:00:00] Message
+            return l.split("] ").slice(1).join("] ");
+        })
         .join(" ")
         .trim();
 
