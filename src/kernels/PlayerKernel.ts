@@ -35,6 +35,9 @@ function init_player() {
     p.maxHp = 100;
     p.gold = 0;
     p.invCount = 0;
+    Chan().on(on_player_event);
+    Chan("BUS").on(on_bus_event);
+    Chan("combat_events").on(on_combat_event);
     Log("[PLAYER] State Initialized");
 }
 
@@ -54,33 +57,52 @@ function add_item(itemId) {
     Log(p.invCount);
 }
 
-function handle_events() {
-  if (M_OP == EVT_SPAWN) {
-     // Run init on first spawn event?
+function on_player_event(op, sender, p1, p2, p3) {
+  if (op == EVT_ITEM_GET) {
+      if (p1 == 0) {
+          Log("Picked up Loot!");
+          add_item(p2);
+      }
   }
 
-  if (M_OP == EVT_COLLIDE) {
-      if (M_P1 == 0) {
-          if (M_P3 == 0) {
-             Log("Blocked by Wall.");
-          } else {
-             Log("Player Hits Enemy! Attacking...");
-             Chan("BUS") <- [CMD_ATTACK, 0, M_P2, 0];
-          }
-      }
-  }
-  
-  if (M_OP == EVT_ITEM_GET) {
-      if (M_P1 == 0) {
-          Log("Picked up Loot!");
-          add_item(M_P2);
-      }
-  }
-  
-  if (M_OP == CMD_INTERACT) {
+  if (op == CMD_INTERACT) {
       Log("Using Heavy Smash!");
       Chan("BUS") <- [CMD_ATTACK, 0, 1, 1];
   }
+}
+
+function on_bus_event(op, sender, p1, p2, p3) {
+  if (op == EVT_COLLIDE) {
+      if (p1 == 0) {
+          if (p3 == 0) {
+             Log("Blocked by Wall.");
+          } else {
+             Log("Player Hits Enemy! Attacking...");
+             Chan("BUS") <- [CMD_ATTACK, 0, p2, 0];
+          }
+      }
+  }
+}
+
+function on_combat_event(op, sender, p1, p2, p3) {
+    if (op == EVT_DAMAGE) {
+        if (p1 == 0) {
+             Log("You dealt damage!");
+        }
+        if (p2 == 0) {
+             Log("Ouch! You took damage!");
+        }
+    }
+}
+
+function on_quest_event(op, sender, p1, p2, p3) {
+    if (op == EVT_DAMAGE) {
+        Log("Quest Progress: Aggressive Enemy Defeated!");
+    }
+}
+
+function handle_events() {
+    // Channel listeners are injected here
 }
 
 ${STANDARD_AJS_POSTAMBLE}
