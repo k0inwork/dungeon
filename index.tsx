@@ -264,15 +264,15 @@ const App = () => {
       }
     });
 
-    let px = 5, py = 5;
+    let player_px_host = 5, player_py_host = 5;
     level.map_layout.forEach((row: string, y: number) => {
         const x = row.indexOf('@');
-        if (x !== -1) { px = x; py = y; }
+        if (x !== -1) { player_px_host = x; player_py_host = y; }
     });
-    addLog(`Spawning Player at ${px},${py}`);
-    setPlayerPos({x: px, y: py});
-    setCursorPos({x: px, y: py});
-    mainProc.run(`${px} ${py} 65535 64 0 SPAWN_ENTITY`);
+    addLog(`Spawning Player at ${player_px_host},${player_py_host}`);
+    setPlayerPos({x: player_px_host, y: player_py_host});
+    setCursorPos({x: player_px_host, y: player_py_host});
+    mainProc.run(`${player_px_host} ${player_py_host} 65535 64 0 SPAWN_ENTITY`);
 
     level.entities.forEach((ent: any) => {
         const c = ent.glyph.color || 0xFF0000;
@@ -370,15 +370,15 @@ const App = () => {
         }
       });
       
-      let px = 5, py = 5;
+      let player_px_host = 5, player_py_host = 5;
       level.map_layout.forEach((row, y) => {
           const x = row.indexOf('@');
-          if (x !== -1) { px = x; py = y; }
+          if (x !== -1) { player_px_host = x; player_py_host = y; }
       });
-      addLog(`Spawning Player at ${px},${py}`);
-      setPlayerPos({x: px, y: py});
-      setCursorPos({x: px, y: py});
-      mainProc.run(`${px} ${py} 65535 64 0 SPAWN_ENTITY`);
+      addLog(`Spawning Player at ${player_px_host},${player_py_host}`);
+      setPlayerPos({x: player_px_host, y: player_py_host});
+      setCursorPos({x: player_px_host, y: player_py_host});
+      mainProc.run(`${player_px_host} ${player_py_host} 65535 64 0 SPAWN_ENTITY`);
 
       level.entities.forEach(ent => {
           const c = ent.glyph.color || 0xFF0000;
@@ -555,10 +555,10 @@ const App = () => {
 
       // 2. Sync Ground Items at Player Position
       const gMemView = new DataView(gridProc.getMemory());
-      const px = gMemView.getInt32(0x90000 + 12, true); // Entity 0 is Player
-      const py = gMemView.getInt32(0x90000 + 8, true);
+      const player_px_host = gMemView.getInt32(0x90000 + 12, true); // Entity 0 is Player
+      const player_py_host = gMemView.getInt32(0x90000 + 8, true);
 
-      const idx = py * MEMORY.GRID_WIDTH + px;
+      const idx = player_py_host * MEMORY.GRID_WIDTH + player_px_host;
       const lootVal = new Uint8Array(gridProc.getMemory())[0x32000 + idx]; // LOOT_MAP
 
       if (lootVal > 0) {

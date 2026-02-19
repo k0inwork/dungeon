@@ -10,7 +10,7 @@ const HUB_LEVEL: LevelData = {
       "#@.....................................#",
       "#......................................#",
       "#.........[P]..........................#",
-      "#........PLATFORM......................#",
+      "#........DUNGEONS......................#",
       "#......................................#",
       "#......................................#",
       "#......................................#",
@@ -20,7 +20,7 @@ const HUB_LEVEL: LevelData = {
     terrain_legend: [
       { symbol: ".", name: "Polished Floor", type: "FLOOR", color: 0x222222, passable: true, description: "Clean and safe." },
       { symbol: "#", name: "Hub Wall", type: "WALL", color: 0x444444, passable: false, description: "Reinforced steel." },
-      { symbol: "P", name: "Platformer Portal", type: "GATE", color: 0xFF00FF, passable: true, description: "To the 1st Platformer." },
+      { symbol: "P", name: "DUNGEONS Portal", type: "GATE", color: 0xFF00FF, passable: true, description: "To the 1st Platformer." },
       { symbol: "[", name: "Bracket", type: "WALL", color: 0x555555, passable: false, description: "Decor." },
       { symbol: "]", name: "Bracket", type: "WALL", color: 0x555555, passable: false, description: "Decor." }
     ],
