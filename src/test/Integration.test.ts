@@ -75,19 +75,19 @@ describe('Integration: Rat Chase', () => {
             return gridMem.getInt32(base + offset, true);
         };
 
-        const px = getVal(0, 12); // OFF_X
-        const py = getVal(0, 8);  // OFF_Y
+        const player_px_test = getVal(0, 12); // OFF_X
+        const player_py_test = getVal(0, 8);  // OFF_Y
         const rx = getVal(1, 12);
         const ry = getVal(1, 8);
 
         const events = sim.busLog.join(" | ");
         sim.busLog = []; // Clear for next tick
 
-        const line = `${i.toString().padEnd(4)} | ${px},${py.toString().padEnd(2)}     | ${rx.toString().padEnd(2)},${ry.toString().padEnd(2)}        | ${events}`;
+        const line = `${i.toString().padEnd(4)} | ${player_px_test},${player_py_test.toString().padEnd(2)}     | ${rx.toString().padEnd(2)},${ry.toString().padEnd(2)}        | ${events}`;
         console.log(line);
         logOutput += line + "\n";
 
-        trace.push({ tick: i, player: {x: px, y: py}, rat: {x: rx, y: ry}, events });
+        trace.push({ tick: i, player: {x: player_px_test, y: player_py_test}, rat: {x: rx, y: ry}, events });
 
         sim.tick();
     }

@@ -12,7 +12,18 @@ const MAP_HEIGHT = 20;
 
 const COLLISION_MAP = new Uint8Array(0x30000);
 const TERRAIN_MAP   = new Uint32Array(0x40000);
+const TRANSITION_MAP = new Int32Array(0x45000);
 const VRAM          = new Uint32Array(0x80000);
+
+struct GridEntity {
+    char,
+    color,
+    y,
+    x,
+    type
+}
+
+let entities = new Array(GridEntity, 1, 0x90000);
 
 // Fixed-point 16.16
 let player_x = 2 * 65536;
@@ -24,30 +35,48 @@ let gravity = 5000;
 let jump_force = -75000;
 let move_speed = 20000;
 
+let CURRENT_LEVEL_ID = 0;
+
+function set_level_id(id) {
+    CURRENT_LEVEL_ID = id;
+}
+
 function calc_idx(x, y) { return (y * MAP_WIDTH + x); }
 
-function get_collision(x, y) {
-    if (x < 0) return 1;
-    if (x >= MAP_WIDTH) return 1;
-    if (y < 0) return 0;
-    if (y >= MAP_HEIGHT) return 1;
-    return COLLISION_MAP[calc_idx(x, y)];
+function get_collision(cx, cy) {
+    if (cx < 0) return 1;
+    if (cx >= MAP_WIDTH) return 1;
+    if (cy < 0) return 0;
+    if (cy >= MAP_HEIGHT) return 1;
+    return COLLISION_MAP[calc_idx(cx, cy)];
 }
 
 function init_platformer() {
+    let i = 0;
+    let total = MAP_WIDTH * MAP_HEIGHT;
+    while (i < total) {
+        TERRAIN_MAP[i] = 0;
+        COLLISION_MAP[i] = 0;
+        TRANSITION_MAP[i] = -1;
+        VRAM[i] = 0;
+        i++;
+    }
     player_x = 2 * 65536;
     player_y = 2 * 65536;
     player_vx = 0;
     player_vy = 0;
+    CURRENT_LEVEL_ID = 0;
     Chan().on(on_platform_request);
     Chan("BUS").on(on_platform_request);
+
     Log("[PLATFORM] Kernel Ready (v4)");
 }
 
-function load_tile(x, y, color, char, type) {
+function load_tile(x, y, color, char, type, target_id) {
     let i = calc_idx(x, y);
     TERRAIN_MAP[i] = (color << 8) | char;
     COLLISION_MAP[i] = type;
+    TRANSITION_MAP[i] = target_id;
 }
 
 function update_physics() {
@@ -96,17 +125,17 @@ function update_physics() {
     // 2. Horizontal Collision (using updated Y)
     let h_rx = (nx + 63536) / 65536;
     let h_lx = (nx + 2000) / 65536;
-    let py = player_y / 65536;
+    let pyy = player_y / 65536;
 
     if (player_vx > 0) {
-        if (get_collision(h_rx, py)) {
+        if (get_collision(h_rx, pyy)) {
             player_vx = 0;
             player_x = (h_rx - 1) * 65536;
         } else {
             player_x = nx;
         }
     } else if (player_vx < 0) {
-        if (get_collision(h_lx, py)) {
+        if (get_collision(h_lx, pyy)) {
             player_vx = 0;
             player_x = (h_lx + 1) * 65536;
         } else {
@@ -118,12 +147,15 @@ function update_physics() {
     if (player_x < 0) player_x = 0;
     if (player_y < 0) player_y = 0;
 
-    // Win condition: reach bottom-left area after falling
-    if (player_x <= 2 * 65536) {
-        if (player_y >= 17 * 65536) {
-           bus_send(EVT_LEVEL_TRANSITION, K_PLATFORM, K_HOST, 0, 0, 0); // Back to Hub
-           player_x = 5 * 65536; // Reset pos
-        }
+    // Check for Exit
+    let exit_px = (player_x + 32768) / 65536;
+    let exit_py = (player_y + 32768) / 65536;
+    let exit_idx = calc_idx(exit_px, exit_py);
+    let exit_target = TRANSITION_MAP[exit_idx];
+
+    if (exit_target != -1) {
+        bus_send(EVT_LEVEL_TRANSITION, K_PLATFORM, K_HOST, exit_target, 0, 0);
+        player_x = 5 * 65536; // Reset pos
     }
 
     if (player_x > 39 * 65536) player_x = 39 * 65536;
@@ -131,26 +163,32 @@ function update_physics() {
 }
 
 function render() {
+    // 0. Sync Entity 0 (Player) for Host
+    let ent = GridEntity(0);
+    ent.x = player_x / 65536;
+    ent.y = player_y / 65536;
+
     // 1. Copy Terrain to VRAM
-    let i = 0;
-    while (i < 800) { // 40 * 20
-        VRAM[i] = TERRAIN_MAP[i];
-        i++;
+    let ri = 0;
+    let total = MAP_WIDTH * MAP_HEIGHT;
+    while (ri < total) {
+        VRAM[ri] = TERRAIN_MAP[ri];
+        ri++;
     }
 
     // 2. Draw Player '@'
-    let px = player_x / 65536;
-    let py = player_y / 65536;
-    let pidx = calc_idx(px, py);
-    if (pidx >= 0) {
-        if (pidx < 800) {
-            VRAM[pidx] = (0x00FF00 << 8) | 64; // Green '@'
+    let ren_px = player_x / 65536;
+    let ren_py = player_y / 65536;
+    let ren_pidx = calc_idx(ren_px, ren_py);
+    if (ren_pidx >= 0) {
+        if (ren_pidx < MAP_WIDTH * MAP_HEIGHT) {
+            VRAM[ren_pidx] = (0x00FF00 << 8) | 64; // Green '@'
         }
     }
 }
 
-function move_player(dir) {
-    player_vx = player_vx + (dir * move_speed);
+function move_player(m_dir) {
+    player_vx = player_vx + (m_dir * move_speed);
 }
 
 function jump_player() {
@@ -159,6 +197,10 @@ function jump_player() {
     if (get_collision(bx, by) != 0) {
         player_vy = jump_force;
     }
+}
+
+function spawn_entity(x, y, color, char, type) {
+    // Stub to prevent load errors, platformer currently has no enemies
 }
 
 function on_platform_request(op, sender, p1, p2, p3) {
@@ -173,11 +215,16 @@ function handle_events() {
 ${STANDARD_AJS_POSTAMBLE}
 `;
 
+export const PLATFORM_AJS_SOURCE = AJS_LOGIC;
+
 export const PLATFORM_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.PLATFORM),
   ": RUN_PLATFORM_CYCLE PROCESS_INBOX UPDATE_PHYSICS RENDER ;",
-  ": INIT_PLATFORMER INIT_PLATFORMER ;",
+  ": SET_LEVEL_ID SET_LEVEL_ID ;",
+  ": INIT_PLATFORMER init_platformer AJS_INIT_CHANNELS ;",
+  ": LOAD_TILE LOAD_TILE ;",
+  ": SPAWN_ENTITY SPAWN_ENTITY ;",
   ": CMD_JUMP JUMP_PLAYER ;",
   ": CMD_MOVE ( dir -- ) MOVE_PLAYER ;"
 ];

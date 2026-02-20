@@ -14,7 +14,9 @@ import { HIVE_KERNEL_BLOCKS } from "./src/kernels/HiveKernel";
 import { PLAYER_KERNEL_BLOCKS } from "./src/kernels/PlayerKernel";
 import { BATTLE_KERNEL_BLOCKS } from "./src/kernels/BattleKernel";
 import { PLATFORM_KERNEL_BLOCKS } from "./src/kernels/PlatformKernel";
-import { KernelID, Opcode, PACKET_SIZE_INTS } from "./src/types/Protocol";
+import { KernelID, Opcode, PACKET_SIZE_INTS, getInstanceID, getRoleID } from "./src/types/Protocol";
+
+const LEVEL_IDS = ["hub", "platformer_1", "roguelike", "platformer_2", "platformer_1_lower", "main_dungeon"];
 
 type GameMode = "BOOT" | "GENERATING" | "GRID" | "PLATFORM";
 type ViewMode = "GAME" | "ARCHITECT";
@@ -55,9 +57,12 @@ const App = () => {
   const [seed, setSeed] = useState("Cyberpunk Sewers");
   const [worldInfo, setWorldInfo] = useState<WorldData | null>(null);
   const [currentLevelId, setCurrentLevelId] = useState<string>("hub");
+  const currentLevelIdx = LEVEL_IDS.indexOf(currentLevelId);
 
   // Track successful kernel loads to prevent loop execution if load failed
   const [activeKernels, setActiveKernels] = useState<Set<string>>(new Set());
+  const initializedLevels = useRef<Set<string>>(new Set());
+  const loadingKernels = useRef<Map<string, Promise<any>>>(new Map());
   const [gameOver, setGameOver] = useState(false);
 
   // Persistent HUD State
@@ -197,10 +202,12 @@ const App = () => {
   }, []);
   // ---------------------------
 
-  const loadKernel = async (id: string, blocks: string[]) => {
+  const loadKernel = async (id: string, blocks: string[], lIdx: number = 0) => {
       try {
+          console.log(`[HOST] Loading Kernel ${id} for Level ${lIdx}...`);
           await forthService.bootProcess(id);
           const proc = forthService.get(id);
+          proc.levelIdx = lIdx;
           addLog(`${id} Kernel Initialized.`);
           
           for (let i = 0; i < blocks.length; i++) {
@@ -211,40 +218,121 @@ const App = () => {
                   addLog(`ERR: ${id} Block ${i} Failed`);
               }
           }
+          proc.isLogicLoaded = true;
           addLog(`${id} Logic Loaded. READY.`);
           setActiveKernels(prev => new Set(prev).add(id));
+          return proc;
       } catch (e) {
           console.error(`Failed to load ${id}`, e);
           addLog(`CRITICAL: ${id} Load Aborted.`);
+          return null;
       }
   };
 
-  // Boot ALL Kernels
+  const ensureKernel = async (id: string, blocks: string[], lIdx: number) => {
+    const proc = forthService.get(id);
+    if (proc.isLogicLoaded) return proc;
+
+    if (loadingKernels.current.has(id)) {
+        return await loadingKernels.current.get(id);
+    }
+
+    const loadPromise = loadKernel(id, blocks, lIdx);
+    loadingKernels.current.set(id, loadPromise);
+    try {
+        return await loadPromise;
+    } finally {
+        loadingKernels.current.delete(id);
+    }
+  };
+
+  // Boot Initial Kernels
   useEffect(() => {
     const bootSystem = async () => {
-        await loadKernel("GRID", GRID_KERNEL_BLOCKS);
-        await loadKernel("HIVE", HIVE_KERNEL_BLOCKS);
-        await loadKernel("PLAYER", PLAYER_KERNEL_BLOCKS);
-        await loadKernel("BATTLE", BATTLE_KERNEL_BLOCKS);
-        await loadKernel("PLATFORM", PLATFORM_KERNEL_BLOCKS);
+        // Boot Player (Singleton)
+        await loadKernel("PLAYER", PLAYER_KERNEL_BLOCKS, 0);
     };
     bootSystem();
     return () => cancelAnimationFrame(requestRef.current!);
   }, []);
 
-  const loadLevel = (level: any) => {
-    const mainProc = forthService.get("GRID");
-    const hiveProc = forthService.get("HIVE");
+  const loadLevel = async (level: any, sourceLevelIdx: number = -1) => {
+    const lIdx = LEVEL_IDS.indexOf(level.id);
+    const gridId = String(getInstanceID(KernelID.GRID, lIdx));
+    const hiveId = String(getInstanceID(KernelID.HIVE, lIdx));
+    const battleId = String(getInstanceID(KernelID.BATTLE, lIdx));
+
+    const physicsBlocks = level.kernel_overrides?.physics || (level.simulation_mode === 'PLATFORM' ? PLATFORM_KERNEL_BLOCKS : GRID_KERNEL_BLOCKS);
+    const aiBlocks = level.kernel_overrides?.ai || HIVE_KERNEL_BLOCKS;
+    const statsBlocks = level.kernel_overrides?.stats || BATTLE_KERNEL_BLOCKS;
+
+    const mainProc = await ensureKernel(gridId, physicsBlocks, lIdx);
+    const hiveProc = await ensureKernel(hiveId, aiBlocks, lIdx);
+    const battleProc = await ensureKernel(battleId, statsBlocks, lIdx);
     const playerProc = forthService.get("PLAYER");
 
-    addLog(`Loading Level: ${level.name}...`);
-    mainProc.run("INIT_MAP");
-    hiveProc.run("INIT_HIVE");
-    playerProc.run("INIT_PLAYER");
+    if (!mainProc || !hiveProc || !battleProc || !playerProc) {
+        addLog("CRITICAL: Failed to ensure required kernels.");
+        return;
+    }
 
-    const platProc = forthService.get("PLATFORM");
-    if (platProc.isReady) {
-        platProc.run("INIT_PLATFORMER");
+    if (initializedLevels.current.has(level.id)) {
+        console.log(`[SYS] Returning to level: ${level.id}`);
+        addLog(`Returning to ${level.name}...`);
+
+        // Determine entry position if we came from another level
+        let entryX = -1, entryY = -1;
+        if (sourceLevelIdx !== -1) {
+            level.map_layout.forEach((row: string, y: number) => {
+                for (let x = 0; x < MEMORY.GRID_WIDTH; x++) {
+                    const char = row[x];
+                    const terrain = level.terrain_legend.find((t: any) => t.symbol === char);
+                    if (terrain && terrain.type === "GATE" && terrain.target_id === sourceLevelIdx) {
+                        entryX = x; entryY = y;
+                    }
+                }
+            });
+        }
+
+        if (entryX !== -1) {
+            console.log(`[SYS] Entry point found at ${entryX}, ${entryY}`);
+            mainProc.run(`${entryX} ${entryY} REQ_TELEPORT`);
+            setPlayerPos({ x: entryX, y: entryY });
+            setCursorPos({ x: entryX, y: entryY });
+        } else {
+            // Sync Player Position from Kernel
+            const gMemView = new DataView(mainProc.getMemory());
+            const px = gMemView.getInt32(0x90000 + 12, true); // Entity 0 X
+            const py = gMemView.getInt32(0x90000 + 8, true);  // Entity 0 Y
+            setPlayerPos({ x: px, y: py });
+            setCursorPos({ x: px, y: py });
+        }
+
+        if (level.simulation_mode === "PLATFORM") {
+            switchMode("PLATFORM");
+        } else {
+            switchMode("GRID");
+            mainProc.run("REDRAW_ALL");
+        }
+        return;
+    }
+    console.log(`[SYS] Initializing level: ${level.id}`);
+
+    addLog(`Initializing ${level.name}...`);
+    if (level.simulation_mode === 'PLATFORM') {
+        mainProc.run("INIT_PLATFORMER");
+    } else {
+        mainProc.run("INIT_MAP");
+    }
+    hiveProc.run("INIT_HIVE");
+    battleProc.run("INIT_BATTLE");
+
+    if (!playerProc.isWordDefined("PLAYER_INITIALIZED")) {
+        playerProc.run("INIT_PLAYER : PLAYER_INITIALIZED ;");
+    }
+
+    if (lIdx !== -1) {
+        mainProc.run(`${lIdx} SET_LEVEL_ID`);
     }
 
     level.map_layout.forEach((row: string, y: number) => {
@@ -255,7 +343,7 @@ const App = () => {
         let type = 0;
         let charCode = char.charCodeAt(0);
 
-        const isPortalPart = char === '[' || char === ']' || char === 'R' || char === 'P';
+        const isPortalPart = char === '[' || char === ']' || char === 'R' || char === 'P' || char === 'U' || char === '>' || char === 'X';
         const terrain = level.terrain_legend.find((t: any) => t.symbol === char);
         if (terrain) {
           color = terrain.color;
@@ -271,22 +359,38 @@ const App = () => {
            type = 1;
         }
 
-        mainProc.run(`${x} ${y} ${color} ${charCode} ${type} LOAD_TILE`);
-        if (platProc.isReady) {
-            platProc.run(`${x} ${y} ${color} ${charCode} ${type} LOAD_TILE`);
-        }
+        const targetId = terrain?.target_id !== undefined ? terrain.target_id : -1;
+        mainProc.run(`${x} ${y} ${color} ${charCode} ${type} ${targetId} LOAD_TILE`);
       }
     });
 
-    let px = 5, py = 5;
-    level.map_layout.forEach((row: string, y: number) => {
-        const x = row.indexOf('@');
-        if (x !== -1) { px = x; py = y; }
-    });
-    addLog(`Spawning Player at ${px},${py}`);
-    setPlayerPos({x: px, y: py});
-    setCursorPos({x: px, y: py});
-    mainProc.run(`${px} ${py} 65535 64 0 SPAWN_ENTITY`);
+    let player_px_host = 5, player_py_host = 5;
+    let foundEntry = false;
+
+    if (sourceLevelIdx !== -1) {
+        level.map_layout.forEach((row: string, y: number) => {
+            for (let x = 0; x < MEMORY.GRID_WIDTH; x++) {
+                const char = row[x];
+                const terrain = level.terrain_legend.find((t: any) => t.symbol === char);
+                if (terrain && terrain.type === "GATE" && terrain.target_id === sourceLevelIdx) {
+                    player_px_host = x; player_py_host = y;
+                    foundEntry = true;
+                }
+            }
+        });
+    }
+
+    if (!foundEntry) {
+        level.map_layout.forEach((row: string, y: number) => {
+            const x = row.indexOf('@');
+            if (x !== -1) { player_px_host = x; player_py_host = y; }
+        });
+    }
+
+    addLog(`Spawning Player at ${player_px_host},${player_py_host}`);
+    setPlayerPos({x: player_px_host, y: player_py_host});
+    setCursorPos({x: player_px_host, y: player_py_host});
+    mainProc.run(`${player_px_host} ${player_py_host} 65535 64 0 SPAWN_ENTITY`);
 
     level.entities.forEach((ent: any) => {
         const c = ent.glyph.color || 0xFF0000;
@@ -304,21 +408,24 @@ const App = () => {
         platformerRef.current.configure(level.platformer_config);
     }
 
-    if (level.id === "platform_dungeon") {
+    initializedLevels.current.add(level.id);
+
+    if (level.simulation_mode === "PLATFORM") {
         switchMode("PLATFORM");
     } else {
         switchMode("GRID");
     }
   };
 
-  const handleLevelTransition = (targetLevelIdx: number) => {
+  const handleLevelTransition = async (targetLevelIdx: number) => {
       if (!worldInfo || !worldInfo.levels) return;
 
-      const levelIds = ["hub", "rogue_dungeon", "platform_dungeon"];
-      const targetId = levelIds[targetLevelIdx];
+      const sourceIdx = currentLevelIdx;
+      const targetId = LEVEL_IDS[targetLevelIdx];
       const nextLevel = worldInfo.levels[targetId];
 
       if (nextLevel) {
+          console.log(`[HOST] Transitioning from ${sourceIdx} to ${targetId} (index ${targetLevelIdx})`);
           addLog(`Transitioning to ${nextLevel.name}...`);
           setCurrentLevelId(targetId);
           // Update active_level in worldInfo for UI components
@@ -326,7 +433,7 @@ const App = () => {
               ...worldInfo,
               active_level: nextLevel
           });
-          loadLevel(nextLevel);
+          await loadLevel(nextLevel, sourceIdx);
       }
   };
 
@@ -346,73 +453,9 @@ const App = () => {
       setWorldInfo(data);
       addLog(`World Generated: ${data.theme.name}`);
       
-      const mainProc = forthService.get("GRID");
-      const hiveProc = forthService.get("HIVE");
-      const playerProc = forthService.get("PLAYER");
-      
-      addLog("Resetting Physics & AI Kernels...");
-      mainProc.run("INIT_MAP"); // Now calls AJS implementation
-      hiveProc.run("INIT_HIVE");
-      playerProc.run("INIT_PLAYER"); // New AJS Init
-
-      addLog("Injecting Map Data...");
-      const level = data.active_level;
-
-      level.map_layout.forEach((row, y) => {
-        if (y >= MEMORY.GRID_HEIGHT) return;
-        for (let x = 0; x < MEMORY.GRID_WIDTH; x++) {
-          const char = row[x] || ' ';
-          let color = 0x888888; 
-          let type = 0; // 0 = Walkable, 1 = Wall
-          let charCode = char.charCodeAt(0);
-
-          const terrain = level.terrain_legend.find(t => t.symbol === char);
-          if (terrain) {
-            color = terrain.color;
-            type = terrain.passable ? 0 : 1;
-          } else if (char === '@') {
-             type = 0;
-             charCode = 32; // Use Space for terrain at spawn point
-          }
-          if (!terrain && char !== '@' && char !== ' ') {
-             type = 1;
-          }
-
-          // LOAD_TILE is now AJS-backed, args same order
-          mainProc.run(`${x} ${y} ${color} ${charCode} ${type} LOAD_TILE`);
-        }
-      });
-      
-      let px = 5, py = 5;
-      level.map_layout.forEach((row, y) => {
-          const x = row.indexOf('@');
-          if (x !== -1) { px = x; py = y; }
-      });
-      addLog(`Spawning Player at ${px},${py}`);
-      setPlayerPos({x: px, y: py});
-      setCursorPos({x: px, y: py});
-      mainProc.run(`${px} ${py} 65535 64 0 SPAWN_ENTITY`);
-
-      level.entities.forEach(ent => {
-          const c = ent.glyph.color || 0xFF0000;
-          const ch = ent.glyph.char.charCodeAt(0);
-          
-          // Determine AI Type
-          let aiType = 1; // Default Passive
-          
-          if (ent.glyph.char === '$') {
-              aiType = 3; // ITEM/LOOT
-          } else if (ent.scripts && ent.scripts.passive && ent.scripts.passive.includes('aggressive')) {
-              aiType = 2; // Aggressive
-          } else if (ent.id.includes("giant")) {
-              aiType = 2; 
-          }
-
-          mainProc.run(`${ent.x} ${ent.y} ${c} ${ch} ${aiType} SPAWN_ENTITY`);
-      });
-
-      platformerRef.current.configure(level.platformer_config);
-      loadLevel(data.active_level);
+      addLog("Simulation Initializing...");
+      setCurrentLevelId(data.active_level.id);
+      await loadLevel(data.active_level);
       addLog("Simulation Ready.");
 
       // Initial Sync
@@ -434,116 +477,105 @@ const App = () => {
   };
 
   const tickSimulation = () => {
-      const main = forthService.get("GRID");
-      const hive = forthService.get("HIVE");
+      const lIdx = currentLevelIdx;
+      const gridId = String(getInstanceID(KernelID.GRID, lIdx));
+      const hiveId = String(getInstanceID(KernelID.HIVE, lIdx));
+      const battleId = String(getInstanceID(KernelID.BATTLE, lIdx));
+
+      const main = forthService.get(gridId);
+      const hive = forthService.get(hiveId);
       const player = forthService.get("PLAYER");
-      const battle = forthService.get("BATTLE");
-      const platform = forthService.get("PLATFORM");
+      const battle = forthService.get(battleId);
 
-      if (!main?.isReady || !hive?.isReady || !player?.isReady || !battle?.isReady) return;
-      if (!activeKernels.has("GRID") || !activeKernels.has("HIVE") || !activeKernels.has("PLAYER") || !activeKernels.has("BATTLE")) return;
+      if (!main?.isReady || !player?.isReady) return;
 
-      const kernels = [
-          { id: KernelID.GRID, proc: main },
-          { id: KernelID.HIVE, proc: hive },
-          { id: KernelID.PLAYER, proc: player },
-          { id: KernelID.BATTLE, proc: battle },
-          { id: KernelID.PLATFORM, proc: platform }
-      ];
+      const activeKernelsList: any[] = [main, player];
+      if (hive?.isReady) activeKernelsList.push(hive);
+      if (battle?.isReady) activeKernelsList.push(battle);
 
       const runBroker = () => {
           const inboxes = new Map<number, number[]>();
-          kernels.forEach(k => inboxes.set(k.id, []));
+          activeKernelsList.forEach(k => {
+              const instId = k.id === "PLAYER" ? 2 : parseInt(k.id);
+              inboxes.set(instId, []);
+          });
 
-          kernels.forEach(k => {
-              if (!k.proc || !k.proc.isReady) return;
-              const outMem = new Int32Array(k.proc.getMemory(), MEMORY.OUTPUT_QUEUE_ADDR, 1024);
+          activeKernelsList.forEach(k => {
+              const outMem = new Int32Array(k.getMemory(), MEMORY.OUTPUT_QUEUE_ADDR, 1024);
               const count = outMem[0];
               
               if (count > 0) {
+                  const kInstId = k.id === "PLAYER" ? 2 : parseInt(k.id);
                   let offset = 1;
                   while (offset < count + 1) {
                       const header = outMem.subarray(offset, offset + PACKET_SIZE_INTS);
                       const op = header[0];
-                      let packetLen = PACKET_SIZE_INTS;
+                      const senderRole = header[1];
+                      const targetRole = header[2];
 
+                      let packetLen = PACKET_SIZE_INTS;
                       if (op === Opcode.SYS_BLOB) {
-                          const dataLen = header[3];
-                          packetLen += dataLen;
+                          packetLen += header[3];
                       }
 
                       const packet = outMem.subarray(offset, offset + packetLen);
-                      forthService.logPacket(header[1], header[2], header[0], header[3], header[4], header[5]);
+                      forthService.logPacket(senderRole, targetRole, op, header[3], header[4], header[5]);
+                      console.log(`[BROKER] Op:${op} SenderRole:${senderRole} TargetRole:${targetRole} P1:${header[3]}`);
 
-                      const target = header[2];
-
-                      if (target === KernelID.HOST) {
+                      if (targetRole === KernelID.HOST) {
                           if (op === Opcode.EVT_DEATH && header[3] === 0) setGameOver(true);
                           if (op === Opcode.EVT_MOVED && header[3] === 0) setPlayerPos({ x: header[4], y: header[5] });
                           if (op === Opcode.EVT_LEVEL_TRANSITION) handleLevelTransition(header[3]);
-                      } else if (target >= 1000) {
-                          channelSubscriptions.current.get(target)?.forEach(subId => {
-                              if (subId !== header[1]) {
-                                  inboxes.get(subId)?.push(...packet);
-                              }
-                          });
-                      } else if (target === KernelID.BUS) {
-                          for (const [key, inbox] of inboxes.entries()) {
-                              if (key !== header[1]) {
-                                  inbox.push(...packet);
-                              }
+                      } else if (targetRole === KernelID.BUS) {
+                          for (const [instId, inbox] of inboxes.entries()) {
+                              if (instId !== kInstId) inbox.push(...packet);
                           }
+                      } else if (targetRole >= 1000) {
+                          channelSubscriptions.current.get(targetRole)?.forEach(subInstId => {
+                              if (subInstId !== kInstId) inboxes.get(subInstId)?.push(...packet);
+                          });
                       } else {
-                          inboxes.get(target)?.push(...packet);
+                          const targetInstId = getInstanceID(targetRole, lIdx);
+                          inboxes.get(targetInstId)?.push(...packet);
                       }
 
-                      // --- CHANNEL MULTICAST LOGIC ---
                       if (op === Opcode.SYS_CHAN_SUB) {
                           const chanId = header[3];
                           if (!channelSubscriptions.current.has(chanId)) channelSubscriptions.current.set(chanId, new Set());
-                          channelSubscriptions.current.get(chanId)!.add(header[1]);
+                          channelSubscriptions.current.get(chanId)!.add(kInstId);
                       } else if (op === Opcode.SYS_CHAN_UNSUB) {
-                          channelSubscriptions.current.get(header[3])?.delete(header[1]);
+                          channelSubscriptions.current.get(header[3])?.delete(kInstId);
                       }
 
                       offset += packetLen;
                   }
-                  outMem[0] = 0; // Clear Output Queue
+                  outMem[0] = 0;
               }
           });
 
-          kernels.forEach(k => {
-              if (!k.proc || !k.proc.isReady) return;
-              const inboxData = inboxes.get(k.id);
-              if (inboxData && inboxData.length > 0) {
-                  const inMem = new Int32Array(k.proc.getMemory(), MEMORY.INPUT_QUEUE_ADDR, 1024);
+          activeKernelsList.forEach(k => {
+              const instId = k.id === "PLAYER" ? 2 : parseInt(k.id);
+              const data = inboxes.get(instId);
+              if (data && data.length > 0) {
+                  const inMem = new Int32Array(k.getMemory(), MEMORY.INPUT_QUEUE_ADDR, 1024);
                   const currentCount = inMem[0];
-                  // Append to prevent losing packets from multiple sources in the same frame
-                  if (currentCount + inboxData.length < 1024) {
-                      inMem[0] = currentCount + inboxData.length;
-                      inMem.set(inboxData, currentCount + 1);
+                  if (currentCount + data.length < 1024) {
+                      inMem[0] = currentCount + data.length;
+                      inMem.set(data, currentCount + 1);
                   }
               }
           });
       };
 
-      // 1. Initial process of pending commands
       runBroker();
       
-      // 2. RUN CYCLES
       player.run("PROCESS_INBOX");
       main.run("PROCESS_INBOX");
-      battle.run("PROCESS_INBOX"); 
-      if (platform?.isReady && activeKernels.has("PLATFORM")) {
-          platform.run("PROCESS_INBOX");
-      }
-      hive.run("RUN_HIVE_CYCLE");
+      if (battle?.isReady) battle.run("PROCESS_INBOX");
+      if (hive?.isReady) hive.run("RUN_HIVE_CYCLE");
       main.run("RUN_ENV_CYCLE");
 
-      // 3. Process resulting events
       runBroker();
-
-      // 4. Immediate feedback pass
       main.run("PROCESS_INBOX");
 
       syncKernelState();
@@ -553,7 +585,8 @@ const App = () => {
 
   const syncKernelState = () => {
       const playerProc = forthService.get("PLAYER");
-      const gridProc = forthService.get("GRID");
+      const gridId = String(getInstanceID(KernelID.GRID, currentLevelIdx));
+      const gridProc = forthService.get(gridId);
       if (!playerProc?.isReady || !gridProc?.isReady) return;
 
       // 1. Sync Player Stats (0xC0000)
@@ -568,10 +601,10 @@ const App = () => {
 
       // 2. Sync Ground Items at Player Position
       const gMemView = new DataView(gridProc.getMemory());
-      const px = gMemView.getInt32(0x90000 + 12, true); // Entity 0 is Player
-      const py = gMemView.getInt32(0x90000 + 8, true);
+      const player_px_host = gMemView.getInt32(0x90000 + 12, true); // Entity 0 is Player
+      const player_py_host = gMemView.getInt32(0x90000 + 8, true);
 
-      const idx = py * MEMORY.GRID_WIDTH + px;
+      const idx = player_py_host * MEMORY.GRID_WIDTH + player_px_host;
       const lootVal = new Uint8Array(gridProc.getMemory())[0x32000 + idx]; // LOOT_MAP
 
       if (lootVal > 0) {
@@ -595,8 +628,9 @@ const App = () => {
   // Inspect Entity at X, Y by checking Kernel Memory directly
   // Returns the ID found, or -1
   const getEntityAt = (x: number, y: number): number => {
-      if (!activeKernels.has("GRID")) return -1;
-      const gridProc = forthService.get("GRID");
+      const gridId = String(getInstanceID(KernelID.GRID, currentLevelIdx));
+      const gridProc = forthService.get(gridId);
+      if (!gridProc?.isReady) return -1;
       const gridMem = new Uint8Array(gridProc.getMemory());
       const ENTITY_MAP_ADDR = 0x31000;
       const idx = y * MEMORY.GRID_WIDTH + x;
@@ -605,8 +639,9 @@ const App = () => {
   };
 
   const isWallAt = (x: number, y: number): boolean => {
-      if (!activeKernels.has("GRID")) return false;
-      const gridProc = forthService.get("GRID");
+      const gridId = String(getInstanceID(KernelID.GRID, currentLevelIdx));
+      const gridProc = forthService.get(gridId);
+      if (!gridProc?.isReady) return false;
       const gridMem = new Uint8Array(gridProc.getMemory());
       const COLLISION_MAP_ADDR = 0x30000;
       const ENTITY_MAP_ADDR = 0x31000;
@@ -619,7 +654,9 @@ const App = () => {
       const foundId = getEntityAt(x, y);
 
       if (foundId !== -1) {
-          const battleProc = forthService.get("BATTLE");
+          const battleId = String(getInstanceID(KernelID.BATTLE, currentLevelIdx));
+          const battleProc = forthService.get(battleId);
+          if (!battleProc?.isReady) return;
           const battleMem = new DataView(battleProc.getMemory());
           const RPG_TABLE_ADDR = 0xA0000; 
           const RPG_ENT_SIZE = 32; 
@@ -645,8 +682,9 @@ const App = () => {
     if (viewMode === "ARCHITECT") return;
 
     if (mode === "GRID") {
-      const mainProc = forthService.get("GRID");
-      if (mainProc && mainProc.isReady && activeKernels.has("GRID")) {
+      const gridId = String(getInstanceID(KernelID.GRID, currentLevelIdx));
+      const mainProc = forthService.get(gridId);
+      if (mainProc && mainProc.isReady) {
          try {
              const raw = mainProc.getMemory() as ArrayBuffer;
              const vramSize = MEMORY.GRID_WIDTH * MEMORY.GRID_HEIGHT * 4;
@@ -658,8 +696,9 @@ const App = () => {
        }
     } 
     else if (mode === "PLATFORM") {
-      const platProc = forthService.get("PLATFORM");
-      if (platProc && platProc.isReady && activeKernels.has("PLATFORM")) {
+      const gridId = String(getInstanceID(KernelID.GRID, currentLevelIdx));
+      const platProc = forthService.get(gridId);
+      if (platProc && platProc.isReady) {
           if (keysDownRef.current.has("ArrowLeft")) platProc.run("-1 CMD_MOVE");
           if (keysDownRef.current.has("ArrowRight")) platProc.run("1 CMD_MOVE");
 
@@ -708,7 +747,8 @@ const App = () => {
         keysDownRef.current.add(k);
 
         if (mode === "PLATFORM") {
-            const platProc = forthService.get("PLATFORM");
+            const gridId = String(getInstanceID(KernelID.GRID, currentLevelIdx));
+            const platProc = forthService.get(gridId);
             if (platProc.isReady) {
                 if (k === "ArrowUp") platProc.run("CMD_JUMP");
                 if (k === "Escape") switchMode("GRID");

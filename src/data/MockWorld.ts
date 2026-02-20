@@ -5,12 +5,13 @@ const HUB_LEVEL: LevelData = {
     id: "hub",
     name: "The Neon-Hub",
     description: "A safe zone with portals to other sectors.",
+    simulation_mode: "GRID",
     map_layout: [
       "########################################",
       "#@.....................................#",
       "#......................................#",
-      "#.........[R]............[P]...........#",
-      "#........ROGUE........PLATFORM.........#",
+      "#.........[P]..........................#",
+      "#........DUNGEONS......................#",
       "#......................................#",
       "#......................................#",
       "#......................................#",
@@ -20,78 +21,158 @@ const HUB_LEVEL: LevelData = {
     terrain_legend: [
       { symbol: ".", name: "Polished Floor", type: "FLOOR", color: 0x222222, passable: true, description: "Clean and safe." },
       { symbol: "#", name: "Hub Wall", type: "WALL", color: 0x444444, passable: false, description: "Reinforced steel." },
-      { symbol: "R", name: "Roguelike Portal", type: "GATE", color: 0x00FFFF, passable: true, description: "To the Deep Sewers." },
-      { symbol: "P", name: "Platformer Portal", type: "GATE", color: 0xFF00FF, passable: true, description: "To the Vertical Shaft." },
+      { symbol: "P", name: "DUNGEONS Portal", type: "GATE", color: 0xFF00FF, passable: true, description: "To the Upper Platformer.", target_id: 1 },
       { symbol: "[", name: "Bracket", type: "WALL", color: 0x555555, passable: false, description: "Decor." },
       { symbol: "]", name: "Bracket", type: "WALL", color: 0x555555, passable: false, description: "Decor." }
     ],
     entities: [],
     entity_roster: [],
-    platformer_config: { gravity: 0.5, jump_force: -1.2, wall_color: 0x444444 }
+    platformer_config: { gravity: 5000, jump_force: -75000, wall_color: 0x444444 }
 };
 
-const ROGUE_LEVEL: LevelData = {
-    id: "rogue_dungeon",
-    name: "The Deep Sewers",
-    description: "A dangerous, monster-infested maze.",
-    map_layout: [], // To be generated
-    terrain_legend: [
-      { symbol: ".", name: "Concrete", type: "FLOOR", color: 0x444444, passable: true, description: "Wet floor." },
-      { symbol: "#", name: "Rusted Wall", type: "WALL", color: 0x885555, passable: false, description: "Iron and rust." },
-      { symbol: "~", name: "Sludge", type: "LIQUID", color: 0x00FF00, passable: true, description: "Toxic waste." }
-    ],
-    entities: [],
-    entity_roster: [
-      {
-        id: "mutant_rat",
-        name: "Mutant Rat",
-        x: 0, y: 0,
-        taxonomy: { race: "Synth-Rat", class: "Scrapper", origin: "Test Subject" },
-        stats: { hp: 20, speed: 12 },
-        glyph: { char: "e", color: 0xFF0000 },
-        scripts: { passive: "ai_passive", active: [] }
-      }
-    ],
-    platformer_config: { gravity: 0.5, jump_force: -1.2, wall_color: 0x885555 }
-};
-
-const PLATFORM_LEVEL: LevelData = {
-    id: "platform_dungeon",
-    name: "The Vertical Shaft",
-    description: "A series of dangerous jumps.",
+const PLATFORMER_1: LevelData = {
+    id: "platformer_1",
+    name: "Upper Platformer",
+    description: "The first vertical descent.",
+    simulation_mode: "PLATFORM",
     map_layout: [
-        "########################################",
-        "#......................................#",
-        "#......................................#",
-        "#......................................#",
-        "#......................................#",
-        "#......................................#",
-        "#......................................#",
-        "#......................................#",
-        "#......................................#",
-        "####################################...#",
-        "#......................................#",
-        "#......................................#",
-        "#......................................#",
-        "#......................................#",
-        "#......................................#",
-        "#......................................#",
-        "#......................................#",
-        "#......................................#",
-        "#......................................#",
-        "########################################"
+      "########################################",
+      "#@.....................................#",
+      "#######................................#",
+      "#............#######...................#",
+      "#.......................#######........#",
+      "#......................................#",
+      "#....................................XX#",
+      "#....................................>>#",
+      "########################################"
     ],
     terrain_legend: [
       { symbol: ".", name: "Air", type: "FLOOR", color: 0x111111, passable: true, description: "Empty space." },
-      { symbol: "#", name: "Grated Platform", type: "WALL", color: 0xAAAAAA, passable: false, description: "Solid metal." }
+      { symbol: "#", name: "Platform", type: "WALL", color: 0xAAAAAA, passable: false, description: "Steel platform." },
+      { symbol: ">", name: "Exit", type: "GATE", color: 0x00FF00, passable: true, description: "To the Roguelike Mid-Level.", target_id: 2 },
+      { symbol: "X", name: "Exit Area", type: "FLOOR", color: 0x004400, passable: true, description: "Safe to exit here." }
     ],
     entities: [],
     entity_roster: [],
-    platformer_config: {
-      gravity: 0.6,
-      jump_force: -1.5,
-      wall_color: 0xAAAAAA
-    }
+    platformer_config: { gravity: 5000, jump_force: -75000, wall_color: 0xAAAAAA }
+};
+
+const ROGUELIKE_LEVEL: LevelData = {
+    id: "roguelike",
+    name: "Roguelike Crossroads",
+    description: "Choose your path through the descent.",
+    simulation_mode: "GRID",
+    map_layout: [
+      "########################################",
+      "#@.................#...................#",
+      "#######............#...................#",
+      "#..................#...................#",
+      "#......#############......##############",
+      "#......#...............................#",
+      "#......#...............................#",
+      "#..#####...............................#",
+      "#..#...................................#",
+      "#L #..........###########..............#",
+      "#L #..........#.........#..............#",
+      "#..#..........#.........#..............#",
+      "#..############.........#..............#",
+      "#.......................#..............#",
+      "#.......................#..............#",
+      "#......##################..............#",
+      "#......#...............................#",
+      "#......#..............................R#",
+      "#......#..............................R#",
+      "########################################"
+    ],
+    terrain_legend: [
+      { symbol: ".", name: "Concrete", type: "FLOOR", color: 0x444444, passable: true, description: "Wet floor." },
+      { symbol: "#", name: "Rusted Wall", type: "WALL", color: 0x885555, passable: false, description: "Iron and rust." },
+      { symbol: "L", name: "Left Path", type: "GATE", color: 0x00FF00, passable: true, description: "To Platformer 2.", target_id: 3 },
+      { symbol: "R", name: "Right Path", type: "GATE", color: 0x00FF00, passable: true, description: "To Platformer 1 Lower.", target_id: 4 }
+    ],
+    entities: [
+        { id: "rat_1", x: 10, y: 3, taxonomy: { race: "Rat", class: "None", origin: "None" }, stats: { hp: 10, speed: 10 }, glyph: { char: "r", color: 0x888888 }, scripts: { passive: "wander", active: [] } },
+        { id: "giant_rat_1", x: 20, y: 10, taxonomy: { race: "Giant Rat", class: "None", origin: "None" }, stats: { hp: 30, speed: 10 }, glyph: { char: "R", color: 0xFF5555 }, scripts: { passive: "aggressive", active: [] } },
+        { id: "loot_1", x: 12, y: 12, taxonomy: { race: "Loot", class: "None", origin: "None" }, stats: { hp: 1, speed: 0 }, glyph: { char: "$", color: 0xFFFF00 }, scripts: { passive: "treasure", active: [] } }
+    ],
+    entity_roster: [],
+    platformer_config: { gravity: 5000, jump_force: -75000, wall_color: 0x885555 }
+};
+
+const PLATFORMER_2: LevelData = {
+    id: "platformer_2",
+    name: "Platformer 2 (2 exits)",
+    description: "One path leads to the core, the other back home.",
+    simulation_mode: "PLATFORM",
+    map_layout: [
+      "########################################",
+      "#@.....................................#",
+      "#######................................#",
+      "#....................................XX#",
+      "#............#######.................HH#",
+      "#....................................XX#",
+      "#....................................EE#",
+      "########################################"
+    ],
+    terrain_legend: [
+      { symbol: ".", name: "Air", type: "FLOOR", color: 0x111111, passable: true, description: "Empty space." },
+      { symbol: "#", name: "Platform", type: "WALL", color: 0xAAAAAA, passable: false, description: "Steel platform." },
+      { symbol: "H", name: "Hub Portal", type: "GATE", color: 0x00FF00, passable: true, description: "Back to Hub.", target_id: 0 },
+      { symbol: "E", name: "Core Descent", type: "GATE", color: 0x00FF00, passable: true, description: "To Main Dungeon.", target_id: 5 },
+      { symbol: "X", name: "Exit Area", type: "FLOOR", color: 0x004400, passable: true, description: "Safe to exit here." }
+    ],
+    entities: [],
+    entity_roster: [],
+    platformer_config: { gravity: 5000, jump_force: -75000, wall_color: 0xAAAAAA }
+};
+
+const PLATFORMER_1_LOWER: LevelData = {
+    id: "platformer_1_lower",
+    name: "Platformer 1 Lower",
+    description: "The direct path to the core.",
+    simulation_mode: "PLATFORM",
+    map_layout: [
+      "########################################",
+      "#@.....................................#",
+      "#######................................#",
+      "#............#######...................#",
+      "#.......................#######........#",
+      "#....................................XX#",
+      "#....................................EE#",
+      "########################################"
+    ],
+    terrain_legend: [
+      { symbol: ".", name: "Air", type: "FLOOR", color: 0x111111, passable: true, description: "Empty space." },
+      { symbol: "#", name: "Platform", type: "WALL", color: 0xAAAAAA, passable: false, description: "Steel platform." },
+      { symbol: "E", name: "Exit", type: "GATE", color: 0x00FF00, passable: true, description: "To Main Dungeon.", target_id: 5 },
+      { symbol: "X", name: "Exit Area", type: "FLOOR", color: 0x004400, passable: true, description: "Safe to exit here." }
+    ],
+    entities: [],
+    entity_roster: [],
+    platformer_config: { gravity: 5000, jump_force: -75000, wall_color: 0xAAAAAA }
+};
+
+const MAIN_DUNGEON: LevelData = {
+    id: "main_dungeon",
+    name: "Main Dungeon",
+    description: "The final depth.",
+    simulation_mode: "GRID",
+    map_layout: [
+      "########################################",
+      "#@.....................................#",
+      "#......................................#",
+      "#...........CENTRAL CORE...............#",
+      "#......................................#",
+      "#......................................#",
+      "########################################"
+    ],
+    terrain_legend: [
+      { symbol: ".", name: "Polished Floor", type: "FLOOR", color: 0x222222, passable: true, description: "Clean and safe." },
+      { symbol: "#", name: "Wall", type: "WALL", color: 0x444444, passable: false, description: "Reinforced steel." }
+    ],
+    entities: [],
+    entity_roster: [],
+    platformer_config: { gravity: 5000, jump_force: -75000, wall_color: 0x444444 }
 };
 
 export const MOCK_WORLD_DATA: WorldData = {
@@ -123,14 +204,20 @@ export const MOCK_WORLD_DATA: WorldData = {
     ]
   },
   atlas: [
-    { id: "hub", name: "The Neon-Hub", biome: "HUB", difficulty: 0, connections: ["rogue_dungeon", "platform_dungeon"] },
-    { id: "rogue_dungeon", name: "The Deep Sewers", biome: "SEWER", difficulty: 1, connections: ["hub"] },
-    { id: "platform_dungeon", name: "The Vertical Shaft", biome: "SHAFT", difficulty: 1, connections: ["hub"] }
+    { id: "hub", name: "The Neon-Hub", biome: "HUB", difficulty: 0, connections: ["platformer_1"] },
+    { id: "platformer_1", name: "Upper Platformer", biome: "SHAFT", difficulty: 1, connections: ["roguelike"] },
+    { id: "roguelike", name: "Roguelike Crossroads", biome: "SEWER", difficulty: 2, connections: ["platformer_2", "platformer_1_lower"] },
+    { id: "platformer_2", name: "Platformer 2 (2 exits)", biome: "SHAFT", difficulty: 3, connections: ["main_dungeon", "hub"] },
+    { id: "platformer_1_lower", name: "Platformer 1 Lower", biome: "SHAFT", difficulty: 2, connections: ["main_dungeon"] },
+    { id: "main_dungeon", name: "Main Dungeon", biome: "CORE", difficulty: 4, connections: [] }
   ],
   levels: {
       "hub": HUB_LEVEL,
-      "rogue_dungeon": ROGUE_LEVEL,
-      "platform_dungeon": PLATFORM_LEVEL
+      "platformer_1": PLATFORMER_1,
+      "roguelike": ROGUELIKE_LEVEL,
+      "platformer_2": PLATFORMER_2,
+      "platformer_1_lower": PLATFORMER_1_LOWER,
+      "main_dungeon": MAIN_DUNGEON
   },
   active_level: HUB_LEVEL
 };

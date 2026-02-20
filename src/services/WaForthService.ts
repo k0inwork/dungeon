@@ -1,6 +1,6 @@
 
 import WAForthPkg from "waforth";
-import { KernelID, Opcode, PACKET_SIZE_INTS, VSO_REGISTRY, hashChannel } from "../types/Protocol";
+import { KernelID, Opcode, PACKET_SIZE_INTS, VSO_REGISTRY, hashChannel,getInstanceID } from "../types/Protocol";
 
 const WAForth = (WAForthPkg as any).default || WAForthPkg;
 
@@ -18,8 +18,10 @@ export interface BusPacket {
 // Individual Process Class (The Virtual Machine)
 export class ForthProcess {
   id: string;
+  levelIdx: number = 0;
   forth: WAForth;
   isReady: boolean = false;
+  isLogicLoaded: boolean = false;
   outputLog: string[] = [];
   emitBuffer: string = ""; // Buffer for standard output
   
@@ -63,10 +65,10 @@ export class ForthProcess {
     try {
         await this.forth.load();
 
-        // 2. Grow Memory to support VRAM
+        // 2. Grow Memory to support VRAM (64 pages = 4MB)
         const currentPages = this.forth.memory().buffer.byteLength / 65536;
-        if (currentPages < 20) {
-            this.forth.memory().grow(20);
+        if (currentPages < 64) {
+            this.forth.memory().grow(64 - currentPages);
             this.log(`Memory Grown. Total: ${this.forth.memory().buffer.byteLength} bytes`);
         }
         
@@ -155,9 +157,19 @@ export class ForthProcess {
             return;
         }
 
-        // 2. Locate Source Kernel
-        const ownerName = typeof entry.owner === 'number' ? KernelID[entry.owner] : entry.owner;
-        const srcProc = this.manager.processes.get(ownerName);
+        // 2. Locate Source Kernel (Level-Aware)
+        const ownerRole = typeof entry.owner === 'number' ? entry.owner : (KernelID as any)[entry.owner];
+        const targetInstanceID = getInstanceID(ownerRole, this.levelIdx);
+        const ownerName = String(targetInstanceID);
+
+        let srcProc = this.manager.processes.get(ownerName);
+
+        // Fallback for legacy named lookups if numeric fails
+        if (!srcProc) {
+            const legacyName = typeof entry.owner === 'number' ? KernelID[entry.owner] : entry.owner;
+            srcProc = this.manager.processes.get(legacyName);
+        }
+
         if (!srcProc || !srcProc.isReady) {
             this.log(`[STDOUT] SYNC ERR: Source Kernel ${ownerName} not ready`);
             stack.push(0);
@@ -253,10 +265,14 @@ export class ForthProcess {
 
   isWordDefined(wordName: string): boolean {
     if (!this.forth) return false;
+    const oldEmit = this.forth.onEmit;
+    this.forth.onEmit = () => {}; // Mute output during check
     try {
         this.forth.interpret(`' ${wordName} DROP`);
+        this.forth.onEmit = oldEmit;
         return true;
     } catch (e) {
+        this.forth.onEmit = oldEmit;
         return false;
     }
   }

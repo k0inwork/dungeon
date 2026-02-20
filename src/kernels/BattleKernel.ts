@@ -187,10 +187,27 @@ function on_battle_request(op, sender, p1, p2, p3) {
 }
 
 function init_battle() {
+    let i = 0;
+    while (i < MAX_ENTITIES) {
+        let e = get_rpg_ptr(i);
+        e.hp = 0;
+        e.maxHp = 0;
+        e.atk = 0;
+        e.def = 0;
+        e.level = 0;
+        e.exp = 0;
+        e.state = 0;
+        e.targetId = 0;
+        e.invItem = 0;
+        i++;
+    }
+    ENTITY_COUNT = 0;
+
     Log("[BATTLE] Battle Kernel Initialized");
     Chan("npc_sync").on(on_npc_sync);
     Chan().on(on_battle_request);
     Chan("BUS").on(on_battle_request);
+
 }
 
 function handle_events() {
@@ -206,7 +223,8 @@ function run_battle_cycle() {
 
 export const BATTLE_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
-  AetherTranspiler.transpile(AJS_LOGIC, KernelID.BATTLE)
+  AetherTranspiler.transpile(AJS_LOGIC, KernelID.BATTLE),
+  ": INIT_BATTLE INIT_BATTLE AJS_INIT_CHANNELS ;"
 ];
 
 export const BATTLE_AJS_SOURCE = AJS_LOGIC;

@@ -17,9 +17,15 @@ const COLLISION_MAP = new Uint8Array(0x30000);
 const ENTITY_MAP    = new Uint8Array(0x31000);
 const LOOT_MAP      = new Uint8Array(0x32000);
 const TERRAIN_MAP   = new Uint32Array(0x40000);
+const TRANSITION_MAP = new Int32Array(0x45000);
 const VRAM          = new Uint32Array(0x80000);
 
 let ENTITY_COUNT = 0;
+let CURRENT_LEVEL_ID = 0;
+
+function set_level_id(id) {
+    CURRENT_LEVEL_ID = id;
+}
 
 // 2. UTILS
 function calc_idx(x, y) { return (y * MAP_WIDTH + x); }
@@ -56,30 +62,45 @@ function check_bounds(x, y) {
   return 1;
 }
 
-function init_map() {
-    let y = 0;
-    while (y < MAP_HEIGHT) {
-        let x = 0;
-        while (x < MAP_WIDTH) {
-            let i = calc_idx(x, y);
-            draw_cell(x, y, 0, 32);
-            COLLISION_MAP[i] = 0;
-            ENTITY_MAP[i] = 0;
-            LOOT_MAP[i] = 0;
-            TERRAIN_MAP[i] = 0;
-            x++;
-        }
-        y++;
+function system_reset_map() {
+    let i = 0;
+    let total = MAP_WIDTH * MAP_HEIGHT;
+    while (i < total) {
+        COLLISION_MAP[i] = 0;
+        ENTITY_MAP[i] = 0;
+        LOOT_MAP[i] = 0;
+        TERRAIN_MAP[i] = 0;
+        TRANSITION_MAP[i] = -1;
+        VRAM[i] = 0;
+        draw_cell(i % 40, i / 40, 0, 32);
+        i++;
     }
+
+    // Clear Entity Array Memory
+    let ei = 0;
+    while (ei < MAX_ENTITIES) {
+        let ent = get_ent_ptr(ei);
+        ent.char = 0;
+        ent.color = 0;
+        ent.x = 0;
+        ent.y = 0;
+        ent.type = 0;
+        ei++;
+    }
+
     ENTITY_COUNT = 0;
+    CURRENT_LEVEL_ID = 0;
+
     Chan().on(on_grid_request);
     Chan("BUS").on(on_grid_request);
+
     Log("[GRID] Map Initialized (AJS v7.0)");
 }
 
-function load_tile(x, y, color, char, type) {
+function load_tile(x, y, color, char, type, target_id) {
     let i = calc_idx(x, y);
     TERRAIN_MAP[i] = (color << 8) | char;
+    TRANSITION_MAP[i] = target_id;
 
     if (type != 0) {
         COLLISION_MAP[i] = 1;
@@ -154,14 +175,9 @@ function move_entity(id, dx, dy) {
 
   // LEVEL TRANSITION CHECK (For Player, ID 0)
   if (id == 0) {
-      let packed = TERRAIN_MAP[ti];
-      let char = packed & 255;
-      if (char == 82) { // 'R'
-          bus_send(EVT_LEVEL_TRANSITION, K_GRID, K_HOST, 1, 0, 0);
-          return;
-      }
-      if (char == 80) { // 'P'
-          bus_send(EVT_LEVEL_TRANSITION, K_GRID, K_HOST, 2, 0, 0);
+      let target = TRANSITION_MAP[ti];
+      if (target != -1) {
+          bus_send(EVT_LEVEL_TRANSITION, K_GRID, K_HOST, target, 0, 0);
           return;
       }
   }
@@ -330,12 +346,44 @@ ${STANDARD_AJS_POSTAMBLE}
 function run_env_cycle() {
     // Empty for now
 }
+
+function redraw_all() {
+    let i = 0;
+    let total = MAP_WIDTH * MAP_HEIGHT;
+    while (i < total) {
+        let x = i % MAP_WIDTH;
+        let y = i / MAP_WIDTH;
+        let packed = TERRAIN_MAP[i];
+        let char = packed & 255;
+        let color = packed >>> 8;
+
+        let val = ENTITY_MAP[i];
+        if (val != 0) {
+            let ent = GridEntity(val - 1);
+            char = ent.char;
+            color = ent.color;
+        } else {
+            val = LOOT_MAP[i];
+            if (val != 0) {
+                let ent = GridEntity(val - 1);
+                char = ent.char;
+                color = ent.color;
+            }
+        }
+        VRAM[i] = (color << 8) | char;
+        i++;
+    }
+}
 `;
 
 export const GRID_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.GRID),
-  ": RUN_GRID_CYCLE PROCESS_INBOX RUN_ENV_CYCLE ;"
+  ": RUN_GRID_CYCLE PROCESS_INBOX RUN_ENV_CYCLE ;",
+  ": SET_LEVEL_ID SET_LEVEL_ID ;",
+  ": INIT_MAP SYSTEM_RESET_MAP AJS_INIT_CHANNELS ;",
+  ": LOAD_TILE LOAD_TILE ;",
+  ": REDRAW_ALL REDRAW_ALL ;"
 ];
 
 export const GRID_AJS_SOURCE = AJS_LOGIC;
