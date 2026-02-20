@@ -214,11 +214,13 @@ const App = () => {
     const mainProc = forthService.get("GRID");
     const hiveProc = forthService.get("HIVE");
     const playerProc = forthService.get("PLAYER");
+    const battleProc = forthService.get("BATTLE");
 
     addLog(`Loading Level: ${level.name}...`);
     mainProc.run("INIT_MAP");
     hiveProc.run("INIT_HIVE");
     playerProc.run("INIT_PLAYER");
+    battleProc.run("INIT_BATTLE");
 
     const platProc = forthService.get("PLATFORM");
     if (platProc.isReady) {
@@ -333,72 +335,7 @@ const App = () => {
       setWorldInfo(data);
       addLog(`World Generated: ${data.theme.name}`);
       
-      const mainProc = forthService.get("GRID");
-      const hiveProc = forthService.get("HIVE");
-      const playerProc = forthService.get("PLAYER");
-      
-      addLog("Resetting Physics & AI Kernels...");
-      mainProc.run("INIT_MAP"); // Now calls AJS implementation
-      hiveProc.run("INIT_HIVE");
-      playerProc.run("INIT_PLAYER"); // New AJS Init
-
-      addLog("Injecting Map Data...");
-      const level = data.active_level;
-
-      level.map_layout.forEach((row, y) => {
-        if (y >= MEMORY.GRID_HEIGHT) return;
-        for (let x = 0; x < MEMORY.GRID_WIDTH; x++) {
-          const char = row[x] || ' ';
-          let color = 0x888888; 
-          let type = 0; // 0 = Walkable, 1 = Wall
-          let charCode = char.charCodeAt(0);
-
-          const terrain = level.terrain_legend.find(t => t.symbol === char);
-          if (terrain) {
-            color = terrain.color;
-            type = terrain.passable ? 0 : 1;
-          } else if (char === '@') {
-             type = 0;
-             charCode = 32; // Use Space for terrain at spawn point
-          }
-          if (!terrain && char !== '@' && char !== ' ') {
-             type = 1;
-          }
-
-          // LOAD_TILE is now AJS-backed, args same order
-          mainProc.run(`${x} ${y} ${color} ${charCode} ${type} LOAD_TILE`);
-        }
-      });
-      
-      let player_px_host = 5, player_py_host = 5;
-      level.map_layout.forEach((row, y) => {
-          const x = row.indexOf('@');
-          if (x !== -1) { player_px_host = x; player_py_host = y; }
-      });
-      addLog(`Spawning Player at ${player_px_host},${player_py_host}`);
-      setPlayerPos({x: player_px_host, y: player_py_host});
-      setCursorPos({x: player_px_host, y: player_py_host});
-      mainProc.run(`${player_px_host} ${player_py_host} 65535 64 0 SPAWN_ENTITY`);
-
-      level.entities.forEach(ent => {
-          const c = ent.glyph.color || 0xFF0000;
-          const ch = ent.glyph.char.charCodeAt(0);
-          
-          // Determine AI Type
-          let aiType = 1; // Default Passive
-          
-          if (ent.glyph.char === '$') {
-              aiType = 3; // ITEM/LOOT
-          } else if (ent.scripts && ent.scripts.passive && ent.scripts.passive.includes('aggressive')) {
-              aiType = 2; // Aggressive
-          } else if (ent.id.includes("giant")) {
-              aiType = 2; 
-          }
-
-          mainProc.run(`${ent.x} ${ent.y} ${c} ${ch} ${aiType} SPAWN_ENTITY`);
-      });
-
-      platformerRef.current.configure(level.platformer_config);
+      addLog("Simulation Initializing...");
       loadLevel(data.active_level);
       addLog("Simulation Ready.");
 

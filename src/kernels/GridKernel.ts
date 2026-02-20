@@ -62,23 +62,35 @@ function check_bounds(x, y) {
 }
 
 function init_map() {
-    let y = 0;
-    while (y < MAP_HEIGHT) {
-        let x = 0;
-        while (x < MAP_WIDTH) {
-            let i = calc_idx(x, y);
-            draw_cell(x, y, 0, 32);
-            COLLISION_MAP[i] = 0;
-            ENTITY_MAP[i] = 0;
-            LOOT_MAP[i] = 0;
-            TERRAIN_MAP[i] = 0;
-            x++;
-        }
-        y++;
+    let i = 0;
+    while (i < 800) {
+        draw_cell(i % 40, i / 40, 0, 32);
+        COLLISION_MAP[i] = 0;
+        ENTITY_MAP[i] = 0;
+        LOOT_MAP[i] = 0;
+        TERRAIN_MAP[i] = 0;
+        VRAM[i] = 0;
+        i++;
     }
+
+    // Clear Entity Array Memory
+    let ei = 0;
+    while (ei < MAX_ENTITIES) {
+        let ent = get_ent_ptr(ei);
+        ent.char = 0;
+        ent.color = 0;
+        ent.x = 0;
+        ent.y = 0;
+        ent.type = 0;
+        ei++;
+    }
+
     ENTITY_COUNT = 0;
+    CURRENT_LEVEL_ID = 0;
+
     Chan().on(on_grid_request);
     Chan("BUS").on(on_grid_request);
+
     Log("[GRID] Map Initialized (AJS v7.0)");
 }
 
@@ -350,7 +362,9 @@ export const GRID_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.GRID),
   ": RUN_GRID_CYCLE PROCESS_INBOX RUN_ENV_CYCLE ;",
-  ": SET_LEVEL_ID SET_LEVEL_ID ;"
+  ": SET_LEVEL_ID SET_LEVEL_ID ;",
+  ": INIT_MAP init_map AJS_INIT_CHANNELS ;",
+  ": LOAD_TILE LOAD_TILE ;"
 ];
 
 export const GRID_AJS_SOURCE = AJS_LOGIC;

@@ -21,11 +21,21 @@ function Random() {
 }
 
 function init_hive() {
+    let i = 0;
+    while (i < MAX_ENTITIES) {
+        let ent = get_hive_ptr(i);
+        ent.x = 0;
+        ent.y = 0;
+        ent.type = 0;
+        i++;
+    }
     HIVE_ENT_COUNT = 0;
+
     Log("[HIVE] Memory Reset");
     Chan("npc_sync").on(on_npc_sync);
     Chan().on(on_bus_event);
     Chan("BUS").on(on_bus_event);
+
 }
 
 // 2. LOGIC
@@ -178,7 +188,9 @@ function run_hive_cycle() {
 
 export const HIVE_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
-  AetherTranspiler.transpile(AJS_LOGIC, KernelID.HIVE)
+  AetherTranspiler.transpile(AJS_LOGIC, KernelID.HIVE),
+  ": INIT_HIVE init_hive AJS_INIT_CHANNELS ;",
+  ": RUN_HIVE_CYCLE RUN_HIVE_CYCLE ;"
 ];
 
 export const HIVE_AJS_SOURCE = AJS_LOGIC;

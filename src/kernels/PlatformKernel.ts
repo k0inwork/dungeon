@@ -41,12 +41,21 @@ function get_collision(cx, cy) {
 }
 
 function init_platformer() {
+    let i = 0;
+    while (i < 800) {
+        TERRAIN_MAP[i] = 0;
+        COLLISION_MAP[i] = 0;
+        VRAM[i] = 0;
+        i++;
+    }
     player_x = 2 * 65536;
     player_y = 2 * 65536;
     player_vx = 0;
     player_vy = 0;
+    CURRENT_LEVEL_ID = 0;
     Chan().on(on_platform_request);
     Chan("BUS").on(on_platform_request);
+
     Log("[PLATFORM] Kernel Ready (v4)");
 }
 
@@ -197,7 +206,8 @@ export const PLATFORM_KERNEL_BLOCKS = [
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.PLATFORM),
   ": RUN_PLATFORM_CYCLE PROCESS_INBOX UPDATE_PHYSICS RENDER ;",
   ": SET_LEVEL_ID SET_LEVEL_ID ;",
-  ": INIT_PLATFORMER INIT_PLATFORMER ;",
+  ": INIT_PLATFORMER init_platformer AJS_INIT_CHANNELS ;",
+  ": LOAD_TILE LOAD_TILE ;",
   ": CMD_JUMP JUMP_PLAYER ;",
   ": CMD_MOVE ( dir -- ) MOVE_PLAYER ;"
 ];
