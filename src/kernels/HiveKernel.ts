@@ -80,6 +80,7 @@ function set_hive_type(id, type) {
 }
 
 function on_npc_sync(opcode, sender, arg1, arg2, arg3) {
+  Log("[HIVE] on_npc_sync Op:"); Log(opcode); Log(" ID:"); Log(arg1);
   if (opcode == EVT_MOVED) {
      update_hive_entity(arg1, arg2, arg3);
      if (arg1 == 0) {
@@ -120,6 +121,7 @@ function abs(n) {
 }
 
 function decide_action(id) {
+  Log("[HIVE] Deciding for ID:"); Log(id);
   let ent = get_hive_ptr(id);
   if (ent.type == 3) return; // Skip items/loot
 
@@ -174,6 +176,7 @@ ${STANDARD_AJS_POSTAMBLE}
 function run_cycle() {
    let i = 1;
    let count = HIVE_ENT_COUNT;
+   Log("[HIVE] Cycle Start. Count:"); Log(count);
    while (i < count) {
       decide_action(i);
       i++;
@@ -189,7 +192,7 @@ function run_hive_cycle() {
 export const HIVE_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.HIVE),
-  ": INIT_HIVE init_hive AJS_INIT_CHANNELS ;",
+  ": INIT_HIVE INIT_HIVE AJS_INIT_CHANNELS ;",
   ": RUN_HIVE_CYCLE RUN_HIVE_CYCLE ;"
 ];
 

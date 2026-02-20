@@ -224,7 +224,7 @@ function run_battle_cycle() {
 export const BATTLE_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.BATTLE),
-  ": INIT_BATTLE init_battle AJS_INIT_CHANNELS ;"
+  ": INIT_BATTLE INIT_BATTLE AJS_INIT_CHANNELS ;"
 ];
 
 export const BATTLE_AJS_SOURCE = AJS_LOGIC;

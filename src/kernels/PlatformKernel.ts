@@ -12,7 +12,18 @@ const MAP_HEIGHT = 20;
 
 const COLLISION_MAP = new Uint8Array(0x30000);
 const TERRAIN_MAP   = new Uint32Array(0x40000);
+const TRANSITION_MAP = new Int32Array(0x45000);
 const VRAM          = new Uint32Array(0x80000);
+
+struct GridEntity {
+    char,
+    color,
+    y,
+    x,
+    type
+}
+
+let entities = new Array(GridEntity, 1, 0x90000);
 
 // Fixed-point 16.16
 let player_x = 2 * 65536;
@@ -42,9 +53,11 @@ function get_collision(cx, cy) {
 
 function init_platformer() {
     let i = 0;
-    while (i < 800) {
+    let total = MAP_WIDTH * MAP_HEIGHT;
+    while (i < total) {
         TERRAIN_MAP[i] = 0;
         COLLISION_MAP[i] = 0;
+        TRANSITION_MAP[i] = -1;
         VRAM[i] = 0;
         i++;
     }
@@ -59,10 +72,11 @@ function init_platformer() {
     Log("[PLATFORM] Kernel Ready (v4)");
 }
 
-function load_tile(x, y, color, char, type) {
+function load_tile(x, y, color, char, type, target_id) {
     let i = calc_idx(x, y);
     TERRAIN_MAP[i] = (color << 8) | char;
     COLLISION_MAP[i] = type;
+    TRANSITION_MAP[i] = target_id;
 }
 
 function update_physics() {
@@ -137,19 +151,11 @@ function update_physics() {
     let exit_px = (player_x + 32768) / 65536;
     let exit_py = (player_y + 32768) / 65536;
     let exit_idx = calc_idx(exit_px, exit_py);
-    let exit_packed = TERRAIN_MAP[exit_idx];
-    let exit_char = exit_packed & 255;
+    let exit_target = TRANSITION_MAP[exit_idx];
 
-    if (exit_char == 62 || exit_char == 88) { // '>' or 'X'
-        let exit_target = -1;
-        if (CURRENT_LEVEL_ID == 1) { exit_target = 2; } // P1 -> Roguelike (Index 2)
-        if (CURRENT_LEVEL_ID == 3) { exit_target = 5; } // P2 -> Main Dungeon (Index 5)
-        if (CURRENT_LEVEL_ID == 4) { exit_target = 0; } // P3 -> Hub (Index 0)
-
-        if (exit_target != -1) {
-            bus_send(EVT_LEVEL_TRANSITION, K_PLATFORM, K_HOST, exit_target, 0, 0);
-            player_x = 5 * 65536; // Reset pos
-        }
+    if (exit_target != -1) {
+        bus_send(EVT_LEVEL_TRANSITION, K_PLATFORM, K_HOST, exit_target, 0, 0);
+        player_x = 5 * 65536; // Reset pos
     }
 
     if (player_x > 39 * 65536) player_x = 39 * 65536;
@@ -157,9 +163,15 @@ function update_physics() {
 }
 
 function render() {
+    // 0. Sync Entity 0 (Player) for Host
+    let ent = GridEntity(0);
+    ent.x = player_x / 65536;
+    ent.y = player_y / 65536;
+
     // 1. Copy Terrain to VRAM
     let ri = 0;
-    while (ri < 800) { // 40 * 20
+    let total = MAP_WIDTH * MAP_HEIGHT;
+    while (ri < total) {
         VRAM[ri] = TERRAIN_MAP[ri];
         ri++;
     }
@@ -169,7 +181,7 @@ function render() {
     let ren_py = player_y / 65536;
     let ren_pidx = calc_idx(ren_px, ren_py);
     if (ren_pidx >= 0) {
-        if (ren_pidx < 800) {
+        if (ren_pidx < MAP_WIDTH * MAP_HEIGHT) {
             VRAM[ren_pidx] = (0x00FF00 << 8) | 64; // Green '@'
         }
     }
@@ -185,6 +197,10 @@ function jump_player() {
     if (get_collision(bx, by) != 0) {
         player_vy = jump_force;
     }
+}
+
+function spawn_entity(x, y, color, char, type) {
+    // Stub to prevent load errors, platformer currently has no enemies
 }
 
 function on_platform_request(op, sender, p1, p2, p3) {
@@ -208,6 +224,7 @@ export const PLATFORM_KERNEL_BLOCKS = [
   ": SET_LEVEL_ID SET_LEVEL_ID ;",
   ": INIT_PLATFORMER init_platformer AJS_INIT_CHANNELS ;",
   ": LOAD_TILE LOAD_TILE ;",
+  ": SPAWN_ENTITY SPAWN_ENTITY ;",
   ": CMD_JUMP JUMP_PLAYER ;",
   ": CMD_MOVE ( dir -- ) MOVE_PLAYER ;"
 ];

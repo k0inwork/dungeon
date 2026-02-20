@@ -11,6 +11,17 @@ export enum KernelID {
     BUS = 255
 }
 
+export function getInstanceID(role: number, levelIdx: number): number {
+    if (role === KernelID.PLAYER) return 2;
+    return (role * 100) + levelIdx;
+}
+
+export function getRoleID(instanceID: number): number {
+    if (instanceID === 2) return KernelID.PLAYER;
+    if (instanceID < 100) return instanceID;
+    return Math.floor(instanceID / 100);
+}
+
 export enum Opcode {
     // --- PHYSICS (100-199) ---
     REQ_MOVE = 101,     // [ID, dX, dY]

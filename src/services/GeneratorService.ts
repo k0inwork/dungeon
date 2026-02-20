@@ -87,12 +87,14 @@ export interface TerrainDef {
   color: number;
   description: string;
   passable: boolean;
+  target_id?: number;
 }
 
 export interface LevelData {
     id: string;
     name: string;
     description: string;
+    simulation_mode?: "GRID" | "PLATFORM";
     map_layout: string[]; 
     terrain_legend: TerrainDef[];
     entities: EntityDef[];
