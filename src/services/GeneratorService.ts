@@ -2,6 +2,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { MapGenerator } from "./MapGenerator";
 import { MOCK_WORLD_DATA } from "../data/MockWorld";
+import { webLLMService } from "./WebLLMService";
 
 // --- CONTEXT INJECTION (THE RULES) ---
 const BATTLE_LOGIC_CONTEXT = `
@@ -122,8 +123,37 @@ export interface WorldData {
   levels?: Record<string, LevelData>;
 }
 
+export type AIProviderType = 'GEMINI' | 'WEBLLM';
+
+interface AIProvider {
+    generate(prompt: string, options?: { json?: boolean, phase?: string }): Promise<string>;
+}
+
+class GeminiProvider implements AIProvider {
+    private ai: GoogleGenAI;
+    constructor(apiKey: string) {
+        this.ai = new GoogleGenAI(apiKey);
+    }
+    async generate(prompt: string, options?: { json?: boolean }): Promise<string> {
+        const result = await this.ai.models.generateContent({
+            model: 'gemini-2.0-flash',
+            contents: prompt,
+            config: options?.json ? { responseMimeType: "application/json" } : undefined
+        });
+        return result.text || "";
+    }
+}
+
+class WebLLMProvider implements AIProvider {
+    async generate(prompt: string, options?: { json?: boolean }): Promise<string> {
+        const system = options?.json ? "Respond ONLY with valid JSON. No conversational text. No markdown blocks." : undefined;
+        return await webLLMService.generate(prompt, system);
+    }
+}
+
 class GeneratorService {
-  private ai: GoogleGenAI;
+  private provider: AIProvider | null = null;
+  private providerType: AIProviderType = 'GEMINI';
   public history: InteractionLog[] = [];
   private logIdCounter = 0;
 
@@ -132,15 +162,27 @@ class GeneratorService {
     // @ts-ignore
     const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
     if (apiKey) {
-      this.ai = new GoogleGenAI(apiKey);
-    } else {
-      // Mock AI if no key provided to allow boot
-      this.ai = {
-        models: {
-          generateContent: async () => { throw new Error("AI API Key Missing"); }
-        }
-      } as any;
+      this.provider = new GeminiProvider(apiKey);
     }
+  }
+
+  setProvider(type: AIProviderType) {
+      this.providerType = type;
+      if (type === 'GEMINI') {
+          // @ts-ignore
+          const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+          if (apiKey) {
+              this.provider = new GeminiProvider(apiKey);
+          } else {
+              this.provider = null;
+          }
+      } else {
+          this.provider = new WebLLMProvider();
+      }
+  }
+
+  getProviderType(): AIProviderType {
+      return this.providerType;
   }
 
   private log(phase: string, prompt: string, response: string) {
@@ -164,13 +206,12 @@ class GeneratorService {
   }
 
   private async callAI(prompt: string, phaseName: string): Promise<any> {
+    if (!this.provider) {
+        throw new Error(`AI Provider ${this.providerType} not configured or unavailable.`);
+    }
+
     try {
-      const result = await this.ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
-        contents: prompt,
-        config: { responseMimeType: "application/json" }
-      });
-      const text = result.text;
+      const text = await this.provider.generate(prompt, { json: true });
       if (!text) throw new Error("Empty response");
       
       this.log(phaseName, prompt, text);
@@ -179,6 +220,11 @@ class GeneratorService {
         return JSON.parse(this.cleanJson(text));
       } catch (parseError) {
         console.error("JSON Parse Error", parseError);
+        // Fallback for some models that might not follow JSON instruction perfectly
+        const match = text.match(/\{[\s\S]*\}/);
+        if (match) {
+            return JSON.parse(match[0]);
+        }
         throw new Error("Failed to parse AI response as JSON");
       }
     } catch (e) {
@@ -189,6 +235,8 @@ class GeneratorService {
   }
 
   async repairForthCode(code: string, error: string): Promise<string> {
+      if (!this.provider) throw new Error("AI Provider unavailable");
+
       const prompt = `
 Role: Forth Expert / WAForth Compiler.
 Task: Fix the following Forth Kernel code which failed to compile/run.
@@ -203,11 +251,7 @@ CODE:
 ${code}
 `;
       try {
-          const result = await this.ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
-            contents: prompt,
-          });
-          const text = result.text;
+          const text = await this.provider.generate(prompt);
           this.log("DEBUG_REPAIR", prompt, text);
           return this.cleanCode(text);
       } catch (e) {
