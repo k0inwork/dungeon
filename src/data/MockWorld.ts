@@ -61,9 +61,24 @@ const ROGUELIKE_LEVEL: LevelData = {
     description: "A crossroads in the deep.",
     map_layout: [
       "########################################",
-      "#......................................#",
-      "#>....................................>#",
-      "#>@...................................>#",
+      "#@.................#...................#",
+      "#######............#...................#",
+      "#..................#...................#",
+      "#......#############......##############",
+      "#......#...............................#",
+      "#......#...............................#",
+      "#..#####...............................#",
+      "#..#...................................#",
+      "#> #..........###########..............#",
+      "#> #..........#.........#..............#",
+      "#..#..........#.........#..............#",
+      "#..############.........#..............#",
+      "#.......................#..............#",
+      "#.......................#..............#",
+      "#......##################..............#",
+      "#......#...............................#",
+      "#......#..............................>#",
+      "#......#..............................>#",
       "########################################"
     ],
     terrain_legend: [
@@ -71,7 +86,22 @@ const ROGUELIKE_LEVEL: LevelData = {
       { symbol: "#", name: "Rusted Wall", type: "WALL", color: 0x885555, passable: false, description: "Iron and rust." },
       { symbol: ">", name: "Exit", type: "GATE", color: 0x00FF00, passable: true, description: "Next level." }
     ],
-    entities: [],
+    entities: [
+        { id: "rat_1", x: 10, y: 3, glyph: { char: "r", color: 0x888888 }, scripts: { passive: ["wander"] } },
+        { id: "rat_2", x: 15, y: 1, glyph: { char: "r", color: 0x888888 }, scripts: { passive: ["wander"] } },
+        { id: "rat_3", x: 25, y: 5, glyph: { char: "r", color: 0x888888 }, scripts: { passive: ["wander"] } },
+        { id: "rat_4", x: 30, y: 10, glyph: { char: "r", color: 0x888888 }, scripts: { passive: ["wander"] } },
+        { id: "rat_5", x: 5, y: 15, glyph: { char: "r", color: 0x888888 }, scripts: { passive: ["wander"] } },
+        { id: "rat_6", x: 35, y: 15, glyph: { char: "r", color: 0x888888 }, scripts: { passive: ["wander"] } },
+        { id: "giant_rat_1", x: 20, y: 10, glyph: { char: "R", color: 0xFF5555 }, scripts: { passive: ["aggressive"] } },
+        { id: "giant_rat_2", x: 35, y: 5, glyph: { char: "R", color: 0xFF5555 }, scripts: { passive: ["aggressive"] } },
+        { id: "giant_rat_3", x: 10, y: 18, glyph: { char: "R", color: 0xFF5555 }, scripts: { passive: ["aggressive"] } },
+        { id: "loot_1", x: 12, y: 12, glyph: { char: "$", color: 0xFFFF00 }, scripts: {} },
+        { id: "loot_2", x: 38, y: 2, glyph: { char: "$", color: 0xFFFF00 }, scripts: {} },
+        { id: "loot_3", x: 2, y: 18, glyph: { char: "$", color: 0xFFFF00 }, scripts: {} },
+        { id: "loot_4", x: 22, y: 1, glyph: { char: "$", color: 0xFFFF00 }, scripts: {} },
+        { id: "loot_5", x: 18, y: 18, glyph: { char: "$", color: 0xFFFF00 }, scripts: {} }
+    ],
     entity_roster: [],
     platformer_config: { gravity: 0.5, jump_force: -1.2, wall_color: 0x885555 }
 };
