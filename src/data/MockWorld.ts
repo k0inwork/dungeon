@@ -221,5 +221,5 @@ export const MOCK_WORLD_DATA: WorldData = {
       "platformer_3": PLATFORMER_3,
       "main_dungeon": MAIN_DUNGEON
   },
-  active_level: HUB_LEVEL
+  active_level: ROGUELIKE_LEVEL
 };
