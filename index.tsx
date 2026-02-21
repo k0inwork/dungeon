@@ -16,7 +16,7 @@ import { BATTLE_KERNEL_BLOCKS } from "./src/kernels/BattleKernel";
 import { PLATFORM_KERNEL_BLOCKS } from "./src/kernels/PlatformKernel";
 import { KernelID, Opcode, PACKET_SIZE_INTS, getInstanceID, getRoleID } from "./src/types/Protocol";
 
-const LEVEL_IDS = ["hub", "platformer_1", "roguelike", "platformer_2", "platformer_1_lower", "main_dungeon"];
+const LEVEL_IDS = ["hub", "platformer_1", "roguelike", "platformer_2", "platformer_1_lower"];
 
 type GameMode = "BOOT" | "GENERATING" | "GRID" | "PLATFORM";
 type ViewMode = "GAME" | "ARCHITECT";
@@ -276,7 +276,7 @@ const App = () => {
     const mainProc = await ensureKernel(gridId, physicsBlocks, lIdx);
     const hiveProc = await ensureKernel(hiveId, aiBlocks, lIdx);
     const battleProc = await ensureKernel(battleId, statsBlocks, lIdx);
-    const playerProc = forthService.get("PLAYER");
+    const playerProc = await ensureKernel("PLAYER", PLAYER_KERNEL_BLOCKS, 0);
 
     if (!mainProc || !hiveProc || !battleProc || !playerProc) {
         addLog("CRITICAL: Failed to ensure required kernels.");
@@ -341,6 +341,10 @@ const App = () => {
     if (lIdx !== -1) {
         mainProc.run(`${lIdx} SET_LEVEL_ID`);
     }
+
+    // [INIT-SYNC] Run broker to process channel subscriptions BEFORE spawning entities
+    // This ensures Hive/Battle kernels are ready to receive spawn events.
+    runBroker([mainProc, hiveProc, battleProc, playerProc], lIdx);
 
     level.map_layout.forEach((row: string, y: number) => {
       if (y >= MEMORY.GRID_HEIGHT) return;
@@ -411,6 +415,15 @@ const App = () => {
         mainProc.run(`${ent.x} ${ent.y} ${c} ${ch} ${aiType} SPAWN_ENTITY`);
     });
 
+    // Final broker run to deliver spawn events to Hive/Battle
+    runBroker([mainProc, hiveProc, battleProc, playerProc], lIdx);
+
+    // Immediately process inboxes so kernels are initialized before first render
+    mainProc.run("PROCESS_INBOX");
+    hiveProc.run("PROCESS_INBOX");
+    battleProc.run("PROCESS_INBOX");
+    playerProc.run("PROCESS_INBOX");
+
     if (level.platformer_config) {
         platformerRef.current.configure(level.platformer_config);
     }
@@ -422,6 +435,9 @@ const App = () => {
     } else {
         switchMode("GRID");
     }
+
+    // Sync state immediately after level load
+    setTimeout(syncKernelState, 50);
   };
 
   const handleLevelTransition = async (targetLevelIdx: number) => {
@@ -483,6 +499,80 @@ const App = () => {
     }
   };
 
+  const runBroker = (kernels: any[], levelIdx: number) => {
+      const inboxes = new Map<number, number[]>();
+      kernels.forEach(k => {
+          const instId = k.id === "PLAYER" ? 2 : parseInt(k.id);
+          inboxes.set(instId, []);
+      });
+
+      kernels.forEach(k => {
+          const outMem = new Int32Array(k.getMemory(), MEMORY.OUTPUT_QUEUE_ADDR, 1024);
+          const count = outMem[0];
+
+          if (count > 0) {
+              const kInstId = k.id === "PLAYER" ? 2 : parseInt(k.id);
+              let offset = 1;
+              while (offset < count + 1) {
+                  const header = outMem.subarray(offset, offset + PACKET_SIZE_INTS);
+                  const op = header[0];
+                  const senderRole = header[1];
+                  const targetRole = header[2];
+
+                  let packetLen = PACKET_SIZE_INTS;
+                  if (op === Opcode.SYS_BLOB) {
+                      packetLen += header[3];
+                  }
+
+                  const packet = outMem.subarray(offset, offset + packetLen);
+                  forthService.logPacket(senderRole, targetRole, op, header[3], header[4], header[5]);
+                  console.log(`[BROKER] Op:${op} SenderRole:${senderRole} TargetRole:${targetRole} P1:${header[3]}`);
+
+                  if (targetRole === KernelID.HOST) {
+                      if (op === Opcode.EVT_DEATH && header[3] === 0) setGameOver(true);
+                      if (op === Opcode.EVT_MOVED && header[3] === 0) setPlayerPos({ x: header[4], y: header[5] });
+                      if (op === Opcode.EVT_LEVEL_TRANSITION) handleLevelTransition(header[3]);
+                  } else if (targetRole === KernelID.BUS) {
+                      for (const [instId, inbox] of inboxes.entries()) {
+                          if (instId !== kInstId) inbox.push(...packet);
+                      }
+                  } else if (targetRole >= 1000) {
+                      channelSubscriptions.current.get(targetRole)?.forEach(subInstId => {
+                          if (subInstId !== kInstId) inboxes.get(subInstId)?.push(...packet);
+                      });
+                  } else {
+                      const targetInstId = getInstanceID(targetRole, levelIdx);
+                      inboxes.get(targetInstId)?.push(...packet);
+                  }
+
+                  if (op === Opcode.SYS_CHAN_SUB) {
+                      const chanId = header[3];
+                      if (!channelSubscriptions.current.has(chanId)) channelSubscriptions.current.set(chanId, new Set());
+                      channelSubscriptions.current.get(chanId)!.add(kInstId);
+                  } else if (op === Opcode.SYS_CHAN_UNSUB) {
+                      channelSubscriptions.current.get(header[3])?.delete(kInstId);
+                  }
+
+                  offset += packetLen;
+              }
+              outMem[0] = 0;
+          }
+      });
+
+      kernels.forEach(k => {
+          const instId = k.id === "PLAYER" ? 2 : parseInt(k.id);
+          const data = inboxes.get(instId);
+          if (data && data.length > 0) {
+              const inMem = new Int32Array(k.getMemory(), MEMORY.INPUT_QUEUE_ADDR, 1024);
+              const currentCount = inMem[0];
+              if (currentCount + data.length < 1024) {
+                  inMem[0] = currentCount + data.length;
+                  inMem.set(data, currentCount + 1);
+              }
+          }
+      });
+  };
+
   const tickSimulation = () => {
       const lIdx = currentLevelIdx;
       const gridId = String(getInstanceID(KernelID.GRID, lIdx));
@@ -500,81 +590,7 @@ const App = () => {
       if (hive?.isReady) activeKernelsList.push(hive);
       if (battle?.isReady) activeKernelsList.push(battle);
 
-      const runBroker = () => {
-          const inboxes = new Map<number, number[]>();
-          activeKernelsList.forEach(k => {
-              const instId = k.id === "PLAYER" ? 2 : parseInt(k.id);
-              inboxes.set(instId, []);
-          });
-
-          activeKernelsList.forEach(k => {
-              const outMem = new Int32Array(k.getMemory(), MEMORY.OUTPUT_QUEUE_ADDR, 1024);
-              const count = outMem[0];
-              
-              if (count > 0) {
-                  const kInstId = k.id === "PLAYER" ? 2 : parseInt(k.id);
-                  let offset = 1;
-                  while (offset < count + 1) {
-                      const header = outMem.subarray(offset, offset + PACKET_SIZE_INTS);
-                      const op = header[0];
-                      const senderRole = header[1];
-                      const targetRole = header[2];
-
-                      let packetLen = PACKET_SIZE_INTS;
-                      if (op === Opcode.SYS_BLOB) {
-                          packetLen += header[3];
-                      }
-
-                      const packet = outMem.subarray(offset, offset + packetLen);
-                      forthService.logPacket(senderRole, targetRole, op, header[3], header[4], header[5]);
-                      console.log(`[BROKER] Op:${op} SenderRole:${senderRole} TargetRole:${targetRole} P1:${header[3]}`);
-
-                      if (targetRole === KernelID.HOST) {
-                          if (op === Opcode.EVT_DEATH && header[3] === 0) setGameOver(true);
-                          if (op === Opcode.EVT_MOVED && header[3] === 0) setPlayerPos({ x: header[4], y: header[5] });
-                          if (op === Opcode.EVT_LEVEL_TRANSITION) handleLevelTransition(header[3]);
-                      } else if (targetRole === KernelID.BUS) {
-                          for (const [instId, inbox] of inboxes.entries()) {
-                              if (instId !== kInstId) inbox.push(...packet);
-                          }
-                      } else if (targetRole >= 1000) {
-                          channelSubscriptions.current.get(targetRole)?.forEach(subInstId => {
-                              if (subInstId !== kInstId) inboxes.get(subInstId)?.push(...packet);
-                          });
-                      } else {
-                          const targetInstId = getInstanceID(targetRole, lIdx);
-                          inboxes.get(targetInstId)?.push(...packet);
-                      }
-
-                      if (op === Opcode.SYS_CHAN_SUB) {
-                          const chanId = header[3];
-                          if (!channelSubscriptions.current.has(chanId)) channelSubscriptions.current.set(chanId, new Set());
-                          channelSubscriptions.current.get(chanId)!.add(kInstId);
-                      } else if (op === Opcode.SYS_CHAN_UNSUB) {
-                          channelSubscriptions.current.get(header[3])?.delete(kInstId);
-                      }
-
-                      offset += packetLen;
-                  }
-                  outMem[0] = 0;
-              }
-          });
-
-          activeKernelsList.forEach(k => {
-              const instId = k.id === "PLAYER" ? 2 : parseInt(k.id);
-              const data = inboxes.get(instId);
-              if (data && data.length > 0) {
-                  const inMem = new Int32Array(k.getMemory(), MEMORY.INPUT_QUEUE_ADDR, 1024);
-                  const currentCount = inMem[0];
-                  if (currentCount + data.length < 1024) {
-                      inMem[0] = currentCount + data.length;
-                      inMem.set(data, currentCount + 1);
-                  }
-              }
-          });
-      };
-
-      runBroker();
+      runBroker(activeKernelsList, lIdx);
       
       player.run("PROCESS_INBOX");
       main.run("PROCESS_INBOX");
@@ -582,7 +598,7 @@ const App = () => {
       if (hive?.isReady) hive.run("RUN_HIVE_CYCLE");
       main.run("RUN_ENV_CYCLE");
 
-      runBroker();
+      runBroker(activeKernelsList, lIdx);
       main.run("PROCESS_INBOX");
 
       syncKernelState();
@@ -596,15 +612,29 @@ const App = () => {
       const gridProc = forthService.get(gridId);
       if (!playerProc?.isReady || !gridProc?.isReady) return;
 
-      // 1. Sync Player Stats (0xC0000)
+      // 1. Sync Player Stats (0xA0000 in Battle Kernel for real-time stats, fallback to 0xC0000 in Player Kernel)
+      const battleId = String(getInstanceID(KernelID.BATTLE, currentLevelIdx));
+      const battleProc = forthService.get(battleId);
+
+      let hp = 0, maxHp = 0, gold = 0, inv = 0;
+
+      if (battleProc?.isReady) {
+          const bMem = new DataView(battleProc.getMemory());
+          hp = bMem.getInt32(0xA0000, true);
+          maxHp = bMem.getInt32(0xA0004, true);
+      }
+
       const pMem = new DataView(playerProc.getMemory());
-      const pBase = 0xC0000;
-      setPlayerStats({
-          hp: pMem.getInt32(pBase, true),
-          maxHp: pMem.getInt32(pBase + 4, true),
-          gold: pMem.getInt32(pBase + 8, true),
-          inv: pMem.getInt32(pBase + 12, true)
-      });
+      gold = pMem.getInt32(0xC0008, true);
+      inv = pMem.getInt32(0xC000C, true);
+
+      // Fallback for HP if Battle Kernel not ready or uninitialized
+      if (hp === 0 && maxHp === 0) {
+          hp = pMem.getInt32(0xC0000, true);
+          maxHp = pMem.getInt32(0xC0004, true);
+      }
+
+      setPlayerStats({ hp, maxHp, gold, inv });
 
       // 2. Sync Ground Items at Player Position
       const gMemView = new DataView(gridProc.getMemory());

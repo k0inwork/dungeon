@@ -92,8 +92,12 @@ const ROGUELIKE_LEVEL: LevelData = {
     ],
     entities: [
         { id: "rat_1", x: 10, y: 3, taxonomy: { race: "Rat", class: "None", origin: "None" }, stats: { hp: 10, speed: 10 }, glyph: { char: "r", color: 0x888888 }, scripts: { passive: "wander", active: [] } },
+        { id: "rat_2", x: 15, y: 6, taxonomy: { race: "Rat", class: "None", origin: "None" }, stats: { hp: 10, speed: 10 }, glyph: { char: "r", color: 0x888888 }, scripts: { passive: "wander", active: [] } },
+        { id: "rat_3", x: 25, y: 15, taxonomy: { race: "Rat", class: "None", origin: "None" }, stats: { hp: 10, speed: 10 }, glyph: { char: "r", color: 0x888888 }, scripts: { passive: "wander", active: [] } },
         { id: "giant_rat_1", x: 20, y: 10, taxonomy: { race: "Giant Rat", class: "None", origin: "None" }, stats: { hp: 30, speed: 10 }, glyph: { char: "R", color: 0xFF5555 }, scripts: { passive: "aggressive", active: [] } },
-        { id: "loot_1", x: 12, y: 12, taxonomy: { race: "Loot", class: "None", origin: "None" }, stats: { hp: 1, speed: 0 }, glyph: { char: "$", color: 0xFFFF00 }, scripts: { passive: "treasure", active: [] } }
+        { id: "giant_rat_2", x: 30, y: 5, taxonomy: { race: "Giant Rat", class: "None", origin: "None" }, stats: { hp: 30, speed: 10 }, glyph: { char: "R", color: 0xFF5555 }, scripts: { passive: "aggressive", active: [] } },
+        { id: "loot_1", x: 12, y: 12, taxonomy: { race: "Loot", class: "None", origin: "None" }, stats: { hp: 1, speed: 0 }, glyph: { char: "$", color: 0xFFFF00 }, scripts: { passive: "treasure", active: [] } },
+        { id: "loot_2", x: 35, y: 18, taxonomy: { race: "Loot", class: "None", origin: "None" }, stats: { hp: 1, speed: 0 }, glyph: { char: "$", color: 0xFFFF00 }, scripts: { passive: "treasure", active: [] } }
     ],
     entity_roster: [],
     platformer_config: { gravity: 5000, jump_force: -75000, wall_color: 0x885555 }
@@ -118,7 +122,7 @@ const PLATFORMER_2: LevelData = {
       { symbol: ".", name: "Air", type: "FLOOR", color: 0x111111, passable: true, description: "Empty space." },
       { symbol: "#", name: "Platform", type: "WALL", color: 0xAAAAAA, passable: false, description: "Steel platform." },
       { symbol: "H", name: "Hub Portal", type: "GATE", color: 0x00FF00, passable: true, description: "Back to Hub.", target_id: 0 },
-      { symbol: "E", name: "Core Descent", type: "GATE", color: 0x00FF00, passable: true, description: "To Main Dungeon.", target_id: 5 },
+      { symbol: "E", name: "Exit Portal", type: "GATE", color: 0x00FF00, passable: true, description: "Back to Hub.", target_id: 0 },
       { symbol: "X", name: "Exit Area", type: "FLOOR", color: 0x004400, passable: true, description: "Safe to exit here." }
     ],
     entities: [],
@@ -144,35 +148,12 @@ const PLATFORMER_1_LOWER: LevelData = {
     terrain_legend: [
       { symbol: ".", name: "Air", type: "FLOOR", color: 0x111111, passable: true, description: "Empty space." },
       { symbol: "#", name: "Platform", type: "WALL", color: 0xAAAAAA, passable: false, description: "Steel platform." },
-      { symbol: "E", name: "Exit", type: "GATE", color: 0x00FF00, passable: true, description: "To Main Dungeon.", target_id: 5 },
+      { symbol: "E", name: "Exit", type: "GATE", color: 0x00FF00, passable: true, description: "Back to Hub.", target_id: 0 },
       { symbol: "X", name: "Exit Area", type: "FLOOR", color: 0x004400, passable: true, description: "Safe to exit here." }
     ],
     entities: [],
     entity_roster: [],
     platformer_config: { gravity: 5000, jump_force: -75000, wall_color: 0xAAAAAA }
-};
-
-const MAIN_DUNGEON: LevelData = {
-    id: "main_dungeon",
-    name: "Main Dungeon",
-    description: "The final depth.",
-    simulation_mode: "GRID",
-    map_layout: [
-      "########################################",
-      "#@.....................................#",
-      "#......................................#",
-      "#...........CENTRAL CORE...............#",
-      "#......................................#",
-      "#......................................#",
-      "########################################"
-    ],
-    terrain_legend: [
-      { symbol: ".", name: "Polished Floor", type: "FLOOR", color: 0x222222, passable: true, description: "Clean and safe." },
-      { symbol: "#", name: "Wall", type: "WALL", color: 0x444444, passable: false, description: "Reinforced steel." }
-    ],
-    entities: [],
-    entity_roster: [],
-    platformer_config: { gravity: 5000, jump_force: -75000, wall_color: 0x444444 }
 };
 
 export const MOCK_WORLD_DATA: WorldData = {
@@ -207,17 +188,15 @@ export const MOCK_WORLD_DATA: WorldData = {
     { id: "hub", name: "The Neon-Hub", biome: "HUB", difficulty: 0, connections: ["platformer_1"] },
     { id: "platformer_1", name: "Upper Platformer", biome: "SHAFT", difficulty: 1, connections: ["roguelike"] },
     { id: "roguelike", name: "Roguelike Crossroads", biome: "SEWER", difficulty: 2, connections: ["platformer_2", "platformer_1_lower"] },
-    { id: "platformer_2", name: "Platformer 2 (2 exits)", biome: "SHAFT", difficulty: 3, connections: ["main_dungeon", "hub"] },
-    { id: "platformer_1_lower", name: "Platformer 1 Lower", biome: "SHAFT", difficulty: 2, connections: ["main_dungeon"] },
-    { id: "main_dungeon", name: "Main Dungeon", biome: "CORE", difficulty: 4, connections: [] }
+    { id: "platformer_2", name: "Platformer 2 (2 exits)", biome: "SHAFT", difficulty: 3, connections: ["hub"] },
+    { id: "platformer_1_lower", name: "Platformer 1 Lower", biome: "SHAFT", difficulty: 2, connections: ["hub"] }
   ],
   levels: {
       "hub": HUB_LEVEL,
       "platformer_1": PLATFORMER_1,
       "roguelike": ROGUELIKE_LEVEL,
       "platformer_2": PLATFORMER_2,
-      "platformer_1_lower": PLATFORMER_1_LOWER,
-      "main_dungeon": MAIN_DUNGEON
+      "platformer_1_lower": PLATFORMER_1_LOWER
   },
   active_level: HUB_LEVEL
 };

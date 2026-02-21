@@ -91,6 +91,9 @@ function on_combat_event(op, sender, p1, p2, p3) {
         }
         if (p2 == 0) {
              Log("Ouch! You took damage!");
+             let p = get_player_ptr();
+             p.hp -= p3; // p3 is dmg amount in combat_events broadcast
+             if (p.hp < 0) p.hp = 0;
         }
     }
 }
