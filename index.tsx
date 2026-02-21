@@ -223,8 +223,9 @@ const App = () => {
               try {
                   proc.run(blocks[i]);
               } catch (e) {
-                  console.error(`Error in ${id} Block ${i}:`, e);
+                  console.error(`Error in ${id} Block ${i}:`, e, "Block Content:", blocks[i]);
                   addLog(`ERR: ${id} Block ${i} Failed`);
+                  throw e; // Fail loud if firmware or logic fails
               }
           }
           proc.isLogicLoaded = true;
@@ -341,9 +342,6 @@ const App = () => {
     } else {
         mainProc.run("INIT_MAP");
     }
-    hiveProc.run("INIT_HIVE");
-    battleProc.run("INIT_BATTLE");
-
     if (!playerProc.isWordDefined("PLAYER_INITIALIZED")) {
         playerProc.run("INIT_PLAYER : PLAYER_INITIALIZED ;");
     }
@@ -351,6 +349,10 @@ const App = () => {
     if (lIdx !== -1) {
         mainProc.run(`${lIdx} SET_LEVEL_ID`);
     }
+
+    // Boot level kernels
+    hiveProc.run("INIT_HIVE");
+    battleProc.run("INIT_BATTLE");
 
     // [INIT-SYNC] Run broker to process channel subscriptions BEFORE spawning entities
     // This ensures Hive/Battle kernels are ready to receive spawn events.

@@ -1,6 +1,7 @@
 import { expect, test, describe } from 'vitest';
 import { forthService } from '../services/WaForthService';
 import { GRID_KERNEL_BLOCKS } from '../kernels/GridKernel';
+import { HIVE_KERNEL_BLOCKS } from '../kernels/HiveKernel';
 
 describe('Persistence: Kernel Hibernate & Restore', () => {
   test('Kernel preserves state across hibernation', async () => {
@@ -41,6 +42,25 @@ describe('Persistence: Kernel Hibernate & Restore', () => {
     proc.run("0 1 1 MOVE_ENTITY"); // Move ID 0 by 1,1
     expect(mem2.getInt32(0x90000 + 12, true)).toBe(6); // X
     expect(mem2.getInt32(0x90000 + 8, true)).toBe(6);  // Y
+  });
+
+  test('Hive Kernel preserves state and logic across hibernation', async () => {
+    const id = "HIVE_TEST";
+    const proc = await forthService.bootProcess(id);
+    proc.logicBlocks = HIVE_KERNEL_BLOCKS;
+    for (const block of HIVE_KERNEL_BLOCKS) {
+        proc.run(block);
+    }
+    proc.run("INIT_HIVE");
+
+    // Verify it works
+    proc.run("INIT_HIVE"); // Should not fail
+
+    await proc.hibernate();
+    await proc.awaken();
+
+    // Verify it still works
+    proc.run("INIT_HIVE");
   });
 
   test('Global serialization preserves all kernels', async () => {

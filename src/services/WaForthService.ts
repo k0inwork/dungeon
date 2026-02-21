@@ -330,10 +330,9 @@ export class ForthProcess {
         this.emitBuffer = "";
       }
     } catch(e: any) {
-      this.log(`EXEC ERROR: ${e.message}`);
-      if (e.message !== this.lastLogMsg) {
-         console.warn(`Failed Command in ${this.id}:`, word, e);
-      }
+      const errMsg = `EXEC ERROR in ${this.id}: ${e.message}`;
+      this.log(errMsg);
+      console.error(errMsg, { word, error: e });
       throw e;
     }
   }
