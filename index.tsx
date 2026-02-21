@@ -548,7 +548,13 @@ const App = () => {
         });
 
         addLog("GAME LOADED SUCCESSFULLY.");
-        setMode("GRID");
+
+        const currentLevel = gameState.worldInfo.levels[gameState.currentLevelId];
+        if (currentLevel?.simulation_mode === "PLATFORM") {
+            setMode("PLATFORM");
+        } else {
+            setMode("GRID");
+        }
     } catch (e) {
         console.error("Load failed:", e);
         addLog("LOAD FAILED: Corrupt data?");
@@ -662,16 +668,27 @@ const App = () => {
       if (hive?.isReady) activeKernelsList.push(hive);
       if (battle?.isReady) activeKernelsList.push(battle);
 
-      runBroker(activeKernelsList, lIdx);
+      // --- TURN-BASED CHAIN REACTION (Flush message queues) ---
       
-      player.run("PROCESS_INBOX");
-      main.run("PROCESS_INBOX");
-      if (battle?.isReady) battle.run("PROCESS_INBOX");
+      // 1. Deliver move requests from last turn/input
+      runBroker(activeKernelsList, lIdx);
+      activeKernelsList.forEach(k => k.run("PROCESS_INBOX"));
+
+      // 2. AI decides actions
       if (hive?.isReady) hive.run("RUN_HIVE_CYCLE");
       main.run("RUN_ENV_CYCLE");
 
+      // 3. Deliver AI actions and physics collisions
       runBroker(activeKernelsList, lIdx);
-      main.run("PROCESS_INBOX");
+      activeKernelsList.forEach(k => k.run("PROCESS_INBOX"));
+
+      // 4. Deliver combat triggers (Attack commands)
+      runBroker(activeKernelsList, lIdx);
+      activeKernelsList.forEach(k => k.run("PROCESS_INBOX"));
+
+      // 5. Deliver final results (Damage events, Deaths)
+      runBroker(activeKernelsList, lIdx);
+      activeKernelsList.forEach(k => k.run("PROCESS_INBOX"));
 
       syncKernelState();
       
