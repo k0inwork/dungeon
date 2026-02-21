@@ -182,7 +182,8 @@ function try_pickup(playerId, x, y) {
                 bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, 2001, 0); // Tooth
                 bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, 2002, 0); // Tail
             } else {
-                bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, id, 0);
+                // Use character code as Item ID for frontend mapping
+                bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, ent.char, 0);
             }
 
             ent.char = 0;
@@ -218,15 +219,27 @@ function move_entity(id, dx, dy) {
   if (col != 0) {
       let obs = find_entity_at(tx, ty);
       if (obs == -1) {
+         Log("[GRID] Blocked by Tile Collision at:");
+         Log(tx); Log(ty);
          bus_send(EVT_COLLIDE, K_GRID, K_BUS, id, 0, 0);
       } else {
+         Log("[GRID] Blocked by Entity ID:");
+         Log(obs);
          bus_send(EVT_COLLIDE, K_GRID, K_BUS, id, obs, 1);
       }
       return;
   }
   
   let oi = calc_idx(ent.x, ent.y);
-  COLLISION_MAP[oi] = 0;
+  // Restore collision from terrain (passable if terrain is type 0)
+  let terrain = TERRAIN_MAP[oi];
+  let terrainType = terrain >>> 24;
+  if (terrainType != 0) {
+      COLLISION_MAP[oi] = 1;
+  } else {
+      COLLISION_MAP[oi] = 0;
+  }
+
   ENTITY_MAP[oi] = 0;
   refresh_tile(ent.x, ent.y, id);
 
@@ -265,7 +278,8 @@ function kill_entity(id, itemId) {
     ent.color = 8947848; // 0x888888 in decimal
     ent.type = 3; // ITEM
     redraw_cell(ex, ey, ent.color, ent.char);
-    Log("[GRID] Entity Died (Corpse)");
+    Log("[GRID] Entity Died (Corpse) at:");
+    Log(ex); Log(ey);
 
     // Pop Item if present
     if (itemId != 0) {
@@ -351,7 +365,13 @@ function teleport_entity(id, tx, ty) {
 
   let oi = calc_idx(ent.x, ent.y);
   if (ent.type != 3) {
-      COLLISION_MAP[oi] = 0;
+      // Restore collision from terrain
+      let terrain = TERRAIN_MAP[oi];
+      if ((terrain >>> 24) != 0) {
+          COLLISION_MAP[oi] = 1;
+      } else {
+          COLLISION_MAP[oi] = 0;
+      }
       ENTITY_MAP[oi] = 0;
   }
   refresh_tile(ent.x, ent.y, id);

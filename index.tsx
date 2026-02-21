@@ -77,7 +77,12 @@ const App = () => {
       114: "Rat Corpse",
       82: "Giant Rat Corpse",
       2001: "Rat Tooth",
-      2002: "Rat Tail"
+      2002: "Rat Tail",
+      2003: "Rat Meat",
+      93: "Healing Herb",
+      118: "Rat Tooth",
+      126: "Rat Tail",
+      37: "Rat Meat"
   };
 
   // Bus Log Sidebar State
