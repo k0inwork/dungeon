@@ -61,6 +61,7 @@ const App = () => {
 
   // Track successful kernel loads to prevent loop execution if load failed
   const [activeKernels, setActiveKernels] = useState<Set<string>>(new Set());
+  const [loadedKernelIds, setLoadedKernelIds] = useState<string[]>([]);
   const initializedLevels = useRef<Set<string>>(new Set());
   const loadingKernels = useRef<Map<string, Promise<any>>>(new Map());
   const [gameOver, setGameOver] = useState(false);
@@ -104,6 +105,12 @@ const App = () => {
           logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
       }
   }, [log]);
+
+  useEffect(() => {
+    return forthService.subscribe((ids) => {
+        setLoadedKernelIds([...ids]);
+    });
+  }, []);
   
   // Hook into Forth Kernel Logs (Global Bridge)
   useEffect(() => {
@@ -992,6 +999,34 @@ const App = () => {
                   />
                   HIDE MOVEMENT/PHYSICS
               </label>
+          </div>
+
+          {/* ACTIVE KERNELS SECTION */}
+          <div style={{ padding: '10px', borderBottom: '1px solid #333', maxHeight: '150px', overflowY: 'auto', background: 'rgba(0,0,0,0.3)' }}>
+              <div style={{ color: '#aaa', fontSize: '0.7em', marginBottom: '5px', letterSpacing: '1px' }}>ACTIVE KERNEL INSTANCES</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                {loadedKernelIds.map(id => {
+                    const proc = forthService.get(id);
+                    const roleId = id === "PLAYER" ? KernelID.PLAYER : getRoleID(parseInt(id));
+                    const roleName = KernelID[roleId] || "UNKNOWN";
+                    const isCurrent = id === "PLAYER" || proc.levelIdx === currentLevelIdx;
+
+                    return (
+                        <div key={id} style={{
+                            fontSize: '10px',
+                            color: isCurrent ? '#0f0' : '#555',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            background: isCurrent ? 'rgba(0, 255, 0, 0.05)' : 'transparent',
+                            padding: '2px 4px',
+                            borderLeft: isCurrent ? '2px solid #0f0' : '2px solid transparent'
+                        }}>
+                            <span style={{ fontWeight: isCurrent ? 'bold' : 'normal' }}>{roleName}</span>
+                            <span style={{ opacity: 0.7 }}>ID:{id} | LVL:{proc.levelIdx}</span>
+                        </div>
+                    );
+                })}
+              </div>
           </div>
 
           <div style={{ flex: 1, overflowY: 'auto', padding: '10px', fontSize: '11px', fontFamily: 'monospace' }}>
