@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { forthService, BusPacket } from "./src/services/WaForthService";
+import { storageService } from "./src/services/StorageService";
 import { PlatformerPhysics } from "./src/systems/PlatformerPhysics";
 import { TerminalCanvas } from "./src/components/TerminalCanvas";
 import { generatorService, WorldData } from "./src/services/GeneratorService";
@@ -484,7 +485,13 @@ const App = () => {
     }
   };
 
-  const saveGame = () => {
+  const [saveExists, setSaveExists] = useState(false);
+
+  useEffect(() => {
+      storageService.exists("AETHERGARD_SAVE").then(setSaveExists);
+  }, []);
+
+  const saveGame = async () => {
     if (!worldInfo) return;
     const gameState = {
         worldInfo,
@@ -492,23 +499,24 @@ const App = () => {
         forthState: forthService.serializeAll()
     };
     try {
-        localStorage.setItem("AETHERGARD_SAVE", JSON.stringify(gameState));
-        addLog("GAME SAVED.");
+        await storageService.save("AETHERGARD_SAVE", gameState);
+        setSaveExists(true);
+        addLog("GAME SAVED TO INDEXEDDB.");
     } catch (e) {
         console.error("Save failed:", e);
-        addLog("SAVE FAILED: Memory limit exceeded? Use smaller world.");
+        addLog("SAVE FAILED.");
     }
   };
 
   const loadGame = async () => {
-    const raw = localStorage.getItem("AETHERGARD_SAVE");
-    if (!raw) {
-        addLog("NO SAVE DATA FOUND.");
-        return;
-    }
     setMode("GENERATING");
     try {
-        const gameState = JSON.parse(raw);
+        const gameState = await storageService.load("AETHERGARD_SAVE");
+        if (!gameState) {
+            addLog("NO SAVE DATA FOUND.");
+            setMode("BOOT");
+            return;
+        }
         setWorldInfo(gameState.worldInfo);
         setCurrentLevelId(gameState.currentLevelId);
 
@@ -538,6 +546,13 @@ const App = () => {
     }
   };
 
+  // Hibernation Maintenance Effect
+  useEffect(() => {
+      if (mode === "GRID" || mode === "PLATFORM") {
+          forthService.maintenance(currentLevelIdx);
+      }
+  }, [currentLevelIdx, loadedKernelIds]);
+
   const tickSimulation = () => {
       const lIdx = currentLevelIdx;
       const gridId = String(getInstanceID(KernelID.GRID, lIdx));
@@ -554,9 +569,6 @@ const App = () => {
       const activeKernelsList: any[] = [main, player];
       if (hive?.isReady) activeKernelsList.push(hive);
       if (battle?.isReady) activeKernelsList.push(battle);
-
-      // Run Hibernation Maintenance
-      forthService.maintenance(lIdx);
 
       const runBroker = () => {
           const inboxes = new Map<number, number[]>();
@@ -1137,7 +1149,7 @@ const App = () => {
             <div style={{ color: "#666", marginBottom: "10px" }}>Tip: Shift+Click for Instant Mock World</div>
             <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
                 <button onClick={handleGenerate} style={{ background: "#0f0", color: "#000", border: "none", padding: "10px 20px", fontSize: "1.2em", cursor: "pointer" }}>INITIATE GENERATION</button>
-                {localStorage.getItem("AETHERGARD_SAVE") && (
+                {saveExists && (
                     <button onClick={loadGame} style={{ background: "#00f", color: "#fff", border: "none", padding: "10px 20px", fontSize: "1.2em", cursor: "pointer" }}>LOAD LAST SESSION</button>
                 )}
             </div>

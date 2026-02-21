@@ -447,25 +447,6 @@ class ForthProcessManager {
       }
   }
 
-  private uint8ToBase64(arr: Uint8Array): string {
-      let binary = '';
-      const len = arr.byteLength;
-      for (let i = 0; i < len; i++) {
-          binary += String.fromCharCode(arr[i]);
-      }
-      return btoa(binary);
-  }
-
-  private base64ToUint8(base64: string): Uint8Array {
-      const binaryString = atob(base64);
-      const len = binaryString.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) {
-          bytes[i] = binaryString.charCodeAt(i);
-      }
-      return bytes;
-  }
-
   serializeAll() {
       const data: Record<string, any> = {};
       for (const [id, proc] of this.processes.entries()) {
@@ -473,7 +454,7 @@ class ForthProcessManager {
               levelIdx: proc.levelIdx,
               status: proc.status,
               logicBlocks: proc.logicBlocks,
-              flashData: this.uint8ToBase64(proc.serialize()),
+              flashData: proc.serialize(),
               outputLog: proc.outputLog
           };
       }
@@ -495,7 +476,7 @@ class ForthProcessManager {
           proc.logicBlocks = (procData as any).logicBlocks;
           proc.outputLog = (procData as any).outputLog || [];
 
-          const rawData = this.base64ToUint8((procData as any).flashData);
+          const rawData = (procData as any).flashData as Uint8Array;
           if ((procData as any).status === "FLASHED") {
               proc.flashData = rawData;
               proc.status = "FLASHED";
