@@ -162,12 +162,12 @@ function run_cycle() {
    }
 }
 
-function run_hive_cycle() {
+function run_hive_step() {
     process_inbox();
     run_cycle();
 }
 
-function init_hive() {
+function init_hive_logic() {
     let i = 0;
     while (i < MAX_ENTITIES) {
         let ent = get_hive_ptr(i);
@@ -189,8 +189,8 @@ function init_hive() {
 export const HIVE_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.HIVE),
-  ": INIT_HIVE INIT_HIVE AJS_INIT_CHANNELS ;",
-  ": RUN_HIVE_CYCLE RUN_HIVE_CYCLE ;"
+  ": INIT_HIVE INIT_HIVE_LOGIC AJS_INIT_CHANNELS ;",
+  ": RUN_HIVE_CYCLE RUN_HIVE_STEP ;"
 ];
 
 export const HIVE_AJS_SOURCE = AJS_LOGIC;

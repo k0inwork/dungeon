@@ -192,7 +192,7 @@ function on_battle_request(op, sender, p1, p2, p3) {
     }
 }
 
-function init_battle() {
+function init_battle_logic() {
     let i = 0;
     while (i < MAX_ENTITIES) {
         let e = get_rpg_ptr(i);
@@ -222,7 +222,7 @@ function handle_events() {
 
 ${STANDARD_AJS_POSTAMBLE}
 
-function run_battle_cycle() {
+function run_battle_step() {
     process_inbox();
 }
 `;
@@ -230,7 +230,8 @@ function run_battle_cycle() {
 export const BATTLE_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.BATTLE),
-  ": INIT_BATTLE INIT_BATTLE AJS_INIT_CHANNELS ;"
+  ": INIT_BATTLE INIT_BATTLE_LOGIC AJS_INIT_CHANNELS ;",
+  ": RUN_BATTLE_CYCLE RUN_BATTLE_STEP ;"
 ];
 
 export const BATTLE_AJS_SOURCE = AJS_LOGIC;

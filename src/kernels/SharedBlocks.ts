@@ -177,6 +177,10 @@ VARIABLE OUT_PTR
   INPUT_QUEUE 4 + SWAP CELLS +
 ;
 
+( --- PERSISTENCE HELPERS --- )
+( Store HERE at fixed location 0x3F0 for JS readout )
+: SYNC_HERE HERE 1008 ! ;
+
 ( --- BLOB EXTENSION v2.0 --- )
 ( Send Variable Length Data )
 ( Stack: data_addr data_len sender target real_op -- )
