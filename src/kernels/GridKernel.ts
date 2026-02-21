@@ -329,8 +329,36 @@ function move_towards(id, tx, ty) {
     }
 }
 
+function teleport_entity(id, tx, ty) {
+  let ent = get_ent_ptr(id);
+  if (ent.char == 0) return;
+  if (check_bounds(tx, ty) == 0) return;
+
+  let oi = calc_idx(ent.x, ent.y);
+  if (ent.type != 3) {
+      COLLISION_MAP[oi] = 0;
+      ENTITY_MAP[oi] = 0;
+  }
+  refresh_tile(ent.x, ent.y, id);
+
+  ent.x = tx;
+  ent.y = ty;
+  let ti = calc_idx(tx, ty);
+  if (ent.type != 3) {
+      COLLISION_MAP[ti] = 1;
+      ENTITY_MAP[ti] = id + 1;
+  }
+  redraw_cell(tx, ty, ent.color, ent.char);
+  Chan("npc_sync") <- [EVT_MOVED, id, tx, ty];
+}
+
+function teleport_player(tx, ty) {
+  teleport_entity(0, tx, ty);
+}
+
 function on_grid_request(op, sender, p1, p2, p3) {
     if (op == REQ_MOVE) { move_entity(p1, p2, p3); }
+    if (op == REQ_TELEPORT) { teleport_entity(p1, p2, p3); }
     if (op == REQ_PATH_STEP) { move_towards(p1, p2, p3); }
     if (op == EVT_DEATH) { kill_entity(p1, p2); }
     if (op == CMD_PICKUP) { try_pickup(p1, p2, p3); }
@@ -383,7 +411,8 @@ export const GRID_KERNEL_BLOCKS = [
   ": SET_LEVEL_ID SET_LEVEL_ID ;",
   ": INIT_MAP SYSTEM_RESET_MAP AJS_INIT_CHANNELS ;",
   ": LOAD_TILE LOAD_TILE ;",
-  ": REDRAW_ALL REDRAW_ALL ;"
+  ": REDRAW_ALL REDRAW_ALL ;",
+  ": CMD_TELEPORT TELEPORT_PLAYER ;"
 ];
 
 export const GRID_AJS_SOURCE = AJS_LOGIC;

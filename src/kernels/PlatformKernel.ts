@@ -199,12 +199,34 @@ function jump_player() {
     }
 }
 
+function teleport_player(tx, ty) {
+    player_x = tx * 65536;
+    player_y = ty * 65536;
+    player_vx = 0;
+    player_vy = 0;
+}
+
 function spawn_entity(x, y, color, char, type) {
-    // Stub to prevent load errors, platformer currently has no enemies
+    // In platformer, we currently only support the player (ID 0)
+    if (type == 0) {
+        player_x = x * 65536;
+        player_y = y * 65536;
+
+        let ent = GridEntity(0);
+        ent.char = char;
+        ent.color = color;
+        ent.x = x;
+        ent.y = y;
+        ent.type = type;
+
+        Chan("npc_sync") <- [EVT_SPAWN, 0, type, 0];
+        Chan("npc_sync") <- [EVT_MOVED, 0, x, y];
+    }
 }
 
 function on_platform_request(op, sender, p1, p2, p3) {
     if (op == REQ_MOVE) { move_player(p1); }
+    if (op == REQ_TELEPORT) { teleport_player(p1, p2); }
     if (op == CMD_INTERACT) { jump_player(); }
 }
 
@@ -226,5 +248,6 @@ export const PLATFORM_KERNEL_BLOCKS = [
   ": LOAD_TILE LOAD_TILE ;",
   ": SPAWN_ENTITY SPAWN_ENTITY ;",
   ": CMD_JUMP JUMP_PLAYER ;",
-  ": CMD_MOVE ( dir -- ) MOVE_PLAYER ;"
+  ": CMD_MOVE ( dir -- ) MOVE_PLAYER ;",
+  ": CMD_TELEPORT TELEPORT_PLAYER ;"
 ];

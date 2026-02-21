@@ -46,9 +46,15 @@ function init_stats(id, type) {
     e.invItem = 0;
     
     if (id == 0) {
-        // Player Buff
-        e.maxHp = 200;
-        e.hp = 200;
+        // Sync from Player Kernel for Persistence
+        let p = PlayerState(0);
+        if (p.maxHp > 0) {
+            e.maxHp = p.maxHp;
+            e.hp = p.hp;
+        } else {
+            e.maxHp = 200;
+            e.hp = 200;
+        }
         e.atk = 20; 
     }
     
@@ -117,7 +123,7 @@ function skill_fireball(srcId, tgtId) {
     
     tgt.hp -= dmg;
     
-    log_combat(srcId, tgtId, dmg, "FIREBALL");
+    log_combat(srcId, tgtId, dmg);
     Chan("BUS") <- [EVT_DAMAGE, tgtId, dmg, 1]; // Type 1 = Thermal
     
     return tgt.hp;
