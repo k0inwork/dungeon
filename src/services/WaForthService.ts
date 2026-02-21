@@ -15,16 +15,22 @@ export interface BusPacket {
   payload: string;
 }
 
+export type ProcessStatus = "ACTIVE" | "PAUSED" | "FLASHED";
+
 // Individual Process Class (The Virtual Machine)
 export class ForthProcess {
   id: string;
   levelIdx: number = 0;
-  forth: WAForth;
+  forth: WAForth | null = null;
+  status: ProcessStatus = "PAUSED";
   isReady: boolean = false;
   isLogicLoaded: boolean = false;
   outputLog: string[] = [];
   emitBuffer: string = ""; // Buffer for standard output
-  
+  logicBlocks: string[] = []; // Store blocks for restoration
+  lastUsed: number = Date.now();
+  flashData: Uint8Array | null = null;
+
   // Multicast Log Listeners
   private logListeners: Set<(msg: string) => void> = new Set();
   
@@ -37,7 +43,6 @@ export class ForthProcess {
 
   constructor(id: string, private manager: ForthProcessManager) {
     this.id = id;
-    this.forth = new WAForth();
   }
 
   addLogListener(cb: (msg: string) => void) {
@@ -49,6 +54,8 @@ export class ForthProcess {
   }
 
   async boot() {
+    this.forth = new WAForth();
+
     // 1. Bind Low-Level Emit (Standard Output)
     this.forth.onEmit = (c: any) => {
        const char = typeof c === 'string' ? c : String.fromCharCode(c);
@@ -143,7 +150,7 @@ export class ForthProcess {
     });
 
     // : JS_SYNC_OBJECT ( id typeId -- ptr ) S" JS_SYNC_OBJECT" SCALL ;
-    this.forth.bind("JS_SYNC_OBJECT", (stack: any) => {
+    this.forth!.bind("JS_SYNC_OBJECT", (stack: any) => {
         const typeId = stack.pop();
         const id = stack.pop();
 
@@ -215,7 +222,68 @@ export class ForthProcess {
     }
   }
 
+  async hibernate() {
+    if (this.status === "FLASHED" || !this.forth) return;
+    this.log("[SYS] Hibernating Kernel to Disk...");
+    this.flashData = this.serialize();
+    this.forth = null; // Release WASM instance
+    this.isReady = false;
+    this.status = "FLASHED";
+    this.manager.notifyListeners();
+  }
+
+  async awaken() {
+    if (this.status !== "FLASHED" || !this.flashData) return;
+    this.log("[SYS] Awakening Kernel from Disk...");
+    this.status = "PAUSED"; // Temporary state to allow run()
+
+    // 1. Re-boot WASM
+    await this.boot();
+
+    // 2. Re-load Logic Blocks (Re-compiles words)
+    for (const block of this.logicBlocks) {
+        this.run(block);
+    }
+
+    // 3. Restore Memory State
+    this.deserialize(this.flashData);
+    this.flashData = null;
+    this.status = "ACTIVE";
+    this.isReady = true;
+    this.manager.notifyListeners();
+  }
+
+  serialize(): Uint8Array {
+    if (!this.forth) return this.flashData || new Uint8Array(0);
+
+    // Try to find HERE if word is defined
+    let here = 200000; // Default safety for dictionary
+    try {
+        if (this.isWordDefined("SYNC_HERE")) {
+            this.forth.interpret("SYNC_HERE\n");
+            const view = new DataView(this.forth.memory().buffer);
+            here = view.getInt32(1008, true); // 0x3F0
+        }
+    } catch(e) {}
+
+    // Determine highest used address based on VSO Registry and common maps
+    // Maps: 0x30000 to 0x34000
+    // Entities: 0x90000, RPG: 0xA0000, Player: 0xC0000
+    let maxAddr = Math.max(here, 0xD0000); // 0xD0000 covers all current regions
+
+    const fullMem = new Uint8Array(this.forth.memory().buffer);
+    const sliceSize = Math.min(fullMem.length, maxAddr);
+    return new Uint8Array(fullMem.slice(0, sliceSize));
+  }
+
+  deserialize(data: Uint8Array) {
+    if (!this.forth) return;
+    const currentMem = new Uint8Array(this.forth.memory().buffer);
+    currentMem.set(data);
+  }
+
   log(msg: string) {
+    this.lastUsed = Date.now();
     // Deduplication Logic
     if (msg === this.lastLogMsg) {
         this.lastLogCount++;
@@ -246,6 +314,13 @@ export class ForthProcess {
   }
 
   run(word: string) {
+    this.lastUsed = Date.now();
+    if (this.status === "FLASHED") {
+        // Auto-awaken if called while flashed?
+        // For now, index.tsx should handle this, but let's be safe
+        console.warn(`[${this.id}] Attempted to run word while FLASHED. Ignoring.`);
+        return;
+    }
     if (!this.forth || !this.isReady) return;
     try {
       console.log(`[${this.id} RUN] ${word}`);
@@ -264,7 +339,7 @@ export class ForthProcess {
   }
 
   isWordDefined(wordName: string): boolean {
-    if (!this.forth) return false;
+    if (!this.forth || this.status === "FLASHED") return false;
     const oldEmit = this.forth.onEmit;
     this.forth.onEmit = () => {}; // Mute output during check
     try {
@@ -277,7 +352,8 @@ export class ForthProcess {
     }
   }
 
-  getMemory() {
+  getMemory(): ArrayBuffer {
+    if (!this.forth) return (this.flashData?.buffer as ArrayBuffer) || new ArrayBuffer(0);
     return this.forth.memory().buffer;
   }
 }
@@ -343,6 +419,100 @@ class ForthProcessManager {
       if (!this.channelNames.has(id)) {
           this.channelNames.set(id, name);
       }
+  }
+
+  // --- PERSISTENCE & HYBERNATION v3.0 ---
+  private MAX_ACTIVE_KERNELS = 10;
+
+  async maintenance(currentLevelIdx: number) {
+      const activeProcesses = Array.from(this.processes.values())
+          .filter(p => p.status !== "FLASHED");
+
+      if (activeProcesses.length > this.MAX_ACTIVE_KERNELS) {
+          // Find candidates for hibernation:
+          // 1. Not the PLAYER
+          // 2. Not in the current level
+          // 3. Sorted by lastUsed (LRU)
+          const candidates = activeProcesses
+              .filter(p => p.id !== "PLAYER" && p.levelIdx !== currentLevelIdx)
+              .sort((a, b) => a.lastUsed - b.lastUsed);
+
+          while (candidates.length > 0 &&
+                 Array.from(this.processes.values()).filter(p => p.status !== "FLASHED").length > this.MAX_ACTIVE_KERNELS) {
+              const toFlash = candidates.shift();
+              if (toFlash) {
+                  await toFlash.hibernate();
+              }
+          }
+      }
+  }
+
+  private uint8ToBase64(arr: Uint8Array): string {
+      let binary = '';
+      const len = arr.byteLength;
+      for (let i = 0; i < len; i++) {
+          binary += String.fromCharCode(arr[i]);
+      }
+      return btoa(binary);
+  }
+
+  private base64ToUint8(base64: string): Uint8Array {
+      const binaryString = atob(base64);
+      const len = binaryString.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+      }
+      return bytes;
+  }
+
+  serializeAll() {
+      const data: Record<string, any> = {};
+      for (const [id, proc] of this.processes.entries()) {
+          data[id] = {
+              levelIdx: proc.levelIdx,
+              status: proc.status,
+              logicBlocks: proc.logicBlocks,
+              flashData: this.uint8ToBase64(proc.serialize()),
+              outputLog: proc.outputLog
+          };
+      }
+      return {
+          processes: data,
+          channelNames: Array.from(this.channelNames.entries()),
+          busHistory: this.busHistory.slice(0, 100) // Only save some history
+      };
+  }
+
+  async deserializeAll(data: any) {
+      this.processes.clear();
+      this.channelNames = new Map(data.channelNames || []);
+      this.busHistory = data.busHistory || [];
+
+      for (const [id, procData] of Object.entries(data.processes)) {
+          const proc = this.get(id);
+          proc.levelIdx = (procData as any).levelIdx;
+          proc.logicBlocks = (procData as any).logicBlocks;
+          proc.outputLog = (procData as any).outputLog || [];
+
+          const rawData = this.base64ToUint8((procData as any).flashData);
+          if ((procData as any).status === "FLASHED") {
+              proc.flashData = rawData;
+              proc.status = "FLASHED";
+              proc.isReady = false;
+          } else {
+              // If it was active, we should still boot and restore it
+              await proc.boot();
+              for (const block of proc.logicBlocks) {
+                  proc.run(block);
+              }
+              proc.deserialize(rawData);
+              proc.status = "ACTIVE";
+              proc.isReady = true;
+              proc.isLogicLoaded = true;
+          }
+      }
+      this.notifyListeners();
   }
 
   logPacket(senderId: number, targetId: number, op: number, p1: number, p2: number, p3: number) {

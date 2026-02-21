@@ -215,6 +215,8 @@ const App = () => {
           await forthService.bootProcess(id);
           const proc = forthService.get(id);
           proc.levelIdx = lIdx;
+          proc.logicBlocks = blocks; // Store for restoration
+          proc.status = "ACTIVE";
           addLog(`${id} Kernel Initialized.`);
           
           for (let i = 0; i < blocks.length; i++) {
@@ -238,7 +240,14 @@ const App = () => {
 
   const ensureKernel = async (id: string, blocks: string[], lIdx: number) => {
     const proc = forthService.get(id);
-    if (proc.isLogicLoaded) return proc;
+    if (proc.status === "FLASHED") {
+        await proc.awaken();
+        return proc;
+    }
+    if (proc.isLogicLoaded) {
+        proc.status = "ACTIVE";
+        return proc;
+    }
 
     if (loadingKernels.current.has(id)) {
         return await loadingKernels.current.get(id);
@@ -475,6 +484,52 @@ const App = () => {
     }
   };
 
+  const saveGame = () => {
+    if (!worldInfo) return;
+    const gameState = {
+        worldInfo,
+        currentLevelId,
+        forthState: forthService.serializeAll()
+    };
+    try {
+        localStorage.setItem("AETHERGARD_SAVE", JSON.stringify(gameState));
+        addLog("GAME SAVED.");
+    } catch (e) {
+        console.error("Save failed:", e);
+        addLog("SAVE FAILED: Memory limit exceeded? Use smaller world.");
+    }
+  };
+
+  const loadGame = async () => {
+    const raw = localStorage.getItem("AETHERGARD_SAVE");
+    if (!raw) {
+        addLog("NO SAVE DATA FOUND.");
+        return;
+    }
+    setMode("GENERATING");
+    try {
+        const gameState = JSON.parse(raw);
+        setWorldInfo(gameState.worldInfo);
+        setCurrentLevelId(gameState.currentLevelId);
+
+        await forthService.deserializeAll(gameState.forthState);
+
+        // Reconstruct initializedLevels set based on restored processes
+        initializedLevels.current = new Set();
+        Object.values(gameState.forthState.processes).forEach((p: any) => {
+            const lId = LEVEL_IDS[p.levelIdx];
+            if (lId) initializedLevels.current.add(lId);
+        });
+
+        addLog("GAME LOADED SUCCESSFULLY.");
+        setMode("GRID");
+    } catch (e) {
+        console.error("Load failed:", e);
+        addLog("LOAD FAILED: Corrupt data?");
+        setMode("BOOT");
+    }
+  };
+
   const switchMode = (newMode: GameMode) => {
     setMode(newMode);
     if (newMode === "PLATFORM") {
@@ -499,6 +554,9 @@ const App = () => {
       const activeKernelsList: any[] = [main, player];
       if (hive?.isReady) activeKernelsList.push(hive);
       if (battle?.isReady) activeKernelsList.push(battle);
+
+      // Run Hibernation Maintenance
+      forthService.maintenance(lIdx);
 
       const runBroker = () => {
           const inboxes = new Map<number, number[]>();
@@ -1011,17 +1069,22 @@ const App = () => {
                     const roleName = KernelID[roleId] || "UNKNOWN";
                     const isCurrent = id === "PLAYER" || proc.levelIdx === currentLevelIdx;
 
+                    const statusColor = proc.status === "ACTIVE" ? (isCurrent ? "#0f0" : "#0a0") :
+                                      proc.status === "PAUSED" ? "#aa0" : "#555";
+
                     return (
                         <div key={id} style={{
                             fontSize: '10px',
-                            color: isCurrent ? '#0f0' : '#555',
+                            color: statusColor,
                             display: 'flex',
                             justifyContent: 'space-between',
                             background: isCurrent ? 'rgba(0, 255, 0, 0.05)' : 'transparent',
                             padding: '2px 4px',
-                            borderLeft: isCurrent ? '2px solid #0f0' : '2px solid transparent'
+                            borderLeft: isCurrent ? '2px solid #0f0' : (proc.status === "FLASHED" ? '2px solid #333' : '2px solid transparent')
                         }}>
-                            <span style={{ fontWeight: isCurrent ? 'bold' : 'normal' }}>{roleName}</span>
+                            <span style={{ fontWeight: isCurrent ? 'bold' : 'normal' }}>
+                                {roleName} {proc.status === "FLASHED" && "[F]"}
+                            </span>
                             <span style={{ opacity: 0.7 }}>ID:{id} | LVL:{proc.levelIdx}</span>
                         </div>
                     );
@@ -1055,6 +1118,7 @@ const App = () => {
         </div>
         {worldInfo && (
           <div style={{ display: "flex", gap: "10px" }}>
+            <button onClick={saveGame} style={{ background: "#222", color: "#0f0", border: "1px solid #0f0", padding: "5px 10px", cursor: "pointer", fontSize: '0.8em' }}>SAVE</button>
             <button onClick={() => setViewMode("GAME")} style={{ background: viewMode === "GAME" ? "#0f0" : "#222", color: viewMode === "GAME" ? "#000" : "#0f0", border: "1px solid #0f0", padding: "5px 15px", cursor: "pointer" }}>SIMULATION</button>
             <button onClick={() => setViewMode("ARCHITECT")} style={{ background: viewMode === "ARCHITECT" ? "#f0f" : "#222", color: viewMode === "ARCHITECT" ? "#000" : "#f0f", border: "1px solid #f0f", padding: "5px 15px", cursor: "pointer" }}>ARCHITECT</button>
           </div>
@@ -1071,7 +1135,12 @@ const App = () => {
             <input type="text" value={seed} onChange={(e) => setSeed(e.target.value)} style={{ background: "#000", border: "1px solid #0f0", color: "#0f0", padding: "10px", fontSize: "1.2em", width: "300px", textAlign: "center" }} />
             <br /><br />
             <div style={{ color: "#666", marginBottom: "10px" }}>Tip: Shift+Click for Instant Mock World</div>
-            <button onClick={handleGenerate} style={{ background: "#0f0", color: "#000", border: "none", padding: "10px 20px", fontSize: "1.2em", cursor: "pointer" }}>INITIATE GENERATION</button>
+            <div style={{ display: 'flex', gap: '20px', justifyContent: 'center' }}>
+                <button onClick={handleGenerate} style={{ background: "#0f0", color: "#000", border: "none", padding: "10px 20px", fontSize: "1.2em", cursor: "pointer" }}>INITIATE GENERATION</button>
+                {localStorage.getItem("AETHERGARD_SAVE") && (
+                    <button onClick={loadGame} style={{ background: "#00f", color: "#fff", border: "none", padding: "10px 20px", fontSize: "1.2em", cursor: "pointer" }}>LOAD LAST SESSION</button>
+                )}
+            </div>
 
             <AIConfig />
           </div>
