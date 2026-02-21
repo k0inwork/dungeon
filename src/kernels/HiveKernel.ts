@@ -67,6 +67,7 @@ function on_npc_sync(opcode, sender, arg1, arg2, arg3) {
      if (arg1 == 0) {
          LAST_PLAYER_X = arg2;
          LAST_PLAYER_Y = arg3;
+         Log("[HIVE] Player Moved to: "); Log(arg2); Log(","); Log(arg3);
      }
   }
 
@@ -116,7 +117,7 @@ function decide_action(id) {
       let dy = abs(ent.y - LAST_PLAYER_Y);
       let dist = dx + dy;
       
-      if (dist < 10) {
+      if (dist < 20) {
          Chan("GRID") <- [REQ_PATH_STEP, id, LAST_PLAYER_X, LAST_PLAYER_Y];
       } else {
          let rdx = rand_dir_x();

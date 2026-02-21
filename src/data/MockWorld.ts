@@ -96,8 +96,8 @@ const ROGUELIKE_LEVEL: LevelData = {
         { id: "rat_3", x: 25, y: 15, taxonomy: { race: "Rat", class: "None", origin: "None" }, stats: { hp: 10, speed: 10 }, glyph: { char: "r", color: 0x888888 }, scripts: { passive: "wander", active: [] } },
         { id: "giant_rat_1", x: 20, y: 10, taxonomy: { race: "Giant Rat", class: "None", origin: "None" }, stats: { hp: 30, speed: 10 }, glyph: { char: "R", color: 0xFF5555 }, scripts: { passive: "aggressive", active: [] } },
         { id: "giant_rat_2", x: 30, y: 5, taxonomy: { race: "Giant Rat", class: "None", origin: "None" }, stats: { hp: 30, speed: 10 }, glyph: { char: "R", color: 0xFF5555 }, scripts: { passive: "aggressive", active: [] } },
-        { id: "loot_1", x: 12, y: 12, taxonomy: { race: "Loot", class: "None", origin: "None" }, stats: { hp: 1, speed: 0 }, glyph: { char: "$", color: 0xFFFF00 }, scripts: { passive: "treasure", active: [] } },
-        { id: "loot_2", x: 35, y: 18, taxonomy: { race: "Loot", class: "None", origin: "None" }, stats: { hp: 1, speed: 0 }, glyph: { char: "$", color: 0xFFFF00 }, scripts: { passive: "treasure", active: [] } }
+        { id: "loot_1", x: 15, y: 13, taxonomy: { race: "Loot", class: "None", origin: "None" }, stats: { hp: 1, speed: 0 }, glyph: { char: "$", color: 0xFFFF00 }, scripts: { passive: "treasure", active: [] } },
+        { id: "loot_2", x: 35, y: 17, taxonomy: { race: "Loot", class: "None", origin: "None" }, stats: { hp: 1, speed: 0 }, glyph: { char: "$", color: 0xFFFF00 }, scripts: { passive: "treasure", active: [] } }
     ],
     entity_roster: [],
     platformer_config: { gravity: 5000, jump_force: -75000, wall_color: 0x885555 }

@@ -99,7 +99,8 @@ function system_reset_map() {
 
 function load_tile(x, y, color, char, type, target_id) {
     let i = calc_idx(x, y);
-    TERRAIN_MAP[i] = (color << 8) | char;
+    // Store type in high byte of TERRAIN_MAP for restoration
+    TERRAIN_MAP[i] = (type << 24) | (color << 8) | char;
     TRANSITION_MAP[i] = target_id;
 
     if (type != 0) {
@@ -163,6 +164,37 @@ function refresh_tile(x, y, skipId) {
     redraw_cell(x, y, color, char);
 }
 
+function dist_sq(x1, y1, x2, y2) {
+    let dx = x1 - x2;
+    let dy = y1 - y2;
+    return (dx * dx) + (dy * dy);
+}
+
+function try_pickup(playerId, x, y) {
+    let idx = calc_idx(x, y);
+    let val = LOOT_MAP[idx];
+    if (val != 0) {
+        let id = val - 1;
+        let ent = get_ent_ptr(id);
+        if (ent.char != 0 && ent.type == 3) {
+            // Big Rat ('R' = 82) gives multiple items
+            if (ent.char == 82) {
+                bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, 2001, 0); // Tooth
+                bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, 2002, 0); // Tail
+            } else {
+                bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, id, 0);
+            }
+
+            ent.char = 0;
+            ent.x = -1;
+            ent.y = -1;
+            LOOT_MAP[idx] = 0;
+            refresh_tile(x, y, -1);
+            return;
+        }
+    }
+}
+
 function move_entity(id, dx, dy) {
   let ent = get_ent_ptr(id);
   if (ent.char == 0 || ent.type == 3) return;
@@ -205,6 +237,11 @@ function move_entity(id, dx, dy) {
 
   redraw_cell(tx, ty, ent.color, ent.char);
   Chan("npc_sync") <- [EVT_MOVED, id, tx, ty];
+
+  // Auto-pickup for player (after successful move)
+  if (id == 0) {
+      try_pickup(id, tx, ty);
+  }
 }
 
 function kill_entity(id, itemId) {
@@ -213,7 +250,15 @@ function kill_entity(id, itemId) {
     let ey = ent.y;
     let i = calc_idx(ex, ey);
 
-    COLLISION_MAP[i] = 0;
+    // Restore collision from terrain
+    let terrain = TERRAIN_MAP[i];
+    let type = terrain >>> 24;
+    if (type != 0) {
+        COLLISION_MAP[i] = 1;
+    } else {
+        COLLISION_MAP[i] = 0;
+    }
+
     ENTITY_MAP[i] = 0;
     LOOT_MAP[i] = id + 1;
     // Keep character (e.g. 'r' or 'R'), change color to gray
@@ -249,36 +294,6 @@ function kill_entity(id, itemId) {
     }
 }
 
-function try_pickup(playerId, x, y) {
-    let idx = calc_idx(x, y);
-    let val = LOOT_MAP[idx];
-    if (val != 0) {
-        let id = val - 1;
-        let ent = get_ent_ptr(id);
-        if (ent.char != 0 && ent.type == 3) {
-            // Big Rat ('R' = 82) gives multiple items
-            if (ent.char == 82) {
-                bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, 2001, 0); // Tooth
-                bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, 2002, 0); // Tail
-            } else {
-                bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, id, 0);
-            }
-
-            ent.char = 0;
-            ent.x = -1;
-            ent.y = -1;
-            LOOT_MAP[idx] = 0;
-            refresh_tile(x, y, -1);
-            return;
-        }
-    }
-}
-
-function dist_sq(x1, y1, x2, y2) {
-    let dx = x1 - x2;
-    let dy = y1 - y2;
-    return (dx * dx) + (dy * dy);
-}
 
 function move_towards(id, tx, ty) {
     let ent = get_ent_ptr(id);
