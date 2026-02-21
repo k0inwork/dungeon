@@ -909,6 +909,7 @@ export class AetherTranspiler {
             if (VSO_REGISTRY[funcName]) {
                 const entry = VSO_REGISTRY[funcName];
                 // node.arguments[0] is the ID
+                this.compileNode(node.arguments[0]);
                 if (entry.owner === this.currentKernelId) {
                     // LOCAL ACCESS: return Base + (id * Size)
                     this.emit(`  ${entry.sizeBytes} * ${entry.baseAddr} +`);

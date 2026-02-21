@@ -287,7 +287,7 @@ const App = () => {
         console.log(`[SYS] Returning to level: ${level.id}`);
         addLog(`Returning to ${level.name}...`);
 
-        // Determine entry position if we came from another level
+        // Determine entry position based on where we came from
         let entryX = -1, entryY = -1;
         if (sourceLevelIdx !== -1) {
             level.map_layout.forEach((row: string, y: number) => {
@@ -301,18 +301,19 @@ const App = () => {
             });
         }
 
+        // If no gate found, fallback to '@' in map
+        if (entryX === -1) {
+            level.map_layout.forEach((row: string, y: number) => {
+                const x = row.indexOf('@');
+                if (x !== -1) { entryX = x; entryY = y; }
+            });
+        }
+
         if (entryX !== -1) {
-            console.log(`[SYS] Entry point found at ${entryX}, ${entryY}`);
-            mainProc.run(`${entryX} ${entryY} REQ_TELEPORT`);
+            console.log(`[SYS] Teleporting player to entry: ${entryX}, ${entryY}`);
+            mainProc.run(`${entryX} ${entryY} CMD_TELEPORT`);
             setPlayerPos({ x: entryX, y: entryY });
             setCursorPos({ x: entryX, y: entryY });
-        } else {
-            // Sync Player Position from Kernel
-            const gMemView = new DataView(mainProc.getMemory());
-            const px = gMemView.getInt32(0x90000 + 12, true); // Entity 0 X
-            const py = gMemView.getInt32(0x90000 + 8, true);  // Entity 0 Y
-            setPlayerPos({ x: px, y: py });
-            setCursorPos({ x: px, y: py });
         }
 
         if (level.simulation_mode === "PLATFORM") {
