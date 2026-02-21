@@ -245,10 +245,10 @@ export class AetherTranspiler {
             const name = decl.id.name.toUpperCase();
 
             // Detect Type Hints: const x = new Uint8Array(...)
-            if (decl.init && decl.init.type === "NewExpression" && decl.init.callee.name && decl.init.callee.name.includes("Uint8")) {
-                this.varTypes.set(name, "Uint8Array");
-            } else if (decl.init && decl.init.type === "CallExpression" && decl.init.callee.name && decl.init.callee.name === "Uint8Array") {
-                this.varTypes.set(name, "Uint8Array");
+            if (decl.init && decl.init.type === "NewExpression" && decl.init.callee.name && (decl.init.callee.name.includes("Uint8") || decl.init.callee.name.includes("Uint32") || decl.init.callee.name.includes("Int32"))) {
+                this.varTypes.set(name, decl.init.callee.name);
+            } else if (decl.init && decl.init.type === "CallExpression" && decl.init.callee.name && (decl.init.callee.name === "Uint8Array" || decl.init.callee.name === "Uint32Array" || decl.init.callee.name === "Int32Array")) {
+                this.varTypes.set(name, decl.init.callee.name);
             } else if (decl.init && decl.init.type === "NewExpression" && decl.init.callee.name === "Array") {
                 const firstArg = decl.init.arguments[0];
                 const secondArg = decl.init.arguments[1];
@@ -400,8 +400,8 @@ export class AetherTranspiler {
         if (decl.init) {
             const fullName = `LV_${scope.functionName}_${name}`;
             if ((decl.init.type === "NewExpression" || decl.init.type === "CallExpression") &&
-                decl.init.callee.name && decl.init.callee.name.includes("Uint8")) {
-                this.varTypes.set(fullName, "Uint8Array");
+                decl.init.callee.name && (decl.init.callee.name.includes("Uint8") || decl.init.callee.name.includes("Uint32") || decl.init.callee.name.includes("Int32"))) {
+                this.varTypes.set(fullName, decl.init.callee.name);
             } else if (decl.init.type === "NewExpression" && decl.init.callee.name === "Array") {
                 const firstArg = decl.init.arguments[0];
                 const secondArg = decl.init.arguments[1];
@@ -453,10 +453,23 @@ export class AetherTranspiler {
       if (init) {
           if (init.type === "Literal") {
             val = init.value;
+          } else if (init.type === "Identifier") {
+              const constInit = this.globalConsts.get(init.name.toUpperCase());
+              if (constInit && constInit.type === "Literal") {
+                  val = constInit.value;
+              }
           } else if (init.type === "NewExpression" || init.type === "CallExpression") {
               // Handle new Uint8Array(0x30000) -> 0x30000
-              if (init.arguments && init.arguments.length > 0 && init.arguments[0].type === "Literal") {
-                  val = init.arguments[0].value;
+              if (init.arguments && init.arguments.length > 0) {
+                  const arg0 = init.arguments[0];
+                  if (arg0.type === "Literal") {
+                      val = arg0.value;
+                  } else if (arg0.type === "Identifier") {
+                      const constInit = this.globalConsts.get(arg0.name.toUpperCase());
+                      if (constInit && constInit.type === "Literal") {
+                          val = constInit.value;
+                      }
+                  }
               }
           }
       }
@@ -654,6 +667,15 @@ export class AetherTranspiler {
             const varName = this.resolveVar(node.argument.name); // returns Name
             const val = node.operator === "++" ? "1" : "-1";
             this.emit(`  ${val} ${varName} +!`);
+        } else if (node.argument.type === "MemberExpression" && !node.argument.computed) {
+            const propName = node.argument.property.name;
+            const structType = this.getExpressionStructType(node.argument.object);
+            const offConst = structType ? `OFF_${structType.toUpperCase()}_${propName.toUpperCase()}` : `OFF_${propName.toUpperCase()}`;
+            const val = node.operator === "++" ? "1" : "-1";
+
+            this.emit(`  ${val}`);
+            this.compileNode(node.argument.object); // Ptr
+            this.emit(`  ${offConst} + +!`);
         }
         break;
 

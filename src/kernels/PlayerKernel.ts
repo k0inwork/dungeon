@@ -18,8 +18,10 @@ struct PlayerState {
     maxHp,
     gold,
     invCount,
-    inv0, inv1, inv2, inv3, inv4,
-    inv5, inv6, inv7, inv8, inv9
+    inv0, inv1, inv2, inv3, inv4, inv5, inv6, inv7, inv8, inv9,
+    inv10, inv11, inv12, inv13, inv14, inv15, inv16, inv17, inv18, inv19,
+    inv20, inv21, inv22, inv23, inv24, inv25, inv26, inv27, inv28, inv29,
+    inv30, inv31
 }
 
 let player_state = new Array(PlayerState, 1, 0xC0000);
@@ -29,21 +31,9 @@ function get_player_ptr() {
     return PlayerState(0);
 }
 
-function init_player() {
-    let p = get_player_ptr();
-    p.hp = 100;
-    p.maxHp = 100;
-    p.gold = 0;
-    p.invCount = 0;
-    Chan().on(on_player_event);
-    Chan("BUS").on(on_bus_event);
-    Chan("combat_events").on(on_combat_event);
-    Log("[PLAYER] State Initialized");
-}
-
 function add_item(itemId) {
     let p = get_player_ptr();
-    if (p.invCount >= 10) {
+    if (p.invCount >= 32) {
         Log("Inventory Full!");
         return;
     }
@@ -96,6 +86,24 @@ function on_combat_event(op, sender, p1, p2, p3) {
              if (p.hp < 0) p.hp = 0;
         }
     }
+}
+
+function init_player() {
+    let p = get_player_ptr();
+    p.hp = 100;
+    p.maxHp = 100;
+    p.gold = 0;
+    p.invCount = 0;
+
+    add_item(40); // Iron Sword
+    add_item(36); // Gold Coin
+    add_item(36); // Gold Coin
+    add_item(91); // Small Potion
+    add_item(36); // Gold Coin
+
+    Chan().on(on_player_event);
+    Chan("BUS").on(on_bus_event);
+    Chan("combat_events").on(on_combat_event);
 }
 
 function handle_events() {

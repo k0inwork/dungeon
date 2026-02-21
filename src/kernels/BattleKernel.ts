@@ -48,7 +48,7 @@ function init_stats(id, type) {
     if (id == 0) {
         // Sync from Player Kernel for Persistence
         let p = PlayerState(0);
-        if (p.maxHp > 0) {
+        if (p.maxHp > 0 && p.maxHp < 100000) {
             e.maxHp = p.maxHp;
             e.hp = p.hp;
         } else {

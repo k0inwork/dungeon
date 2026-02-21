@@ -67,8 +67,18 @@ const App = () => {
   const [gameOver, setGameOver] = useState(false);
 
   // Persistent HUD State
-  const [playerStats, setPlayerStats] = useState({ hp: 0, maxHp: 0, gold: 0, inv: 0 });
+  const [playerStats, setPlayerStats] = useState({ hp: 0, maxHp: 0, gold: 0, invCount: 0, inventory: [] as number[] });
   const [groundItems, setGroundItems] = useState<string[]>([]);
+
+  const ITEM_NAMES: Record<number, string> = {
+      36: "Gold Coin",
+      40: "Iron Sword",
+      91: "Small Potion",
+      114: "Rat Corpse",
+      82: "Giant Rat Corpse",
+      2001: "Rat Tooth",
+      2002: "Rat Tail"
+  };
 
   // Bus Log Sidebar State
   const [showBus, setShowBus] = useState(false);
@@ -705,7 +715,8 @@ const App = () => {
       const battleId = String(getInstanceID(KernelID.BATTLE, currentLevelIdx));
       const battleProc = forthService.get(battleId);
 
-      let hp = 0, maxHp = 0, gold = 0, inv = 0;
+      let hp = 0, maxHp = 0, gold = 0, invCount = 0;
+      const inventory: number[] = [];
 
       if (battleProc?.isReady) {
           const bMem = new DataView(battleProc.getMemory());
@@ -715,7 +726,11 @@ const App = () => {
 
       const pMem = new DataView(playerProc.getMemory());
       gold = pMem.getInt32(0xC0008, true);
-      inv = pMem.getInt32(0xC000C, true);
+      invCount = pMem.getInt32(0xC000C, true);
+
+      for (let i = 0; i < 32; i++) {
+          inventory.push(pMem.getUint32(0xC0010 + (i * 4), true));
+      }
 
       // Fallback for HP if Battle Kernel not ready or uninitialized
       if (hp === 0 && maxHp === 0) {
@@ -723,7 +738,7 @@ const App = () => {
           maxHp = pMem.getInt32(0xC0004, true);
       }
 
-      setPlayerStats({ hp, maxHp, gold, inv });
+      setPlayerStats({ hp, maxHp, gold, invCount, inventory });
 
       // 2. Sync Ground Items at Player Position
       const gMemView = new DataView(gridProc.getMemory());
@@ -1250,8 +1265,24 @@ const App = () => {
             }}>
                 <div style={{ borderBottom: '1px solid #333', marginBottom: '8px', color: '#fff' }}>PLAYER HUD</div>
                 <div style={{ marginBottom: '4px' }}>HP: <span style={{ color: playerStats.hp < 30 ? 'red' : '#0f0' }}>{playerStats.hp}/{playerStats.maxHp}</span></div>
-                <div style={{ marginBottom: '4px' }}>GOLD: <span style={{ color: 'gold' }}>{playerStats.gold}</span></div>
-                <div style={{ marginBottom: '4px' }}>INV: <span style={{ color: 'cyan' }}>{playerStats.inv}/10</span></div>
+                <div style={{ marginBottom: '4px' }}>INV: <span style={{ color: 'cyan' }}>{playerStats.invCount}/32</span></div>
+
+                <div style={{ borderBottom: '1px solid #333', marginTop: '15px', marginBottom: '8px', color: '#fff' }}>LOOT</div>
+                <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                    {playerStats.invCount > 0 ? (() => {
+                        const counts: Record<string, number> = {};
+                        for (let i = 0; i < playerStats.invCount; i++) {
+                            const id = playerStats.inventory[i];
+                            const name = ITEM_NAMES[id] || `Item (${id})`;
+                            counts[name] = (counts[name] || 0) + 1;
+                        }
+                        return Object.entries(counts).map(([name, num], i) => (
+                            <div key={i} style={{ color: 'cyan', marginBottom: '2px' }}>
+                                {name} {num > 1 ? `x${num}` : ''}
+                            </div>
+                        ));
+                    })() : <div style={{ color: '#444' }}>Empty</div>}
+                </div>
 
                 <div style={{ borderBottom: '1px solid #333', marginTop: '15px', marginBottom: '8px', color: '#fff' }}>ON GROUND</div>
                 {groundItems.length > 0 ? groundItems.map((it, i) => (
