@@ -20,24 +20,6 @@ function Random() {
     return (RNG_SEED >>> 16) & 32767;
 }
 
-function init_hive() {
-    let i = 0;
-    while (i < MAX_ENTITIES) {
-        let ent = get_hive_ptr(i);
-        ent.x = 0;
-        ent.y = 0;
-        ent.type = 0;
-        i++;
-    }
-    HIVE_ENT_COUNT = 0;
-
-    Log("[HIVE] Memory Reset");
-    Chan("npc_sync").on(on_npc_sync);
-    Chan().on(on_bus_event);
-    Chan("BUS").on(on_bus_event);
-
-}
-
 // 2. LOGIC
 struct HiveEntity {
     x,
@@ -80,7 +62,6 @@ function set_hive_type(id, type) {
 }
 
 function on_npc_sync(opcode, sender, arg1, arg2, arg3) {
-  Log("[HIVE] on_npc_sync Op:"); Log(opcode); Log(" ID:"); Log(arg1);
   if (opcode == EVT_MOVED) {
      update_hive_entity(arg1, arg2, arg3);
      if (arg1 == 0) {
@@ -121,7 +102,6 @@ function abs(n) {
 }
 
 function decide_action(id) {
-  Log("[HIVE] Deciding for ID:"); Log(id);
   let ent = get_hive_ptr(id);
   if (ent.type == 3) return; // Skip items/loot
 
@@ -176,7 +156,6 @@ ${STANDARD_AJS_POSTAMBLE}
 function run_cycle() {
    let i = 1;
    let count = HIVE_ENT_COUNT;
-   Log("[HIVE] Cycle Start. Count:"); Log(count);
    while (i < count) {
       decide_action(i);
       i++;
@@ -186,6 +165,24 @@ function run_cycle() {
 function run_hive_cycle() {
     process_inbox();
     run_cycle();
+}
+
+function init_hive() {
+    let i = 0;
+    while (i < MAX_ENTITIES) {
+        let ent = get_hive_ptr(i);
+        ent.x = 0;
+        ent.y = 0;
+        ent.type = 0;
+        i++;
+    }
+    HIVE_ENT_COUNT = 0;
+
+    Log("[HIVE] Memory Reset");
+    Chan("npc_sync").on(on_npc_sync);
+    Chan().on(on_bus_event);
+    Chan("BUS").on(on_bus_event);
+
 }
 `;
 
