@@ -18,6 +18,7 @@ export function getInstanceID(role: number, levelIdx: number): number {
 
 export function getRoleID(instanceID: number): number {
     if (instanceID === 2) return KernelID.PLAYER;
+    if (instanceID === 255) return KernelID.BUS;
     if (instanceID < 100) return instanceID;
     return Math.floor(instanceID / 100);
 }

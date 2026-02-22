@@ -15,6 +15,8 @@ const TERRAIN_MAP   = new Uint32Array(0x40000);
 const TRANSITION_MAP = new Int32Array(0x45000);
 const VRAM          = new Uint32Array(0x80000);
 
+const MAX_ENTITIES = 32;
+
 struct GridEntity {
     char,
     color,
@@ -23,13 +25,29 @@ struct GridEntity {
     type
 }
 
-let entities = new Array(GridEntity, 1, 0x90000);
+struct EntityPhysics {
+    vx,
+    vy,
+    fx,
+    fy,
+    active
+}
 
-// Fixed-point 16.16
-let player_x = 2 * 65536;
-let player_y = 10 * 65536;
-let player_vx = 0;
-let player_vy = 0;
+let entities = new Array(GridEntity, MAX_ENTITIES, 0x90000);
+let physics  = new Array(EntityPhysics, MAX_ENTITIES, 0x95000);
+let ENTITY_COUNT = 0;
+let RNG_SEED = 12345;
+let skill_timer = 0;
+
+function Random() {
+    RNG_SEED = (RNG_SEED * 1103515245 + 12345);
+    return (RNG_SEED >>> 16) & 32767;
+}
+
+function abs(n) {
+    if (n < 0) return 0 - n;
+    return n;
+}
 
 let gravity = 5000;
 let jump_force = -75000;
@@ -61,15 +79,25 @@ function init_platformer() {
         VRAM[i] = 0;
         i++;
     }
-    player_x = 2 * 65536;
-    player_y = 2 * 65536;
-    player_vx = 0;
-    player_vy = 0;
+
+    i = 0;
+    while (i < MAX_ENTITIES) {
+        let p = EntityPhysics(i);
+        p.active = 0;
+        p.vx = 0;
+        p.vy = 0;
+        let ent = GridEntity(i);
+        ent.char = 0;
+        i++;
+    }
+
+    ENTITY_COUNT = 0;
+    skill_timer = 0;
     CURRENT_LEVEL_ID = 0;
     Chan().on(on_platform_request);
     Chan("BUS").on(on_platform_request);
 
-    Log("[PLATFORM] Kernel Ready (v4)");
+    Log("[PLATFORM] Kernel Ready (v5-multi)");
 }
 
 function load_tile(x, y, color, char, type, target_id) {
@@ -79,96 +107,217 @@ function load_tile(x, y, color, char, type, target_id) {
     TRANSITION_MAP[i] = target_id;
 }
 
-function update_physics() {
-    player_vy = player_vy + gravity;
-    player_vx = (player_vx * 8) / 10; // friction
+function update_entity_physics(id) {
+    let p = EntityPhysics(id);
+    if (p.active == 0) return;
 
-    let nx = player_x + player_vx;
-    let ny = player_y + player_vy;
+    let ent = GridEntity(id);
 
-    // Player bounding box with small insets to prevent corner-snagging
-    let lx = (player_x + 4000) / 65536;
-    let rx = (player_x + 61536) / 65536;
-
-    // 1. Vertical Collision (check both left and right edges)
-    let by_foot = (ny + 65535) / 65536;
-    let by_head = ny / 65536;
-    let by_mid_travel = (player_y + (player_vy / 2) + 65535) / 65536;
-
-    if (player_vy > 0) {
-        // Check foot AND mid-point of travel to prevent tunneling
-        if (get_collision(lx, by_foot) || get_collision(rx, by_foot) || get_collision(lx, by_mid_travel) || get_collision(rx, by_mid_travel)) {
-            // If we hit mid_travel but not by_foot, we should snap to the mid_travel platform
-            if (get_collision(lx, by_mid_travel) || get_collision(rx, by_mid_travel)) {
-                if (get_collision(lx, by_foot) == 0 && get_collision(rx, by_foot) == 0) {
-                    by_foot = by_mid_travel;
-                }
-            }
-            player_vy = 0;
-            player_y = (by_foot - 1) * 65536;
-            ny = player_y;
-        } else {
-            player_y = ny;
-        }
-    } else if (player_vy < 0) {
-        if (get_collision(lx, by_head) || get_collision(rx, by_head) || get_collision(lx, by_mid_travel) || get_collision(rx, by_mid_travel)) {
-            player_vy = 0;
-            player_y = (by_head + 1) * 65536;
-            ny = player_y;
-        } else {
-            player_y = ny;
-        }
+    // Apply Gravity
+    p.vy = p.vy + gravity;
+    if (id == 0) {
+        p.vx = (p.vx * 8) / 10; // friction for player
     } else {
-        player_y = ny;
+        p.vx = (p.vx * 9) / 10; // friction for others
     }
 
-    // 2. Horizontal Collision (using updated Y)
+    let nx = p.fx + p.vx;
+    let ny = p.fy + p.vy;
+
+    let lx = (p.fx + 4000) / 65536;
+    let rx = (p.fx + 61536) / 65536;
+
+    // 1. Vertical Collision
+    let by_foot = (ny + 65535) / 65536;
+    let by_head = ny / 65536;
+
+    if (p.vy > 0) {
+        if (get_collision(lx, by_foot) || get_collision(rx, by_foot)) {
+            p.vy = 0;
+            p.fy = (by_foot - 1) * 65536;
+            ny = p.fy;
+        } else {
+            p.fy = ny;
+        }
+    } else if (p.vy < 0) {
+        if (get_collision(lx, by_head) || get_collision(rx, by_head)) {
+            p.vy = 0;
+            p.fy = (by_head + 1) * 65536;
+            ny = p.fy;
+        } else {
+            p.fy = ny;
+        }
+    } else {
+        p.fy = ny;
+    }
+
+    // 2. Horizontal Collision (using updated FY)
     let h_rx = (nx + 63536) / 65536;
     let h_lx = (nx + 2000) / 65536;
-    let pyy = player_y / 65536;
+    let pyy = p.fy / 65536;
 
-    if (player_vx > 0) {
+    if (p.vx > 0) {
         if (get_collision(h_rx, pyy)) {
-            player_vx = 0;
-            player_x = (h_rx - 1) * 65536;
+            p.vx = 0;
+            p.fx = (h_rx - 1) * 65536;
         } else {
-            player_x = nx;
+            p.fx = nx;
         }
-    } else if (player_vx < 0) {
+    } else if (p.vx < 0) {
         if (get_collision(h_lx, pyy)) {
-            player_vx = 0;
-            player_x = (h_lx + 1) * 65536;
+            p.vx = 0;
+            p.fx = (h_lx + 1) * 65536;
         } else {
-            player_x = nx;
+            p.fx = nx;
         }
     }
 
     // Bounds clamp
-    if (player_x < 0) player_x = 0;
-    if (player_y < 0) player_y = 0;
+    if (p.fx < 0) p.fx = 0;
+    if (p.fy < 0) p.fy = 0;
+    if (p.fx > 39 * 65536) p.fx = 39 * 65536;
+    if (p.fy > 19 * 65536) p.fy = 19 * 65536;
 
-    // Check for Exit
-    let exit_px = (player_x + 32768) / 65536;
-    let exit_py = (player_y + 32768) / 65536;
-    let exit_idx = calc_idx(exit_px, exit_py);
-    let exit_target = TRANSITION_MAP[exit_idx];
+    // Sync GridEntity for render/host
+    ent.x = p.fx / 65536;
+    ent.y = p.fy / 65536;
 
-    if (exit_target != -1) {
-        bus_send(EVT_LEVEL_TRANSITION, K_PLATFORM, K_HOST, exit_target, 0, 0);
-        player_x = 5 * 65536; // Reset pos
+    // Player specific (Exit check)
+    if (id == 0) {
+        let exit_idx = calc_idx(ent.x, ent.y);
+        let exit_target = TRANSITION_MAP[exit_idx];
+        if (exit_target != -1) {
+            bus_send(EVT_LEVEL_TRANSITION, K_PLATFORM, K_HOST, exit_target, 0, 0);
+            p.fx = 5 * 65536; // reset pos
+        }
+    }
+}
+
+function frog_ai(id) {
+    let p = EntityPhysics(id);
+    let ent = GridEntity(id);
+    let player = EntityPhysics(0);
+
+    let r = Random() % 100;
+
+    if (ent.type == 1) { // passive frog 'f'
+        if (r < 2) {
+            if (get_collision(ent.x, ent.y + 1)) {
+                p.vy = jump_force / 2;
+                p.vx = (Random() % 20000) - 10000;
+            }
+        }
+    } else if (ent.type == 2) { // aggressive frog 'F'
+        let dx = p.fx - player.fx;
+        let dy = p.fy - player.fy;
+        let dist = abs(dx/65536) + abs(dy/65536);
+
+        if (dist < 10) {
+            if (r < 5) {
+                if (get_collision(ent.x, ent.y + 1)) {
+                    p.vy = jump_force / 2;
+                    if (dx > 0) p.vx = -15000; else p.vx = 15000;
+                }
+            }
+            if (dist < 1) {
+                bus_send(EVT_DAMAGE, K_PLATFORM, K_BUS, 0, 1, 0);
+            }
+        }
+    }
+}
+
+function check_player_stomps() {
+    let player = EntityPhysics(0);
+    if (player.vy <= 0) return;
+
+    let i = 1;
+    while (i < ENTITY_COUNT) {
+        let p = EntityPhysics(i);
+        if (p.active) {
+            let ent = GridEntity(i);
+            if (ent.type == 1 || ent.type == 2) {
+                let dx = abs(player.fx - p.fx);
+                let dy = player.fy - p.fy;
+                if (dx < 40000 && dy > -32768 && dy < 32768) {
+                    bus_send(EVT_DAMAGE, K_PLATFORM, K_BUS, i, 10, 0);
+                    player.vy = jump_force / 2;
+                    return;
+                }
+            }
+        }
+        i++;
+    }
+}
+
+function update_physics() {
+    update_entity_physics(0);
+    check_player_stomps();
+
+    let i = 1;
+    while (i < ENTITY_COUNT) {
+        let p = EntityPhysics(i);
+        if (p.active) {
+            update_entity_physics(i);
+            let ent = GridEntity(i);
+            if (ent.type == 1 || ent.type == 2) {
+                frog_ai(i);
+            }
+        }
+        i++;
     }
 
-    if (player_x > 39 * 65536) player_x = 39 * 65536;
-    if (player_y > 19 * 65536) player_y = 19 * 65536;
+    if (skill_timer > 0) skill_timer--;
+}
+
+function spawn_entity(x, y, color, char, type) {
+    if (ENTITY_COUNT >= MAX_ENTITIES) return;
+    let id = ENTITY_COUNT;
+    ENTITY_COUNT++;
+
+    let ent = GridEntity(id);
+    ent.char = char;
+    ent.color = color;
+    ent.x = x;
+    ent.y = y;
+    ent.type = type;
+
+    let p = EntityPhysics(id);
+    p.fx = x * 65536;
+    p.fy = y * 65536;
+    p.vx = 0;
+    p.vy = 0;
+    p.active = 1;
+
+    Chan("npc_sync") <- [EVT_SPAWN, id, type, 0];
+    Chan("npc_sync") <- [EVT_MOVED, id, x, y];
+}
+
+function trigger_skill() {
+    skill_timer = 10;
+    let player = EntityPhysics(0);
+    let px = player.fx / 65536;
+    let py = player.fy / 65536;
+
+    let i = 1;
+    while (i < ENTITY_COUNT) {
+        let p = EntityPhysics(i);
+        if (p.active) {
+            let ent = GridEntity(i);
+            if (ent.type == 1 || ent.type == 2) {
+                let ex = p.fx / 65536;
+                let ey = p.fy / 65536;
+                let dx = abs(px - ex);
+                let dy = abs(py - ey);
+                if (dx <= 1 && dy <= 1) {
+                    bus_send(EVT_DAMAGE, K_PLATFORM, K_BUS, i, 15, 0);
+                }
+            }
+        }
+        i++;
+    }
 }
 
 function render() {
-    // 0. Sync Entity 0 (Player) for Host
-    let ent = GridEntity(0);
-    ent.x = player_x / 65536;
-    ent.y = player_y / 65536;
-
-    // 1. Copy Terrain to VRAM
     let ri = 0;
     let total = MAP_WIDTH * MAP_HEIGHT;
     while (ri < total) {
@@ -176,58 +325,81 @@ function render() {
         ri++;
     }
 
-    // 2. Draw Player '@'
-    let ren_px = player_x / 65536;
-    let ren_py = player_y / 65536;
-    let ren_pidx = calc_idx(ren_px, ren_py);
-    if (ren_pidx >= 0) {
-        if (ren_pidx < MAP_WIDTH * MAP_HEIGHT) {
-            VRAM[ren_pidx] = (0x00FF00 << 8) | 64; // Green '@'
+    if (skill_timer > 0) {
+        let player = EntityPhysics(0);
+        let px = player.fx / 65536;
+        let py = player.fy / 65536;
+        let gx = px - 1;
+        while (gx <= px + 1) {
+            let gy = py - 1;
+            while (gy <= py + 1) {
+                if (gx >= 0 && gx < MAP_WIDTH && gy >= 0 && gy < MAP_HEIGHT) {
+                    let gidx = calc_idx(gx, gy);
+                    let orig = VRAM[gidx];
+                    VRAM[gidx] = (0x800080 << 8) | (orig & 255);
+                }
+                gy++;
+            }
+            gx++;
         }
+    }
+
+    let i = 0;
+    while (i < ENTITY_COUNT) {
+        let p = EntityPhysics(i);
+        if (p.active) {
+            let ent = GridEntity(i);
+            let ren_pidx = calc_idx(ent.x, ent.y);
+            if (ren_pidx >= 0 && ren_pidx < total) {
+                VRAM[ren_pidx] = (ent.color << 8) | ent.char;
+            }
+        }
+        i++;
     }
 }
 
 function move_player(m_dir) {
-    player_vx = player_vx + (m_dir * move_speed);
+    let p = EntityPhysics(0);
+    p.vx = p.vx + (m_dir * move_speed);
 }
 
 function jump_player() {
-    let bx = player_x / 65536;
-    let by = (player_y / 65536) + 1;
+    let p = EntityPhysics(0);
+    let bx = p.fx / 65536;
+    let by = (p.fy / 65536) + 1;
     if (get_collision(bx, by) != 0) {
-        player_vy = jump_force;
+        p.vy = jump_force;
     }
 }
 
 function teleport_player(tx, ty) {
-    player_x = tx * 65536;
-    player_y = ty * 65536;
-    player_vx = 0;
-    player_vy = 0;
+    let p = EntityPhysics(0);
+    p.fx = tx * 65536;
+    p.fy = ty * 65536;
+    p.vx = 0;
+    p.vy = 0;
 }
 
-function spawn_entity(x, y, color, char, type) {
-    // In platformer, we currently only support the player (ID 0)
-    if (type == 0) {
-        player_x = x * 65536;
-        player_y = y * 65536;
-
-        let ent = GridEntity(0);
-        ent.char = char;
-        ent.color = color;
-        ent.x = x;
-        ent.y = y;
-        ent.type = type;
-
-        Chan("npc_sync") <- [EVT_SPAWN, 0, type, 0];
-        Chan("npc_sync") <- [EVT_MOVED, 0, x, y];
-    }
-}
+// Legacy helpers for tests and host
+function PLAYER_X() { return EntityPhysics(0).fx; }
+function PLAYER_Y() { return EntityPhysics(0).fy; }
+function PLAYER_VX() { return EntityPhysics(0).vx; }
+function PLAYER_VY() { return EntityPhysics(0).vy; }
 
 function on_platform_request(op, sender, p1, p2, p3) {
     if (op == REQ_MOVE) { move_player(p1); }
     if (op == REQ_TELEPORT) { teleport_player(p1, p2); }
-    if (op == CMD_INTERACT) { jump_player(); }
+    if (op == CMD_INTERACT) { trigger_skill(); }
+    if (op == EVT_DAMAGE) {
+        let ent = GridEntity(p1);
+        if (ent.type == 3) return;
+        if (p1 > 0) {
+            let p = EntityPhysics(p1);
+            p.active = 0;
+            ent.char = 32;
+            Chan("npc_sync") <- [EVT_DEATH, p1, 0, 0];
+        }
+    }
 }
 
 function handle_events() {

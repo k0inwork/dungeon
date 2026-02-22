@@ -294,7 +294,8 @@ const App = () => {
 
   const loadLevel = async (level: any, sourceLevelIdx: number = -1) => {
     const lIdx = LEVEL_IDS.indexOf(level.id);
-    const gridId = String(getInstanceID(KernelID.GRID, lIdx));
+    const physicsRole = level.simulation_mode === 'PLATFORM' ? KernelID.PLATFORM : KernelID.GRID;
+    const gridId = String(getInstanceID(physicsRole, lIdx));
     const hiveId = String(getInstanceID(KernelID.HIVE, lIdx));
     const battleId = String(getInstanceID(KernelID.BATTLE, lIdx));
 
@@ -674,7 +675,9 @@ const App = () => {
 
   const tickSimulation = () => {
       const lIdx = currentLevelIdx;
-      const gridId = String(getInstanceID(KernelID.GRID, lIdx));
+      const currentLevel = worldInfo?.levels?.[currentLevelId];
+      const physicsRole = currentLevel?.simulation_mode === 'PLATFORM' ? KernelID.PLATFORM : KernelID.GRID;
+      const gridId = String(getInstanceID(physicsRole, lIdx));
       const hiveId = String(getInstanceID(KernelID.HIVE, lIdx));
       const battleId = String(getInstanceID(KernelID.BATTLE, lIdx));
 
@@ -718,7 +721,9 @@ const App = () => {
 
   const syncKernelState = () => {
       const playerProc = forthService.get("PLAYER");
-      const gridId = String(getInstanceID(KernelID.GRID, currentLevelIdx));
+      const currentLevel = worldInfo?.levels?.[currentLevelId];
+      const physicsRole = currentLevel?.simulation_mode === 'PLATFORM' ? KernelID.PLATFORM : KernelID.GRID;
+      const gridId = String(getInstanceID(physicsRole, currentLevelIdx));
       const gridProc = forthService.get(gridId);
       if (!playerProc?.isReady || !gridProc?.isReady) return;
 
@@ -787,7 +792,9 @@ const App = () => {
   // Inspect Entity at X, Y by checking Kernel Memory directly
   // Returns the ID found, or -1
   const getEntityAt = (x: number, y: number): number => {
-      const gridId = String(getInstanceID(KernelID.GRID, currentLevelIdx));
+      const currentLevel = worldInfo?.levels?.[currentLevelId];
+      const physicsRole = currentLevel?.simulation_mode === 'PLATFORM' ? KernelID.PLATFORM : KernelID.GRID;
+      const gridId = String(getInstanceID(physicsRole, currentLevelIdx));
       const gridProc = forthService.get(gridId);
       if (!gridProc?.isReady) return -1;
       const gridMem = new Uint8Array(gridProc.getMemory());
@@ -798,7 +805,9 @@ const App = () => {
   };
 
   const isWallAt = (x: number, y: number): boolean => {
-      const gridId = String(getInstanceID(KernelID.GRID, currentLevelIdx));
+      const currentLevel = worldInfo?.levels?.[currentLevelId];
+      const physicsRole = currentLevel?.simulation_mode === 'PLATFORM' ? KernelID.PLATFORM : KernelID.GRID;
+      const gridId = String(getInstanceID(physicsRole, currentLevelIdx));
       const gridProc = forthService.get(gridId);
       if (!gridProc?.isReady) return false;
       const gridMem = new Uint8Array(gridProc.getMemory());
@@ -841,7 +850,9 @@ const App = () => {
     if (viewMode === "ARCHITECT") return;
 
     if (mode === "GRID") {
-      const gridId = String(getInstanceID(KernelID.GRID, currentLevelIdx));
+      const currentLevel = worldInfo?.levels?.[currentLevelId];
+      const physicsRole = currentLevel?.simulation_mode === 'PLATFORM' ? KernelID.PLATFORM : KernelID.GRID;
+      const gridId = String(getInstanceID(physicsRole, currentLevelIdx));
       const mainProc = forthService.get(gridId);
       if (mainProc && mainProc.isReady) {
          try {
@@ -855,7 +866,9 @@ const App = () => {
        }
     } 
     else if (mode === "PLATFORM") {
-      const gridId = String(getInstanceID(KernelID.GRID, currentLevelIdx));
+      const currentLevel = worldInfo?.levels?.[currentLevelId];
+      const physicsRole = currentLevel?.simulation_mode === 'PLATFORM' ? KernelID.PLATFORM : KernelID.GRID;
+      const gridId = String(getInstanceID(physicsRole, currentLevelIdx));
       const platProc = forthService.get(gridId);
       if (platProc && platProc.isReady) {
           if (keysDownRef.current.has("ArrowLeft")) platProc.run("-1 CMD_MOVE");
@@ -906,7 +919,9 @@ const App = () => {
         keysDownRef.current.add(k);
 
         if (mode === "PLATFORM") {
-            const gridId = String(getInstanceID(KernelID.GRID, currentLevelIdx));
+            const currentLevel = worldInfo?.levels?.[currentLevelId];
+            const physicsRole = currentLevel?.simulation_mode === 'PLATFORM' ? KernelID.PLATFORM : KernelID.GRID;
+            const gridId = String(getInstanceID(physicsRole, currentLevelIdx));
             const platProc = forthService.get(gridId);
             if (platProc.isReady) {
                 if (k === "ArrowUp") platProc.run("CMD_JUMP");
@@ -1160,7 +1175,7 @@ const App = () => {
                 {loadedKernelIds.map(id => {
                     const proc = forthService.get(id);
                     const roleId = id === "PLAYER" ? KernelID.PLAYER : getRoleID(parseInt(id));
-                    const roleName = KernelID[roleId] || "UNKNOWN";
+                    const roleName = KernelID[roleId] || `UNK(${roleId})`;
                     const isCurrent = id === "PLAYER" || proc.levelIdx === currentLevelIdx;
 
                     const statusColor = proc.status === "ACTIVE" ? (isCurrent ? "#0f0" : "#0a0") :
