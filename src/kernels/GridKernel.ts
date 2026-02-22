@@ -16,6 +16,7 @@ const MAX_ENTITIES = 32;
 const COLLISION_MAP = new Uint8Array(0x30000);
 const ENTITY_MAP    = new Uint8Array(0x31000);
 const LOOT_MAP      = new Uint8Array(0x32000);
+const TERRAIN_TYPE_MAP = new Uint8Array(0x33000);
 const TERRAIN_MAP   = new Uint32Array(0x40000);
 const TRANSITION_MAP = new Int32Array(0x45000);
 const VRAM          = new Uint32Array(0x80000);
@@ -69,6 +70,7 @@ function system_reset_map() {
         COLLISION_MAP[i] = 0;
         ENTITY_MAP[i] = 0;
         LOOT_MAP[i] = 0;
+        TERRAIN_TYPE_MAP[i] = 0;
         TERRAIN_MAP[i] = 0;
         TRANSITION_MAP[i] = -1;
         VRAM[i] = 0;
@@ -99,8 +101,9 @@ function system_reset_map() {
 
 function load_tile(x, y, color, char, type, target_id) {
     let i = calc_idx(x, y);
-    // Store type in high byte of TERRAIN_MAP for restoration
-    TERRAIN_MAP[i] = (type << 24) | (color << 8) | char;
+    // Store type in separate map to avoid color bit overflow
+    TERRAIN_TYPE_MAP[i] = type;
+    TERRAIN_MAP[i] = (color << 8) | char;
     TRANSITION_MAP[i] = target_id;
 
     if (type != 0) {
@@ -219,14 +222,11 @@ function move_entity(id, dx, dy) {
   if (col != 0) {
       let obs = find_entity_at(tx, ty);
       if (obs == -1) {
-         Log("[GRID] Entity ID:"); Log(id);
-         Log("Blocked by Tile Collision at:");
-         Log(tx); Log(ty);
+         Log("[GRID] Movement Blocked (Tile) for ID:"); Log(id);
          bus_send(EVT_COLLIDE, K_GRID, K_BUS, id, 0, 0);
       } else {
-         Log("[GRID] Entity ID:"); Log(id);
+         Log("[GRID] Movement Blocked (Entity) for ID:"); Log(id);
          Log("Blocked by ID:"); Log(obs);
-         Log("at Location:"); Log(tx); Log(ty);
          bus_send(EVT_COLLIDE, K_GRID, K_BUS, id, obs, 1);
       }
       return;
@@ -234,12 +234,11 @@ function move_entity(id, dx, dy) {
   
   let oi = calc_idx(ent.x, ent.y);
   // Restore collision from terrain (passable if terrain is type 0)
-  let terrain = TERRAIN_MAP[oi];
-  let terrainType = terrain >>> 24;
-  if (terrainType != 0) {
+  if (TERRAIN_TYPE_MAP[oi] != 0) {
       COLLISION_MAP[oi] = 1;
   } else {
       COLLISION_MAP[oi] = 0;
+      Log("[GRID] Cleared Collision at:"); Log(ent.x); Log(ent.y);
   }
 
   // Only clear ENTITY_MAP if it currently holds THIS entity
@@ -273,9 +272,7 @@ function kill_entity(id, itemId) {
     let i = calc_idx(ex, ey);
 
     // Restore collision from terrain
-    let terrain = TERRAIN_MAP[i];
-    let type = terrain >>> 24;
-    if (type != 0) {
+    if (TERRAIN_TYPE_MAP[i] != 0) {
         COLLISION_MAP[i] = 1;
     } else {
         COLLISION_MAP[i] = 0;
@@ -377,8 +374,7 @@ function teleport_entity(id, tx, ty) {
   let oi = calc_idx(ent.x, ent.y);
   if (ent.type != 3) {
       // Restore collision from terrain
-      let terrain = TERRAIN_MAP[oi];
-      if ((terrain >>> 24) != 0) {
+      if (TERRAIN_TYPE_MAP[oi] != 0) {
           COLLISION_MAP[oi] = 1;
       } else {
           COLLISION_MAP[oi] = 0;

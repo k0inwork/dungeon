@@ -137,7 +137,8 @@ const App = () => {
           // We want [PLAYER], [BATTLE], or anything mentioning "Attack/Damage/Die"
           const isGameplay = msg.includes("PLAYER") || msg.includes("BATTLE") || msg.includes("HIVE") || 
                              msg.includes("GRID") || msg.includes("PLATFORM") ||
-                             msg.includes("Attack") || msg.includes("Hits") || msg.includes("Die") || msg.includes("Loot");
+                             msg.includes("Attack") || msg.includes("Hits") || msg.includes("Die") || msg.includes("Loot") ||
+                             msg.includes("Blocked") || msg.includes("Collision") || msg.includes("Stuck");
                              
           if (isGameplay) {
               // Strip timestamp for UI cleanliness
