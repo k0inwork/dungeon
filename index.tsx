@@ -73,7 +73,10 @@ const App = () => {
   const ITEM_NAMES: Record<number, string> = {
       36: "Gold Coin",
       40: "Iron Sword",
+      105: "Iron Sword",
       91: "Small Potion",
+      112: "Potion",
+      97: "Apple",
       114: "Rat Corpse",
       82: "Giant Rat Corpse",
       2001: "Rat Tooth",
@@ -394,7 +397,9 @@ const App = () => {
            }
         }
         if (!terrain && char !== '@' && char !== ' ' && !isPortalPart) {
-           type = 1;
+           // Treating unknown characters as passable by default to avoid "invisible walls"
+           // left by spawned entities that move away.
+           type = 0;
         }
 
         const targetId = terrain?.target_id !== undefined ? terrain.target_id : -1;
@@ -745,8 +750,15 @@ const App = () => {
 
       setPlayerStats({ hp, maxHp, gold, invCount, inventory });
 
-      // 2. Sync Ground Items at Player Position
+      // 1b. Sync Player Position (Total Insurance)
       const gMemView = new DataView(gridProc.getMemory());
+      const player_px = gMemView.getInt32(0x90000 + 12, true);
+      const player_py = gMemView.getInt32(0x90000 + 8, true);
+      if (player_px !== playerPos.x || player_py !== playerPos.y) {
+          setPlayerPos({ x: player_px, y: player_py });
+      }
+
+      // 2. Sync Ground Items at Player Position
       const player_px_host = gMemView.getInt32(0x90000 + 12, true); // Entity 0 is Player
       const player_py_host = gMemView.getInt32(0x90000 + 8, true);
 

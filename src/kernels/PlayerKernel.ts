@@ -89,17 +89,24 @@ function on_combat_event(op, sender, p1, p2, p3) {
 }
 
 function init_player() {
+    Log("[PLAYER] Initializing...");
     let p = get_player_ptr();
     p.hp = 100;
     p.maxHp = 100;
     p.gold = 0;
     p.invCount = 0;
 
-    add_item(40); // Iron Sword
-    add_item(36); // Gold Coin
-    add_item(36); // Gold Coin
-    add_item(91); // Small Potion
-    add_item(36); // Gold Coin
+    // Starting items (10-20 items as requested)
+    let k = 0;
+    while (k < 12) {
+        add_item(36); // Gold Coin ($)
+        k++;
+    }
+    add_item(105); // Iron Sword (i)
+    add_item(105); // Iron Sword (i)
+    add_item(97);  // Apple (a)
+    add_item(97);  // Apple (a)
+    add_item(112); // Potion (p)
 
     Chan().on(on_player_event);
     Chan("BUS").on(on_bus_event);
@@ -119,6 +126,8 @@ function run_player_cycle() {
 function player_boot() {
     init_player();
 }
+
+player_boot();
 `;
 
 export const PLAYER_KERNEL_BLOCKS = [

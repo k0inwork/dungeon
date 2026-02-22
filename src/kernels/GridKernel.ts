@@ -219,12 +219,14 @@ function move_entity(id, dx, dy) {
   if (col != 0) {
       let obs = find_entity_at(tx, ty);
       if (obs == -1) {
-         Log("[GRID] Blocked by Tile Collision at:");
+         Log("[GRID] Entity ID:"); Log(id);
+         Log("Blocked by Tile Collision at:");
          Log(tx); Log(ty);
          bus_send(EVT_COLLIDE, K_GRID, K_BUS, id, 0, 0);
       } else {
-         Log("[GRID] Blocked by Entity ID:");
-         Log(obs);
+         Log("[GRID] Entity ID:"); Log(id);
+         Log("Blocked by ID:"); Log(obs);
+         Log("at Location:"); Log(tx); Log(ty);
          bus_send(EVT_COLLIDE, K_GRID, K_BUS, id, obs, 1);
       }
       return;
@@ -240,7 +242,10 @@ function move_entity(id, dx, dy) {
       COLLISION_MAP[oi] = 0;
   }
 
-  ENTITY_MAP[oi] = 0;
+  // Only clear ENTITY_MAP if it currently holds THIS entity
+  if (ENTITY_MAP[oi] == (id + 1)) {
+      ENTITY_MAP[oi] = 0;
+  }
   refresh_tile(ent.x, ent.y, id);
 
   ent.x = tx;
@@ -250,6 +255,10 @@ function move_entity(id, dx, dy) {
 
   redraw_cell(tx, ty, ent.color, ent.char);
   Chan("npc_sync") <- [EVT_MOVED, id, tx, ty];
+
+  if (id == 0) {
+      bus_send(EVT_MOVED, K_GRID, K_HOST, id, tx, ty);
+  }
 
   // Auto-pickup for player (after successful move)
   if (id == 0) {
@@ -272,7 +281,9 @@ function kill_entity(id, itemId) {
         COLLISION_MAP[i] = 0;
     }
 
-    ENTITY_MAP[i] = 0;
+    if (ENTITY_MAP[i] == (id + 1)) {
+        ENTITY_MAP[i] = 0;
+    }
     LOOT_MAP[i] = id + 1;
     // Keep character (e.g. 'r' or 'R'), change color to gray
     ent.color = 8947848; // 0x888888 in decimal
@@ -372,7 +383,9 @@ function teleport_entity(id, tx, ty) {
       } else {
           COLLISION_MAP[oi] = 0;
       }
-      ENTITY_MAP[oi] = 0;
+      if (ENTITY_MAP[oi] == (id + 1)) {
+          ENTITY_MAP[oi] = 0;
+      }
   }
   refresh_tile(ent.x, ent.y, id);
 
@@ -385,6 +398,10 @@ function teleport_entity(id, tx, ty) {
   }
   redraw_cell(tx, ty, ent.color, ent.char);
   Chan("npc_sync") <- [EVT_MOVED, id, tx, ty];
+
+  if (id == 0) {
+      bus_send(EVT_MOVED, K_GRID, K_HOST, id, tx, ty);
+  }
 }
 
 function teleport_player(tx, ty) {
