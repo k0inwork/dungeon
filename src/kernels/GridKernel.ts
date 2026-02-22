@@ -16,6 +16,7 @@ const MAX_ENTITIES = 32;
 const COLLISION_MAP = new Uint8Array(0x30000);
 const ENTITY_MAP    = new Uint8Array(0x31000);
 const LOOT_MAP      = new Uint8Array(0x32000);
+const TERRAIN_TYPE_MAP = new Uint8Array(0x33000);
 const TERRAIN_MAP   = new Uint32Array(0x40000);
 const TRANSITION_MAP = new Int32Array(0x45000);
 const VRAM          = new Uint32Array(0x80000);
@@ -69,6 +70,7 @@ function system_reset_map() {
         COLLISION_MAP[i] = 0;
         ENTITY_MAP[i] = 0;
         LOOT_MAP[i] = 0;
+        TERRAIN_TYPE_MAP[i] = 0;
         TERRAIN_MAP[i] = 0;
         TRANSITION_MAP[i] = -1;
         VRAM[i] = 0;
@@ -99,8 +101,9 @@ function system_reset_map() {
 
 function load_tile(x, y, color, char, type, target_id) {
     let i = calc_idx(x, y);
-    // Store type in high byte of TERRAIN_MAP for restoration
-    TERRAIN_MAP[i] = (type << 24) | (color << 8) | char;
+    // Store type in separate map to avoid color bit overflow
+    TERRAIN_TYPE_MAP[i] = type;
+    TERRAIN_MAP[i] = (color << 8) | char;
     TRANSITION_MAP[i] = target_id;
 
     if (type != 0) {
@@ -182,7 +185,8 @@ function try_pickup(playerId, x, y) {
                 bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, 2001, 0); // Tooth
                 bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, 2002, 0); // Tail
             } else {
-                bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, id, 0);
+                // Use character code as Item ID for frontend mapping
+                bus_send(EVT_ITEM_GET, K_GRID, K_PLAYER, playerId, ent.char, 0);
             }
 
             ent.char = 0;
@@ -218,16 +222,29 @@ function move_entity(id, dx, dy) {
   if (col != 0) {
       let obs = find_entity_at(tx, ty);
       if (obs == -1) {
+         Log("[GRID] Movement Blocked (Tile) for ID:"); Log(id);
          bus_send(EVT_COLLIDE, K_GRID, K_BUS, id, 0, 0);
       } else {
+         Log("[GRID] Movement Blocked (Entity) for ID:"); Log(id);
+         Log("Blocked by ID:"); Log(obs);
          bus_send(EVT_COLLIDE, K_GRID, K_BUS, id, obs, 1);
       }
       return;
   }
   
   let oi = calc_idx(ent.x, ent.y);
-  COLLISION_MAP[oi] = 0;
-  ENTITY_MAP[oi] = 0;
+  // Restore collision from terrain (passable if terrain is type 0)
+  if (TERRAIN_TYPE_MAP[oi] != 0) {
+      COLLISION_MAP[oi] = 1;
+  } else {
+      COLLISION_MAP[oi] = 0;
+      Log("[GRID] Cleared Collision at:"); Log(ent.x); Log(ent.y);
+  }
+
+  // Only clear ENTITY_MAP if it currently holds THIS entity
+  if (ENTITY_MAP[oi] == (id + 1)) {
+      ENTITY_MAP[oi] = 0;
+  }
   refresh_tile(ent.x, ent.y, id);
 
   ent.x = tx;
@@ -237,6 +254,10 @@ function move_entity(id, dx, dy) {
 
   redraw_cell(tx, ty, ent.color, ent.char);
   Chan("npc_sync") <- [EVT_MOVED, id, tx, ty];
+
+  if (id == 0) {
+      bus_send(EVT_MOVED, K_GRID, K_HOST, id, tx, ty);
+  }
 
   // Auto-pickup for player (after successful move)
   if (id == 0) {
@@ -251,21 +272,22 @@ function kill_entity(id, itemId) {
     let i = calc_idx(ex, ey);
 
     // Restore collision from terrain
-    let terrain = TERRAIN_MAP[i];
-    let type = terrain >>> 24;
-    if (type != 0) {
+    if (TERRAIN_TYPE_MAP[i] != 0) {
         COLLISION_MAP[i] = 1;
     } else {
         COLLISION_MAP[i] = 0;
     }
 
-    ENTITY_MAP[i] = 0;
+    if (ENTITY_MAP[i] == (id + 1)) {
+        ENTITY_MAP[i] = 0;
+    }
     LOOT_MAP[i] = id + 1;
     // Keep character (e.g. 'r' or 'R'), change color to gray
     ent.color = 8947848; // 0x888888 in decimal
     ent.type = 3; // ITEM
     redraw_cell(ex, ey, ent.color, ent.char);
-    Log("[GRID] Entity Died (Corpse)");
+    Log("[GRID] Entity Died (Corpse) at:");
+    Log(ex); Log(ey);
 
     // Pop Item if present
     if (itemId != 0) {
@@ -351,8 +373,15 @@ function teleport_entity(id, tx, ty) {
 
   let oi = calc_idx(ent.x, ent.y);
   if (ent.type != 3) {
-      COLLISION_MAP[oi] = 0;
-      ENTITY_MAP[oi] = 0;
+      // Restore collision from terrain
+      if (TERRAIN_TYPE_MAP[oi] != 0) {
+          COLLISION_MAP[oi] = 1;
+      } else {
+          COLLISION_MAP[oi] = 0;
+      }
+      if (ENTITY_MAP[oi] == (id + 1)) {
+          ENTITY_MAP[oi] = 0;
+      }
   }
   refresh_tile(ent.x, ent.y, id);
 
@@ -365,6 +394,10 @@ function teleport_entity(id, tx, ty) {
   }
   redraw_cell(tx, ty, ent.color, ent.char);
   Chan("npc_sync") <- [EVT_MOVED, id, tx, ty];
+
+  if (id == 0) {
+      bus_send(EVT_MOVED, K_GRID, K_HOST, id, tx, ty);
+  }
 }
 
 function teleport_player(tx, ty) {
