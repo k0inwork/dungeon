@@ -35,6 +35,7 @@ struct EntityPhysics {
 
 let entities = new Array(GridEntity, MAX_ENTITIES, 0x90000);
 let physics  = new Array(EntityPhysics, MAX_ENTITIES, 0x95000);
+
 let ENTITY_COUNT = 0;
 let RNG_SEED = 12345;
 let skill_timer = 0;
@@ -69,7 +70,7 @@ function get_collision(cx, cy) {
     return COLLISION_MAP[calc_idx(cx, cy)];
 }
 
-function init_platformer() {
+function init_platformer_logic() {
     let i = 0;
     let total = MAP_WIDTH * MAP_HEIGHT;
     while (i < total) {
@@ -82,11 +83,11 @@ function init_platformer() {
 
     i = 0;
     while (i < MAX_ENTITIES) {
-        let p = EntityPhysics(i);
+        let p = physics[i];
         p.active = 0;
         p.vx = 0;
         p.vy = 0;
-        let ent = GridEntity(i);
+        let ent = entities[i];
         ent.char = 0;
         i++;
     }
@@ -97,7 +98,7 @@ function init_platformer() {
     Chan().on(on_platform_request);
     Chan("BUS").on(on_platform_request);
 
-    Log("[PLATFORM] Kernel Ready (v5-multi)");
+    Log("[PLATFORM] Kernel Ready (v6-safe)");
 }
 
 function load_tile(x, y, color, char, type, target_id) {
@@ -108,10 +109,10 @@ function load_tile(x, y, color, char, type, target_id) {
 }
 
 function update_entity_physics(id) {
-    let p = EntityPhysics(id);
+    let p = physics[id];
     if (p.active == 0) return;
 
-    let ent = GridEntity(id);
+    let ent = entities[id];
 
     // Apply Gravity
     p.vy = p.vy + gravity;
@@ -194,9 +195,9 @@ function update_entity_physics(id) {
 }
 
 function frog_ai(id) {
-    let p = EntityPhysics(id);
-    let ent = GridEntity(id);
-    let player = EntityPhysics(0);
+    let p = physics[id];
+    let ent = entities[id];
+    let player = physics[0];
 
     let r = Random() % 100;
 
@@ -227,14 +228,14 @@ function frog_ai(id) {
 }
 
 function check_player_stomps() {
-    let player = EntityPhysics(0);
+    let player = physics[0];
     if (player.vy <= 0) return;
 
     let i = 1;
     while (i < ENTITY_COUNT) {
-        let p = EntityPhysics(i);
+        let p = physics[i];
         if (p.active) {
-            let ent = GridEntity(i);
+            let ent = entities[i];
             if (ent.type == 1 || ent.type == 2) {
                 let dx = abs(player.fx - p.fx);
                 let dy = player.fy - p.fy;
@@ -255,10 +256,10 @@ function update_physics() {
 
     let i = 1;
     while (i < ENTITY_COUNT) {
-        let p = EntityPhysics(i);
+        let p = physics[i];
         if (p.active) {
             update_entity_physics(i);
-            let ent = GridEntity(i);
+            let ent = entities[i];
             if (ent.type == 1 || ent.type == 2) {
                 frog_ai(i);
             }
@@ -269,19 +270,19 @@ function update_physics() {
     if (skill_timer > 0) skill_timer--;
 }
 
-function spawn_entity(x, y, color, char, type) {
+function spawn_entity_logic(x, y, color, char, type) {
     if (ENTITY_COUNT >= MAX_ENTITIES) return;
     let id = ENTITY_COUNT;
     ENTITY_COUNT++;
 
-    let ent = GridEntity(id);
+    let ent = entities[id];
     ent.char = char;
     ent.color = color;
     ent.x = x;
     ent.y = y;
     ent.type = type;
 
-    let p = EntityPhysics(id);
+    let p = physics[id];
     p.fx = x * 65536;
     p.fy = y * 65536;
     p.vx = 0;
@@ -294,15 +295,15 @@ function spawn_entity(x, y, color, char, type) {
 
 function trigger_skill() {
     skill_timer = 10;
-    let player = EntityPhysics(0);
+    let player = physics[0];
     let px = player.fx / 65536;
     let py = player.fy / 65536;
 
     let i = 1;
     while (i < ENTITY_COUNT) {
-        let p = EntityPhysics(i);
+        let p = physics[i];
         if (p.active) {
-            let ent = GridEntity(i);
+            let ent = entities[i];
             if (ent.type == 1 || ent.type == 2) {
                 let ex = p.fx / 65536;
                 let ey = p.fy / 65536;
@@ -317,7 +318,7 @@ function trigger_skill() {
     }
 }
 
-function render() {
+function render_logic() {
     let ri = 0;
     let total = MAP_WIDTH * MAP_HEIGHT;
     while (ri < total) {
@@ -326,7 +327,7 @@ function render() {
     }
 
     if (skill_timer > 0) {
-        let player = EntityPhysics(0);
+        let player = physics[0];
         let px = player.fx / 65536;
         let py = player.fy / 65536;
         let gx = px - 1;
@@ -346,9 +347,9 @@ function render() {
 
     let i = 0;
     while (i < ENTITY_COUNT) {
-        let p = EntityPhysics(i);
+        let p = physics[i];
         if (p.active) {
-            let ent = GridEntity(i);
+            let ent = entities[i];
             let ren_pidx = calc_idx(ent.x, ent.y);
             if (ren_pidx >= 0 && ren_pidx < total) {
                 VRAM[ren_pidx] = (ent.color << 8) | ent.char;
@@ -359,12 +360,12 @@ function render() {
 }
 
 function move_player(m_dir) {
-    let p = EntityPhysics(0);
+    let p = physics[0];
     p.vx = p.vx + (m_dir * move_speed);
 }
 
 function jump_player() {
-    let p = EntityPhysics(0);
+    let p = physics[0];
     let bx = p.fx / 65536;
     let by = (p.fy / 65536) + 1;
     if (get_collision(bx, by) != 0) {
@@ -373,7 +374,7 @@ function jump_player() {
 }
 
 function teleport_player(tx, ty) {
-    let p = EntityPhysics(0);
+    let p = physics[0];
     p.fx = tx * 65536;
     p.fy = ty * 65536;
     p.vx = 0;
@@ -381,20 +382,20 @@ function teleport_player(tx, ty) {
 }
 
 // Legacy helpers for tests and host
-function PLAYER_X() { return EntityPhysics(0).fx; }
-function PLAYER_Y() { return EntityPhysics(0).fy; }
-function PLAYER_VX() { return EntityPhysics(0).vx; }
-function PLAYER_VY() { return EntityPhysics(0).vy; }
+function player_x_val() { return physics[0].fx; }
+function player_y_val() { return physics[0].fy; }
+function player_vx_val() { return physics[0].vx; }
+function player_vy_val() { return physics[0].vy; }
 
 function on_platform_request(op, sender, p1, p2, p3) {
     if (op == REQ_MOVE) { move_player(p1); }
     if (op == REQ_TELEPORT) { teleport_player(p1, p2); }
     if (op == CMD_INTERACT) { trigger_skill(); }
     if (op == EVT_DAMAGE) {
-        let ent = GridEntity(p1);
-        if (ent.type == 3) return;
         if (p1 > 0) {
-            let p = EntityPhysics(p1);
+            let ent = entities[p1];
+            if (ent.type == 3) return;
+            let p = physics[p1];
             p.active = 0;
             ent.char = 32;
             Chan("npc_sync") <- [EVT_DEATH, p1, 0, 0];
@@ -414,12 +415,17 @@ export const PLATFORM_AJS_SOURCE = AJS_LOGIC;
 export const PLATFORM_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.PLATFORM),
-  ": RUN_PLATFORM_CYCLE PROCESS_INBOX UPDATE_PHYSICS RENDER ;",
+  ": RUN_PLATFORM_CYCLE PROCESS_INBOX UPDATE_PHYSICS RENDER_LOGIC ;",
   ": SET_LEVEL_ID SET_LEVEL_ID ;",
-  ": INIT_PLATFORMER init_platformer AJS_INIT_CHANNELS ;",
+  ": INIT_PLATFORMER INIT_PLATFORMER_LOGIC AJS_INIT_CHANNELS ;",
   ": LOAD_TILE LOAD_TILE ;",
-  ": SPAWN_ENTITY SPAWN_ENTITY ;",
+  ": SPAWN_ENTITY SPAWN_ENTITY_LOGIC ;",
   ": CMD_JUMP JUMP_PLAYER ;",
   ": CMD_MOVE ( dir -- ) MOVE_PLAYER ;",
-  ": CMD_TELEPORT TELEPORT_PLAYER ;"
+  ": CMD_INTERACT trigger_skill ;",
+  ": CMD_TELEPORT TELEPORT_PLAYER ;",
+  ": PLAYER_X player_x_val ;",
+  ": PLAYER_Y player_y_val ;",
+  ": PLAYER_VX player_vx_val ;",
+  ": PLAYER_VY player_vy_val ;"
 ];

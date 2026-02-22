@@ -925,6 +925,7 @@ const App = () => {
             const platProc = forthService.get(gridId);
             if (platProc.isReady) {
                 if (k === "ArrowUp") platProc.run("CMD_JUMP");
+                if (k === " ") platProc.run("CMD_INTERACT");
                 if (k === "Escape") switchMode("GRID");
             }
             return;
