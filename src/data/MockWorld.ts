@@ -52,7 +52,11 @@ const PLATFORMER_1: LevelData = {
       { symbol: ">", name: "Exit", type: "GATE", color: 0x00FF00, passable: true, description: "To the Roguelike Mid-Level.", target_id: 2 },
       { symbol: "X", name: "Exit Area", type: "FLOOR", color: 0x004400, passable: true, description: "Safe to exit here." }
     ],
-    entities: [],
+    entities: [
+        { id: "frog_1", x: 10, y: 2, taxonomy: { race: "Frog", class: "Passive", origin: "None" }, stats: { hp: 10, speed: 10 }, glyph: { char: "f", color: 0x00FF00 }, scripts: { passive: "wander", active: [] } },
+        { id: "frog_2", x: 25, y: 3, taxonomy: { race: "Frog", class: "Aggressive", origin: "None" }, stats: { hp: 20, speed: 10 }, glyph: { char: "F", color: 0xFF5555 }, scripts: { passive: "aggressive", active: [] } },
+        { id: "loot_1", x: 15, y: 1, taxonomy: { race: "Loot", class: "None", origin: "None" }, stats: { hp: 1, speed: 0 }, glyph: { char: "$", color: 0xFFFF00 }, scripts: { passive: "treasure", active: [] } }
+    ],
     entity_roster: [],
     platformer_config: { gravity: 5000, jump_force: -75000, wall_color: 0xAAAAAA }
 };
@@ -77,7 +81,7 @@ const ROGUELIKE_LEVEL: LevelData = {
       "#..#..........#.........#..............#",
       "#..############.........#..............#",
       "#.......................#..............#",
-      "#.......................#..............#",
+      "#......................................#",
       "#......##################..............#",
       "#......#...............................#",
       "#......#..............................R#",
@@ -125,7 +129,10 @@ const PLATFORMER_2: LevelData = {
       { symbol: "E", name: "Exit Portal", type: "GATE", color: 0x00FF00, passable: true, description: "Back to Hub.", target_id: 0 },
       { symbol: "X", name: "Exit Area", type: "FLOOR", color: 0x004400, passable: true, description: "Safe to exit here." }
     ],
-    entities: [],
+    entities: [
+        { id: "frog_3", x: 15, y: 3, taxonomy: { race: "Frog", class: "Aggressive", origin: "None" }, stats: { hp: 20, speed: 10 }, glyph: { char: "F", color: 0xFF5555 }, scripts: { passive: "aggressive", active: [] } },
+        { id: "loot_2", x: 20, y: 3, taxonomy: { race: "Loot", class: "None", origin: "None" }, stats: { hp: 1, speed: 0 }, glyph: { char: "$", color: 0xFFFF00 }, scripts: { passive: "treasure", active: [] } }
+    ],
     entity_roster: [],
     platformer_config: { gravity: 5000, jump_force: -75000, wall_color: 0xAAAAAA }
 };
@@ -151,7 +158,10 @@ const PLATFORMER_1_LOWER: LevelData = {
       { symbol: "E", name: "Exit", type: "GATE", color: 0x00FF00, passable: true, description: "Back to Hub.", target_id: 0 },
       { symbol: "X", name: "Exit Area", type: "FLOOR", color: 0x004400, passable: true, description: "Safe to exit here." }
     ],
-    entities: [],
+    entities: [
+        { id: "frog_4", x: 5, y: 1, taxonomy: { race: "Frog", class: "Passive", origin: "None" }, stats: { hp: 10, speed: 10 }, glyph: { char: "f", color: 0x00FF00 }, scripts: { passive: "wander", active: [] } },
+        { id: "frog_5", x: 20, y: 3, taxonomy: { race: "Frog", class: "Aggressive", origin: "None" }, stats: { hp: 20, speed: 10 }, glyph: { char: "F", color: 0xFF5555 }, scripts: { passive: "aggressive", active: [] } }
+    ],
     entity_roster: [],
     platformer_config: { gravity: 5000, jump_force: -75000, wall_color: 0xAAAAAA }
 };
