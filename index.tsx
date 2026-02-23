@@ -700,7 +700,7 @@ const App = () => {
 
       // 2. AI decides actions
       if (hive?.isReady) hive.run("RUN_HIVE_CYCLE");
-      main.run("RUN_ENV_CYCLE");
+      if (physicsRole === KernelID.GRID) main.run("RUN_ENV_CYCLE");
 
       // 3. Deliver AI actions and physics collisions
       runBroker(activeKernelsList, lIdx);
@@ -867,7 +867,9 @@ const App = () => {
     } 
     else if (mode === "PLATFORM") {
       const currentLevel = worldInfo?.levels?.[currentLevelId];
-      const physicsRole = currentLevel?.simulation_mode === 'PLATFORM' ? KernelID.PLATFORM : KernelID.GRID;
+      if (currentLevel?.simulation_mode !== 'PLATFORM') return;
+
+      const physicsRole = KernelID.PLATFORM;
       const gridId = String(getInstanceID(physicsRole, currentLevelIdx));
       const platProc = forthService.get(gridId);
       if (platProc && platProc.isReady) {
