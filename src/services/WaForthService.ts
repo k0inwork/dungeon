@@ -74,8 +74,8 @@ export class ForthProcess {
 
         // 2. Grow Memory to support VRAM (64 pages = 4MB)
         const currentPages = this.forth.memory().buffer.byteLength / 65536;
-        if (currentPages < 64) {
-            this.forth.memory().grow(64 - currentPages);
+        if (currentPages < 128) {
+            this.forth.memory().grow(128 - currentPages);
             this.log(`Memory Grown. Total: ${this.forth.memory().buffer.byteLength} bytes`);
         }
         
@@ -253,86 +253,106 @@ export class ForthProcess {
     this.manager.notifyListeners();
   }
 
-  serialize(): Uint8Array {
+    serialize(): Uint8Array {
     if (!this.forth) return this.flashData || new Uint8Array(0);
 
-    // Try to find HERE if word is defined
-    let here = 200000; // Default safety for dictionary
+    let here = 200000;
     try {
         if (this.isWordDefined("SYNC_HERE")) {
             this.forth.interpret("SYNC_HERE\n");
             const view = new DataView(this.forth.memory().buffer);
-            here = view.getInt32(1008, true); // 0x3F0
+            here = view.getInt32(1008, true);
         }
     } catch(e) {}
 
-    // Determine highest used address based on VSO Registry and common maps
-    // Maps: 0x30000 to 0x34000
-    // Entities: 0x90000, RPG: 0xA0000, Player: 0xC0000
-    let maxAddr = Math.max(here, 0xD0000); // 0xD0000 covers all current regions
+    const state: any = {
+        lp: 0, fp: 0, fsp: 0,
+        memBase64: ""
+    };
 
+    try {
+        const view = new DataView(this.forth.memory().buffer);
+        if (this.isWordDefined("LP")) {
+            this.forth.interpret("LP @ 1012 ! FP @ 1016 ! FSP @ 1020 !\n");
+            state.lp = view.getInt32(1012, true);
+            state.fp = view.getInt32(1016, true);
+            state.fsp = view.getInt32(1020, true);
+        }
+    } catch(e) {}
+
+    let maxAddr = Math.max(here, 0x100000); // 1MB is usually enough for data // Include Local Stack up to 2MB
     const fullMem = new Uint8Array(this.forth.memory().buffer);
     const sliceSize = Math.min(fullMem.length, maxAddr);
-    return new Uint8Array(fullMem.slice(0, sliceSize));
+    const slice = fullMem.slice(0, sliceSize);
+
+    state.memBase64 = Buffer.from(slice).toString('base64');
+
+    return new TextEncoder().encode(JSON.stringify(state));
   }
 
   deserialize(data: Uint8Array) {
     if (!this.forth) return;
-    const currentMem = new Uint8Array(this.forth.memory().buffer);
-    currentMem.set(data);
+    try {
+        const json = new TextDecoder().decode(data);
+        const state = JSON.parse(json);
+
+        if (state.memBase64) {
+            const currentMem = new Uint8Array(this.forth.memory().buffer);
+            const slice = Buffer.from(state.memBase64, 'base64');
+            currentMem.set(slice);
+
+            if (state.lp) {
+                const view = new DataView(this.forth.memory().buffer);
+                view.setInt32(1012, state.lp, true);
+                view.setInt32(1016, state.fp, true);
+                view.setInt32(1020, state.fsp, true);
+                this.forth.interpret("1012 @ LP ! 1016 @ FP ! 1020 @ FSP !\n");
+            }
+        } else {
+             const currentMem = new Uint8Array(this.forth.memory().buffer);
+             currentMem.set(data);
+        }
+    } catch(e) {
+        try {
+            const currentMem = new Uint8Array(this.forth.memory().buffer);
+            currentMem.set(data);
+        } catch(e2) {}
+    }
   }
 
   log(msg: string) {
     this.lastUsed = Date.now();
-    // Deduplication Logic
     if (msg === this.lastLogMsg) {
         this.lastLogCount++;
         if (this.outputLog.length > 0) {
             const timestamp = new Date().toLocaleTimeString().split(" ")[0];
             const baseEntry = `[${this.id} ${timestamp}] ${msg}`;
             const entryWithCount = `${baseEntry} (x${this.lastLogCount + 1})`;
-            
             this.outputLog[this.outputLog.length - 1] = entryWithCount;
         }
         return;
     }
-
     this.lastLogMsg = msg;
     this.lastLogCount = 0;
-
     const timestamp = new Date().toLocaleTimeString().split(" ")[0];
     const entry = `[${this.id} ${timestamp}] ${msg}`;
-    
     this.outputLog.push(entry);
     if (this.outputLog.length > 50) this.outputLog.shift();
-    
-    // Multicast to Process Listeners
     this.logListeners.forEach(cb => cb(entry));
-    
-    // Multicast to Global Manager
     this.manager.broadcastLog(entry);
   }
 
   run(word: string) {
     this.lastUsed = Date.now();
-    if (this.status === "FLASHED") {
-        // Auto-awaken if called while flashed?
-        // For now, index.tsx should handle this, but let's be safe
-        console.warn(`[${this.id}] Attempted to run word while FLASHED. Ignoring.`);
-        return;
-    }
-    if (!this.forth || !this.isReady) return;
+    if (this.status === "FLASHED" || !this.forth || !this.isReady) return;
     try {
-      console.log(`[${this.id} RUN] ${word}`);
       this.forth.interpret(word + "\n");
       if (this.emitBuffer) {
         this.log(`[STDOUT] ${this.emitBuffer}`);
         this.emitBuffer = "";
       }
     } catch(e: any) {
-      const errMsg = `EXEC ERROR in ${this.id}: ${e.message}`;
-      this.log(errMsg);
-      console.error(errMsg, { word, error: e });
+      this.log(`EXEC ERROR in ${this.id}: ${e.message}`);
       throw e;
     }
   }
@@ -340,9 +360,9 @@ export class ForthProcess {
   isWordDefined(wordName: string): boolean {
     if (!this.forth || this.status === "FLASHED") return false;
     const oldEmit = this.forth.onEmit;
-    this.forth.onEmit = () => {}; // Mute output during check
+    this.forth.onEmit = () => {};
     try {
-        this.forth.interpret(`' ${wordName} DROP`);
+        this.forth.interpret(`' ${wordName} DROP\n`);
         this.forth.onEmit = oldEmit;
         return true;
     } catch (e) {
