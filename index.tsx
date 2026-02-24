@@ -260,11 +260,34 @@ const App = () => {
 
   const ensureKernel = async (id: string, blocks: string[], lIdx: number) => {
     const proc = forthService.get(id);
+
+    // Jules: Detection of logic changes (e.g. developer updated the kernel source)
+    const blocksChanged = proc.logicBlocks.length > 0 && JSON.stringify(proc.logicBlocks) !== JSON.stringify(blocks);
+
     if (proc.status === "FLASHED") {
+        if (blocksChanged) {
+            console.log(`[SYS] Logic for ${id} updated. Performing cold boot...`);
+            // Update blocks for restoration
+            proc.logicBlocks = blocks;
+            // Awaken will re-boot and run the new blocks
+            await proc.awaken();
+            return proc;
+        }
         await proc.awaken();
         return proc;
     }
+
     if (proc.isLogicLoaded) {
+        if (blocksChanged) {
+            console.log(`[SYS] Logic for ${id} updated. Re-loading dictionary...`);
+            // For active kernels, we must re-boot to clear the dictionary safely
+            await forthService.bootProcess(id); // Re-boot WASM
+            proc.logicBlocks = blocks;
+            for (let i = 0; i < blocks.length; i++) {
+                proc.run(blocks[i]);
+            }
+            proc.isLogicLoaded = true;
+        }
         proc.status = "ACTIVE";
         return proc;
     }

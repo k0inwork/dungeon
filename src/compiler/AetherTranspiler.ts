@@ -446,8 +446,9 @@ export class AetherTranspiler {
     this.emit("0 CHANNELS_INITED !");
 
     // 1. Emit simple constants first
-    this.globalConsts.forEach((init, name) => {
-      if (this.isStructArray(name)) return;
+    this.globalConsts.forEach((init, rawName) => {
+      const name = this.sanitizeName(rawName);
+      if (this.isStructArray(rawName)) return;
 
       let val = 0;
       if (init) {
@@ -477,13 +478,14 @@ export class AetherTranspiler {
     });
 
     // 2. Emit Top-Level Variables (including struct arrays)
-    this.globalVars.forEach(v => {
-      if (KNOWN_GLOBALS.has(v)) return; // Skip firmware globals
-      if (this.isStructArray(v)) {
-          const structName = this.getStructType(v);
-          const count = this.structArrayCounts.get(v) || 0;
+    this.globalVars.forEach(rawV => {
+      if (KNOWN_GLOBALS.has(rawV)) return; // Skip firmware globals
+      const v = this.sanitizeName(rawV);
+      if (this.isStructArray(rawV)) {
+          const structName = this.getStructType(rawV);
+          const count = this.structArrayCounts.get(rawV) || 0;
 
-          const constInit = this.globalConsts.get(v);
+          const constInit = this.globalConsts.get(rawV);
           if (constInit && constInit.type === "Literal" && typeof constInit.value === "number") {
                this.emit(`${constInit.value} CONSTANT ${v}`);
           } else {
@@ -491,7 +493,7 @@ export class AetherTranspiler {
           }
 
           const entry = AetherTranspiler.globalExportRegistry.get(structName!);
-          if (entry && entry.owner === this.currentKernelId && entry.varName === v) {
+          if (entry && entry.owner === this.currentKernelId && entry.varName === rawV) {
               this.emit(`${v} ${entry.typeId} ${entry.sizeBytes} JS_REGISTER_VSO`);
           }
       } else {
@@ -500,12 +502,13 @@ export class AetherTranspiler {
     });
 
     // 3. Emit struct arrays that were declared as 'const'
-    this.globalConsts.forEach((init, name) => {
-        if (!this.isStructArray(name)) return;
-        if (this.globalVars.has(name)) return; // Already emitted
+    this.globalConsts.forEach((init, rawName) => {
+        if (!this.isStructArray(rawName)) return;
+        if (this.globalVars.has(rawName)) return; // Already emitted
 
-        const structName = this.getStructType(name);
-        const count = this.structArrayCounts.get(name) || 0;
+        const name = this.sanitizeName(rawName);
+        const structName = this.getStructType(rawName);
+        const count = this.structArrayCounts.get(rawName) || 0;
 
         if (init && init.type === "Literal" && typeof init.value === "number") {
              this.emit(`${init.value} CONSTANT ${name}`);
@@ -514,7 +517,7 @@ export class AetherTranspiler {
         }
 
         const entry = AetherTranspiler.globalExportRegistry.get(structName!);
-        if (entry && entry.owner === this.currentKernelId && entry.varName === name) {
+        if (entry && entry.owner === this.currentKernelId && entry.varName === rawName) {
             this.emit(`${name} ${entry.typeId} ${entry.sizeBytes} JS_REGISTER_VSO`);
         }
     });
@@ -522,17 +525,19 @@ export class AetherTranspiler {
     // 4. Emit Local Variables
     this.scopes.forEach(scope => {
       scope.args.forEach(arg => {
-        this.emit(`VARIABLE LV_${scope.functionName}_${arg}`);
+        const fullName = this.sanitizeName(`LV_${scope.functionName}_${arg}`);
+        this.emit(`VARIABLE ${fullName}`);
       });
       scope.variables.forEach(v => {
-        const fullName = `LV_${scope.functionName}_${v}`;
-        if (this.isStructArray(fullName)) {
-            const structName = this.getStructType(fullName);
-            const count = this.structArrayCounts.get(fullName) || 0;
+        const rawFullName = `LV_${scope.functionName}_${v}`;
+        const fullName = this.sanitizeName(rawFullName);
+        if (this.isStructArray(rawFullName)) {
+            const structName = this.getStructType(rawFullName);
+            const count = this.structArrayCounts.get(rawFullName) || 0;
             this.emit(`CREATE ${fullName} ${count} SIZEOF_${structName?.toUpperCase()} * ALLOT`);
 
             const entry = AetherTranspiler.globalExportRegistry.get(structName!);
-            if (entry && entry.owner === this.currentKernelId && entry.varName === fullName) {
+            if (entry && entry.owner === this.currentKernelId && entry.varName === rawFullName) {
                 this.emit(`${fullName} ${entry.typeId} ${entry.sizeBytes} JS_REGISTER_VSO`);
             }
         } else {

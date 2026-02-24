@@ -431,8 +431,8 @@ export const PLATFORM_KERNEL_BLOCKS = [
   ": CMD_MOVE ( dir -- ) MOVE_PLAYER ;",
   ": CMD_INTERACT TRIGGER_SKILL ;",
   ": CMD_TELEPORT TELEPORT_PLAYER ;",
-  ": PLAYER_X player_x_val ;",
-  ": PLAYER_Y player_y_val ;",
-  ": PLAYER_VX player_vx_val ;",
-  ": PLAYER_VY player_vy_val ;"
+  ": PLAYER_X PLAYER_X_VAL ;",
+  ": PLAYER_Y PLAYER_Y_VAL ;",
+  ": PLAYER_VX PLAYER_VX_VAL ;",
+  ": PLAYER_VY PLAYER_VY_VAL ;"
 ];
