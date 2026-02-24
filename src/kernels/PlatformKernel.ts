@@ -72,108 +72,101 @@ function get_collision(cx, cy) {
 
 
 function update_entity_physics(id) {
-    let p = physics[id];
-    if (p.active == 0) return;
-
-    let ent = entities[id];
+    if (physics[id].active == 0) return;
 
     // Apply Gravity
-    p.vy = p.vy + gravity;
+    physics[id].vy = physics[id].vy + gravity;
     if (id == 0) {
-        p.vx = (p.vx * 8) / 10; // friction for player
+        physics[id].vx = (physics[id].vx * 8) / 10; // friction for player
     } else {
-        p.vx = (p.vx * 9) / 10; // friction for others
+        physics[id].vx = (physics[id].vx * 9) / 10; // friction for others
     }
 
-    let nx = p.fx + p.vx;
-    let ny = p.fy + p.vy;
+    let nx = physics[id].fx + physics[id].vx;
+    let ny = physics[id].fy + physics[id].vy;
 
-    let lx = (p.fx + 4000) / 65536;
-    let rx = (p.fx + 61536) / 65536;
+    let lx = (physics[id].fx + 4000) / 65536;
+    let rx = (physics[id].fx + 61536) / 65536;
 
     // 1. Vertical Collision
     let by_foot = (ny + 65535) / 65536;
     let by_head = ny / 65536;
 
-    if (p.vy > 0) {
+    if (physics[id].vy > 0) {
         if (get_collision(lx, by_foot) || get_collision(rx, by_foot)) {
-            p.vy = 0;
-            p.fy = (by_foot - 1) * 65536;
-            ny = p.fy;
+            physics[id].vy = 0;
+            physics[id].fy = (by_foot - 1) * 65536;
+            ny = physics[id].fy;
         } else {
-            p.fy = ny;
+            physics[id].fy = ny;
         }
-    } else if (p.vy < 0) {
+    } else if (physics[id].vy < 0) {
         if (get_collision(lx, by_head) || get_collision(rx, by_head)) {
-            p.vy = 0;
-            p.fy = (by_head + 1) * 65536;
-            ny = p.fy;
+            physics[id].vy = 0;
+            physics[id].fy = (by_head + 1) * 65536;
+            ny = physics[id].fy;
         } else {
-            p.fy = ny;
+            physics[id].fy = ny;
         }
     } else {
-        p.fy = ny;
+        physics[id].fy = ny;
     }
 
     // 2. Horizontal Collision (using updated FY)
     let h_rx = (nx + 63536) / 65536;
     let h_lx = (nx + 2000) / 65536;
-    let pyy = p.fy / 65536;
+    let pyy = physics[id].fy / 65536;
 
-    if (p.vx > 0) {
+    if (physics[id].vx > 0) {
         if (get_collision(h_rx, pyy)) {
-            p.vx = 0;
-            p.fx = (h_rx - 1) * 65536;
+            physics[id].vx = 0;
+            physics[id].fx = (h_rx - 1) * 65536;
         } else {
-            p.fx = nx;
+            physics[id].fx = nx;
         }
-    } else if (p.vx < 0) {
+    } else if (physics[id].vx < 0) {
         if (get_collision(h_lx, pyy)) {
-            p.vx = 0;
-            p.fx = (h_lx + 1) * 65536;
+            physics[id].vx = 0;
+            physics[id].fx = (h_lx + 1) * 65536;
         } else {
-            p.fx = nx;
+            physics[id].fx = nx;
         }
     }
 
     // Bounds clamp
-    if (p.fx < 0) p.fx = 0;
-    if (p.fy < 0) p.fy = 0;
-    if (p.fx > 39 * 65536) p.fx = 39 * 65536;
-    if (p.fy > 19 * 65536) p.fy = 19 * 65536;
+    if (physics[id].fx < 0) physics[id].fx = 0;
+    if (physics[id].fy < 0) physics[id].fy = 0;
+    if (physics[id].fx > 39 * 65536) physics[id].fx = 39 * 65536;
+    if (physics[id].fy > 19 * 65536) physics[id].fy = 19 * 65536;
 
     // Sync GridEntity for render/host
-    ent.px = p.fx / 65536;
-    ent.py = p.fy / 65536;
+    entities[id].px = physics[id].fx / 65536;
+    entities[id].py = physics[id].fy / 65536;
 
     // Player specific (Exit check)
     if (id == 0) {
-        let exit_idx = calc_idx(ent.px, ent.py);
+        let exit_idx = calc_idx(entities[id].px, entities[id].py);
         let exit_target = TRANSITION_MAP[exit_idx];
         if (exit_target != -1) {
             bus_send(EVT_LEVEL_TRANSITION, K_PLATFORM, K_HOST, exit_target, 0, 0);
-            p.fx = 5 * 65536; // reset pos
+            physics[id].fx = 5 * 65536; // reset pos
         }
     }
 }
 
 function frog_ai(id) {
-    let p = physics[id];
-    let ent = entities[id];
-    let player = physics[0];
-
     let r = Random() % 100;
 
-    if (ent.ptype == 1) { // passive frog 'f'
+    if (entities[id].ptype == 1) { // passive frog 'f'
         if (r < 2) {
-            if (get_collision(ent.px, ent.py + 1)) {
-                p.vy = jump_force / 2;
-                p.vx = (Random() % 20000) - 10000;
+            if (get_collision(entities[id].px, entities[id].py + 1)) {
+                physics[id].vy = jump_force / 2;
+                physics[id].vx = (Random() % 20000) - 10000;
             }
         }
-    } else if (ent.ptype == 2) { // aggressive frog 'F'
-        let dx = p.fx - player.fx;
-        let dy = p.fy - player.fy;
+    } else if (entities[id].ptype == 2) { // aggressive frog 'F'
+        let dx = physics[id].fx - physics[0].fx;
+        let dy = physics[id].fy - physics[0].fy;
         let dist = abs(dx/65536) + abs(dy/65536);
 
         if (dist < 10) {
@@ -191,20 +184,17 @@ function frog_ai(id) {
 }
 
 function check_player_stomps() {
-    let player = physics[0];
-    if (player.vy <= 0) return;
+    if (physics[0].vy <= 0) return;
 
     let i = 1;
     while (i < ENTITY_COUNT) {
-        let p = physics[i];
-        if (p.active) {
-            let ent = entities[i];
-            if (ent.ptype == 1 || ent.ptype == 2) {
-                let dx = abs(player.fx - p.fx);
-                let dy = player.fy - p.fy;
+        if (physics[i].active) {
+            if (entities[i].ptype == 1 || entities[i].ptype == 2) {
+                let dx = abs(physics[0].fx - physics[i].fx);
+                let dy = physics[0].fy - physics[i].fy;
                 if (dx < 40000 && dy > -32768 && dy < 32768) {
                     bus_send(EVT_DAMAGE, K_PLATFORM, K_BUS, i, 10, 0);
-                    player.vy = jump_force / 2;
+                    physics[0].vy = jump_force / 2;
                     return;
                 }
             }
@@ -219,11 +209,9 @@ function update_physics() {
 
     let i = 1;
     while (i < ENTITY_COUNT) {
-        let p = physics[i];
-        if (p.active) {
+        if (physics[i].active) {
             update_entity_physics(i);
-            let ent = entities[i];
-            if (ent.ptype == 1 || ent.ptype == 2) {
+            if (entities[i].ptype == 1 || entities[i].ptype == 2) {
                 frog_ai(i);
             }
         }
@@ -238,19 +226,17 @@ function spawn_entity_logic(x, y, color, char, type) {
     let id = ENTITY_COUNT;
     ENTITY_COUNT++;
 
-    let ent = entities[id];
-    ent.char = char;
-    ent.color = color;
-    ent.px = x;
-    ent.py = y;
-    ent.ptype = type;
+    entities[id].char = char;
+    entities[id].color = color;
+    entities[id].px = x;
+    entities[id].py = y;
+    entities[id].ptype = type;
 
-    let p = physics[id];
-    p.fx = x * 65536;
-    p.fy = y * 65536;
-    p.vx = 0;
-    p.vy = 0;
-    p.active = 1;
+    physics[id].fx = x * 65536;
+    physics[id].fy = y * 65536;
+    physics[id].vx = 0;
+    physics[id].vy = 0;
+    physics[id].active = 1;
 
     Chan("npc_sync") <- [EVT_SPAWN, id, type, 0];
     Chan("npc_sync") <- [EVT_MOVED, id, x, y];
@@ -258,18 +244,15 @@ function spawn_entity_logic(x, y, color, char, type) {
 
 function trigger_skill() {
     skill_timer = 10;
-    let player = physics[0];
-    let px = player.fx / 65536;
-    let py = player.fy / 65536;
+    let px = physics[0].fx / 65536;
+    let py = physics[0].fy / 65536;
 
     let i = 1;
     while (i < ENTITY_COUNT) {
-        let p = physics[i];
-        if (p.active) {
-            let ent = entities[i];
-            if (ent.ptype == 1 || ent.ptype == 2) {
-                let ex = p.fx / 65536;
-                let ey = p.fy / 65536;
+        if (physics[i].active) {
+            if (entities[i].ptype == 1 || entities[i].ptype == 2) {
+                let ex = physics[i].fx / 65536;
+                let ey = physics[i].fy / 65536;
                 let dx = abs(px - ex);
                 let dy = abs(py - ey);
                 if (dx <= 1 && dy <= 1) {
@@ -290,9 +273,8 @@ function render_logic() {
     }
 
     if (skill_timer > 0) {
-        let player = physics[0];
-        let px = player.fx / 65536;
-        let py = player.fy / 65536;
+        let px = physics[0].fx / 65536;
+        let py = physics[0].fy / 65536;
         let gx = px - 1;
         while (gx <= px + 1) {
             let gy = py - 1;
@@ -310,12 +292,10 @@ function render_logic() {
 
     let i = 0;
     while (i < ENTITY_COUNT) {
-        let p = physics[i];
-        if (p.active) {
-            let ent = entities[i];
-            let ren_pidx = calc_idx(ent.px, ent.py);
+        if (physics[i].active) {
+            let ren_pidx = calc_idx(entities[i].px, entities[i].py);
             if (ren_pidx >= 0 && ren_pidx < total) {
-                VRAM[ren_pidx] = (ent.color << 8) | ent.char;
+                VRAM[ren_pidx] = (entities[i].color << 8) | entities[i].char;
             }
         }
         i++;
@@ -323,25 +303,22 @@ function render_logic() {
 }
 
 function move_player(m_dir) {
-    let p = physics[0];
-    p.vx = p.vx + (m_dir * move_speed);
+    physics[0].vx = physics[0].vx + (m_dir * move_speed);
 }
 
 function jump_player() {
-    let p = physics[0];
-    let bx = p.fx / 65536;
-    let by = (p.fy / 65536) + 1;
+    let bx = physics[0].fx / 65536;
+    let by = (physics[0].fy / 65536) + 1;
     if (get_collision(bx, by) != 0) {
-        p.vy = jump_force;
+        physics[0].vy = jump_force;
     }
 }
 
 function teleport_player(tx, ty) {
-    let p = physics[0];
-    p.fx = tx * 65536;
-    p.fy = ty * 65536;
-    p.vx = 0;
-    p.vy = 0;
+    physics[0].fx = tx * 65536;
+    physics[0].fy = ty * 65536;
+    physics[0].vx = 0;
+    physics[0].vy = 0;
 }
 
 // Legacy helpers for tests and host
@@ -356,11 +333,9 @@ function on_platform_request(op, sender, p1, p2, p3) {
     if (op == CMD_INTERACT) { trigger_skill(); }
     if (op == EVT_DAMAGE) {
         if (p1 > 0) {
-            let ent = entities[p1];
-            if (ent.ptype == 3) return;
-            let p = physics[p1];
-            p.active = 0;
-            ent.char = 32;
+            if (entities[p1].ptype == 3) return;
+            physics[p1].active = 0;
+            entities[p1].char = 32;
             Chan("npc_sync") <- [EVT_DEATH, p1, 0, 0];
         }
     }

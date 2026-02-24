@@ -14,12 +14,16 @@ describe('PlatformKernel Logic Tests', () => {
 
   test('Physics Initialization', () => {
     runner.proc.run('INIT_PLATFORMER');
+    // Manual spawn for player in tests
+    runner.proc.run('2 2 65535 64 0 SPAWN_ENTITY');
     // Check initial position (2, 2 in fixed point)
     runner.proc.run('PLAYER_X 131072 JS_ASSERT');
     runner.proc.run('PLAYER_Y 131072 JS_ASSERT');
   });
 
   test('Gravity and Collision', () => {
+    runner.proc.run('INIT_PLATFORMER');
+    runner.proc.run('2 2 65535 64 0 SPAWN_ENTITY');
     // Set a block below the player (at y=3)
     runner.proc.run('2 3 0 35 1 LOAD_TILE');
 
@@ -34,6 +38,8 @@ describe('PlatformKernel Logic Tests', () => {
   });
 
   test('Jump Mechanics', () => {
+    runner.proc.run('INIT_PLATFORMER');
+    runner.proc.run('2 2 65535 64 0 SPAWN_ENTITY');
     // Ensure on ground
     runner.proc.run('2 3 0 35 1 LOAD_TILE');
     runner.proc.run('UPDATE_PHYSICS');
@@ -45,6 +51,7 @@ describe('PlatformKernel Logic Tests', () => {
 
   test('Horizontal Movement', () => {
     runner.proc.run('INIT_PLATFORMER');
+    runner.proc.run('2 2 65535 64 0 SPAWN_ENTITY');
     runner.proc.run('1 CMD_MOVE'); // Move Right
     runner.proc.run('UPDATE_PHYSICS');
 
@@ -55,6 +62,7 @@ describe('PlatformKernel Logic Tests', () => {
 
   test('Win Condition (Bottom-Left)', () => {
     runner.proc.run('INIT_PLATFORMER');
+    runner.proc.run('2 2 65535 64 0 SPAWN_ENTITY');
     // Set level to 1 (P1)
     runner.proc.run('1 SET_LEVEL_ID');
 
