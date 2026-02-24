@@ -872,7 +872,9 @@ const App = () => {
       const physicsRole = KernelID.PLATFORM;
       const gridId = String(getInstanceID(physicsRole, currentLevelIdx));
       const platProc = forthService.get(gridId);
-      if (platProc && platProc.isLogicLoaded) {
+
+      // Safety: Only call platform cycle on a platform kernel that is fully loaded
+      if (platProc && platProc.isLogicLoaded && getRoleID(parseInt(platProc.id)) === KernelID.PLATFORM) {
           if (keysDownRef.current.has("ArrowLeft")) platProc.run("-1 CMD_MOVE");
           if (keysDownRef.current.has("ArrowRight")) platProc.run("1 CMD_MOVE");
 

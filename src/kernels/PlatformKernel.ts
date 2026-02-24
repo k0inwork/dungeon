@@ -17,15 +17,15 @@ const VRAM          = new Uint32Array(0x80000);
 
 const MAX_ENTITIES = 32;
 
-struct GridEntity {
+struct PlatEntity {
     char,
     color,
-    y,
-    x,
-    type
+    py,
+    px,
+    ptype
 }
 
-struct EntityPhysics {
+struct PlatPhysics {
     vx,
     vy,
     fx,
@@ -33,8 +33,8 @@ struct EntityPhysics {
     active
 }
 
-let entities = new Array(GridEntity, MAX_ENTITIES, 0x90000);
-let physics  = new Array(EntityPhysics, MAX_ENTITIES, 0x95000);
+let entities = new Array(PlatEntity, MAX_ENTITIES, 0x90000);
+let physics  = new Array(PlatPhysics, MAX_ENTITIES, 0x95000);
 
 let ENTITY_COUNT = 0;
 let RNG_SEED = 12345;
@@ -143,12 +143,12 @@ function update_entity_physics(id) {
     if (p.fy > 19 * 65536) p.fy = 19 * 65536;
 
     // Sync GridEntity for render/host
-    ent.x = p.fx / 65536;
-    ent.y = p.fy / 65536;
+    ent.px = p.fx / 65536;
+    ent.py = p.fy / 65536;
 
     // Player specific (Exit check)
     if (id == 0) {
-        let exit_idx = calc_idx(ent.x, ent.y);
+        let exit_idx = calc_idx(ent.px, ent.py);
         let exit_target = TRANSITION_MAP[exit_idx];
         if (exit_target != -1) {
             bus_send(EVT_LEVEL_TRANSITION, K_PLATFORM, K_HOST, exit_target, 0, 0);
@@ -164,21 +164,21 @@ function frog_ai(id) {
 
     let r = Random() % 100;
 
-    if (ent.type == 1) { // passive frog 'f'
+    if (ent.ptype == 1) { // passive frog 'f'
         if (r < 2) {
-            if (get_collision(ent.x, ent.y + 1)) {
+            if (get_collision(ent.px, ent.py + 1)) {
                 p.vy = jump_force / 2;
                 p.vx = (Random() % 20000) - 10000;
             }
         }
-    } else if (ent.type == 2) { // aggressive frog 'F'
+    } else if (ent.ptype == 2) { // aggressive frog 'F'
         let dx = p.fx - player.fx;
         let dy = p.fy - player.fy;
         let dist = abs(dx/65536) + abs(dy/65536);
 
         if (dist < 10) {
             if (r < 5) {
-                if (get_collision(ent.x, ent.y + 1)) {
+                if (get_collision(ent.px, ent.py + 1)) {
                     p.vy = jump_force / 2;
                     if (dx > 0) p.vx = -15000; else p.vx = 15000;
                 }
@@ -199,7 +199,7 @@ function check_player_stomps() {
         let p = physics[i];
         if (p.active) {
             let ent = entities[i];
-            if (ent.type == 1 || ent.type == 2) {
+            if (ent.ptype == 1 || ent.ptype == 2) {
                 let dx = abs(player.fx - p.fx);
                 let dy = player.fy - p.fy;
                 if (dx < 40000 && dy > -32768 && dy < 32768) {
@@ -223,7 +223,7 @@ function update_physics() {
         if (p.active) {
             update_entity_physics(i);
             let ent = entities[i];
-            if (ent.type == 1 || ent.type == 2) {
+            if (ent.ptype == 1 || ent.ptype == 2) {
                 frog_ai(i);
             }
         }
@@ -241,9 +241,9 @@ function spawn_entity_logic(x, y, color, char, type) {
     let ent = entities[id];
     ent.char = char;
     ent.color = color;
-    ent.x = x;
-    ent.y = y;
-    ent.type = type;
+    ent.px = x;
+    ent.py = y;
+    ent.ptype = type;
 
     let p = physics[id];
     p.fx = x * 65536;
@@ -267,7 +267,7 @@ function trigger_skill() {
         let p = physics[i];
         if (p.active) {
             let ent = entities[i];
-            if (ent.type == 1 || ent.type == 2) {
+            if (ent.ptype == 1 || ent.ptype == 2) {
                 let ex = p.fx / 65536;
                 let ey = p.fy / 65536;
                 let dx = abs(px - ex);
@@ -313,7 +313,7 @@ function render_logic() {
         let p = physics[i];
         if (p.active) {
             let ent = entities[i];
-            let ren_pidx = calc_idx(ent.x, ent.y);
+            let ren_pidx = calc_idx(ent.px, ent.py);
             if (ren_pidx >= 0 && ren_pidx < total) {
                 VRAM[ren_pidx] = (ent.color << 8) | ent.char;
             }
@@ -357,7 +357,7 @@ function on_platform_request(op, sender, p1, p2, p3) {
     if (op == EVT_DAMAGE) {
         if (p1 > 0) {
             let ent = entities[p1];
-            if (ent.type == 3) return;
+            if (ent.ptype == 3) return;
             let p = physics[p1];
             p.active = 0;
             ent.char = 32;
@@ -383,8 +383,14 @@ function init_platformer_logic() {
         p.active = 0;
         p.vx = 0;
         p.vy = 0;
+        p.fx = 0;
+        p.fy = 0;
         let ent = entities[i];
         ent.char = 0;
+        ent.color = 0;
+        ent.px = 0;
+        ent.py = 0;
+        ent.ptype = 0;
         i++;
     }
 
@@ -423,7 +429,7 @@ export const PLATFORM_KERNEL_BLOCKS = [
   ": SPAWN_ENTITY SPAWN_ENTITY_LOGIC ;",
   ": CMD_JUMP JUMP_PLAYER ;",
   ": CMD_MOVE ( dir -- ) MOVE_PLAYER ;",
-  ": CMD_INTERACT trigger_skill ;",
+  ": CMD_INTERACT TRIGGER_SKILL ;",
   ": CMD_TELEPORT TELEPORT_PLAYER ;",
   ": PLAYER_X player_x_val ;",
   ": PLAYER_Y player_y_val ;",
