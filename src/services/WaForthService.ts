@@ -250,6 +250,7 @@ export class ForthProcess {
     this.flashData = null;
     this.status = "ACTIVE";
     this.isReady = true;
+    this.isLogicLoaded = true;
     this.manager.notifyListeners();
   }
 

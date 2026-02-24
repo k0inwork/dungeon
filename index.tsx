@@ -686,11 +686,11 @@ const App = () => {
       const player = forthService.get("PLAYER");
       const battle = forthService.get(battleId);
 
-      if (!main?.isReady || !player?.isReady) return;
+      if (!main?.isLogicLoaded || !player?.isLogicLoaded) return;
 
       const activeKernelsList: any[] = [main, player];
-      if (hive?.isReady) activeKernelsList.push(hive);
-      if (battle?.isReady) activeKernelsList.push(battle);
+      if (hive?.isLogicLoaded) activeKernelsList.push(hive);
+      if (battle?.isLogicLoaded) activeKernelsList.push(battle);
 
       // --- TURN-BASED CHAIN REACTION (Flush message queues) ---
       
@@ -699,7 +699,7 @@ const App = () => {
       activeKernelsList.forEach(k => k.run("PROCESS_INBOX"));
 
       // 2. AI decides actions
-      if (hive?.isReady) hive.run("RUN_HIVE_CYCLE");
+      if (hive?.isLogicLoaded) hive.run("RUN_HIVE_CYCLE");
       if (physicsRole === KernelID.GRID) main.run("RUN_ENV_CYCLE");
 
       // 3. Deliver AI actions and physics collisions
@@ -725,7 +725,7 @@ const App = () => {
       const physicsRole = currentLevel?.simulation_mode === 'PLATFORM' ? KernelID.PLATFORM : KernelID.GRID;
       const gridId = String(getInstanceID(physicsRole, currentLevelIdx));
       const gridProc = forthService.get(gridId);
-      if (!playerProc?.isReady || !gridProc?.isReady) return;
+      if (!playerProc?.isLogicLoaded || !gridProc?.isLogicLoaded) return;
 
       // 1. Sync Player Stats (0xA0000 in Battle Kernel for real-time stats, fallback to 0xC0000 in Player Kernel)
       const battleId = String(getInstanceID(KernelID.BATTLE, currentLevelIdx));
@@ -734,7 +734,7 @@ const App = () => {
       let hp = 0, maxHp = 0, gold = 0, invCount = 0;
       const inventory: number[] = [];
 
-      if (battleProc?.isReady) {
+      if (battleProc?.isLogicLoaded) {
           const bMem = new DataView(battleProc.getMemory());
           hp = bMem.getInt32(0xA0000, true);
           maxHp = bMem.getInt32(0xA0004, true);
@@ -796,7 +796,7 @@ const App = () => {
       const physicsRole = currentLevel?.simulation_mode === 'PLATFORM' ? KernelID.PLATFORM : KernelID.GRID;
       const gridId = String(getInstanceID(physicsRole, currentLevelIdx));
       const gridProc = forthService.get(gridId);
-      if (!gridProc?.isReady) return -1;
+      if (!gridProc?.isLogicLoaded) return -1;
       const gridMem = new Uint8Array(gridProc.getMemory());
       const ENTITY_MAP_ADDR = 0x31000;
       const idx = y * MEMORY.GRID_WIDTH + x;
@@ -809,7 +809,7 @@ const App = () => {
       const physicsRole = currentLevel?.simulation_mode === 'PLATFORM' ? KernelID.PLATFORM : KernelID.GRID;
       const gridId = String(getInstanceID(physicsRole, currentLevelIdx));
       const gridProc = forthService.get(gridId);
-      if (!gridProc?.isReady) return false;
+      if (!gridProc?.isLogicLoaded) return false;
       const gridMem = new Uint8Array(gridProc.getMemory());
       const COLLISION_MAP_ADDR = 0x30000;
       const ENTITY_MAP_ADDR = 0x31000;
@@ -824,7 +824,7 @@ const App = () => {
       if (foundId !== -1) {
           const battleId = String(getInstanceID(KernelID.BATTLE, currentLevelIdx));
           const battleProc = forthService.get(battleId);
-          if (!battleProc?.isReady) return;
+          if (!battleProc?.isLogicLoaded) return;
           const battleMem = new DataView(battleProc.getMemory());
           const RPG_TABLE_ADDR = 0xA0000; 
           const RPG_ENT_SIZE = 32; 
@@ -854,7 +854,7 @@ const App = () => {
       const physicsRole = currentLevel?.simulation_mode === 'PLATFORM' ? KernelID.PLATFORM : KernelID.GRID;
       const gridId = String(getInstanceID(physicsRole, currentLevelIdx));
       const mainProc = forthService.get(gridId);
-      if (mainProc && mainProc.isReady) {
+      if (mainProc && mainProc.isLogicLoaded) {
          try {
              const raw = mainProc.getMemory() as ArrayBuffer;
              const vramSize = MEMORY.GRID_WIDTH * MEMORY.GRID_HEIGHT * 4;
@@ -872,7 +872,7 @@ const App = () => {
       const physicsRole = KernelID.PLATFORM;
       const gridId = String(getInstanceID(physicsRole, currentLevelIdx));
       const platProc = forthService.get(gridId);
-      if (platProc && platProc.isReady) {
+      if (platProc && platProc.isLogicLoaded) {
           if (keysDownRef.current.has("ArrowLeft")) platProc.run("-1 CMD_MOVE");
           if (keysDownRef.current.has("ArrowRight")) platProc.run("1 CMD_MOVE");
 
@@ -907,7 +907,7 @@ const App = () => {
 
   const triggerPickup = () => {
         const playerProc = forthService.get("PLAYER");
-        if (playerProc && playerProc.isReady) {
+        if (playerProc && playerProc.isLogicLoaded) {
             // CMD_PICKUP [PlayerID, PlayerX, PlayerY]
             const cmd = `0 OUT_PTR ! 305 2 1 0 ${playerPos.x} ${playerPos.y} BUS_SEND`;
             playerProc.run(cmd);
@@ -925,7 +925,7 @@ const App = () => {
             const physicsRole = currentLevel?.simulation_mode === 'PLATFORM' ? KernelID.PLATFORM : KernelID.GRID;
             const gridId = String(getInstanceID(physicsRole, currentLevelIdx));
             const platProc = forthService.get(gridId);
-            if (platProc.isReady) {
+            if (platProc.isLogicLoaded) {
                 if (k === "ArrowUp") platProc.run("CMD_JUMP");
                 if (k === " ") platProc.run("CMD_INTERACT");
                 if (k === "Escape") switchMode("GRID");
@@ -1013,7 +1013,7 @@ const App = () => {
 
                     addLog(`Executing ${selectedSkill.name} on ID ${targetId}`);
                     const playerProc = forthService.get("PLAYER");
-                    if (playerProc && playerProc.isReady) {
+                    if (playerProc && playerProc.isLogicLoaded) {
                         // Send Attack Command to Bus
                         // P1=Source(0), P2=Target(targetId), P3=SkillID
                         const cmd = `0 OUT_PTR ! 303 2 255 0 ${targetId} ${selectedSkill.id} BUS_SEND`;
@@ -1063,7 +1063,7 @@ const App = () => {
 
         if (dx !== 0 || dy !== 0) {
             const playerProc = forthService.get("PLAYER");
-            if (playerProc && playerProc.isReady) {
+            if (playerProc && playerProc.isLogicLoaded) {
                 // Send Move Request
                 const cmd = `0 OUT_PTR ! 101 2 1 0 ${dx} ${dy} BUS_SEND`;
                 playerProc.run(cmd);
@@ -1074,7 +1074,7 @@ const App = () => {
         if (k === " ") {
             // Spacebar = Interact/Heavy Smash Shortcut (Legacy)
              const playerProc = forthService.get("PLAYER");
-            if (playerProc && playerProc.isReady) {
+            if (playerProc && playerProc.isLogicLoaded) {
                 const cmd = `0 OUT_PTR ! 301 2 2 0 0 0 BUS_SEND`;
                 playerProc.run(cmd);
                 tickSimulation();

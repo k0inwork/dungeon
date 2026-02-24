@@ -70,43 +70,6 @@ function get_collision(cx, cy) {
     return COLLISION_MAP[calc_idx(cx, cy)];
 }
 
-function init_platformer_logic() {
-    let i = 0;
-    let total = MAP_WIDTH * MAP_HEIGHT;
-    while (i < total) {
-        TERRAIN_MAP[i] = 0;
-        COLLISION_MAP[i] = 0;
-        TRANSITION_MAP[i] = -1;
-        VRAM[i] = 0;
-        i++;
-    }
-
-    i = 0;
-    while (i < MAX_ENTITIES) {
-        let p = physics[i];
-        p.active = 0;
-        p.vx = 0;
-        p.vy = 0;
-        let ent = entities[i];
-        ent.char = 0;
-        i++;
-    }
-
-    ENTITY_COUNT = 0;
-    skill_timer = 0;
-    CURRENT_LEVEL_ID = 0;
-    Chan().on(on_platform_request);
-    Chan("BUS").on(on_platform_request);
-
-    Log("[PLATFORM] Kernel Ready (v6-safe)");
-}
-
-function load_tile(x, y, color, char, type, target_id) {
-    let i = calc_idx(x, y);
-    TERRAIN_MAP[i] = (color << 8) | char;
-    COLLISION_MAP[i] = type;
-    TRANSITION_MAP[i] = target_id;
-}
 
 function update_entity_physics(id) {
     let p = physics[id];
@@ -401,6 +364,44 @@ function on_platform_request(op, sender, p1, p2, p3) {
             Chan("npc_sync") <- [EVT_DEATH, p1, 0, 0];
         }
     }
+}
+
+function init_platformer_logic() {
+    let i = 0;
+    let total = MAP_WIDTH * MAP_HEIGHT;
+    while (i < total) {
+        TERRAIN_MAP[i] = 0;
+        COLLISION_MAP[i] = 0;
+        TRANSITION_MAP[i] = -1;
+        VRAM[i] = 0;
+        i++;
+    }
+
+    i = 0;
+    while (i < MAX_ENTITIES) {
+        let p = physics[i];
+        p.active = 0;
+        p.vx = 0;
+        p.vy = 0;
+        let ent = entities[i];
+        ent.char = 0;
+        i++;
+    }
+
+    ENTITY_COUNT = 0;
+    skill_timer = 0;
+    CURRENT_LEVEL_ID = 0;
+    Chan().on(on_platform_request);
+    Chan("BUS").on(on_platform_request);
+
+    Log("[PLATFORM] Kernel Ready (v6-safe)");
+}
+
+function load_tile(x, y, color, char, type, target_id) {
+    let i = calc_idx(x, y);
+    TERRAIN_MAP[i] = (color << 8) | char;
+    COLLISION_MAP[i] = type;
+    TRANSITION_MAP[i] = target_id;
 }
 
 function handle_events() {
