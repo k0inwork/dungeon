@@ -1,12 +1,7 @@
-import { HIVE_KERNEL_BLOCKS } from './src/kernels/HiveKernel.ts';
-import { BATTLE_KERNEL_BLOCKS } from './src/kernels/BattleKernel.ts';
-import { GRID_KERNEL_BLOCKS } from './src/kernels/GridKernel.ts';
 
-console.log("--- GRID BLOCKS ---");
-GRID_KERNEL_BLOCKS.forEach((b, i) => console.log(`BLOCK ${i}:\n`, b));
+import { PLATFORM_AJS_SOURCE } from "./src/kernels/PlatformKernel.ts";
+import { AetherTranspiler } from "./src/compiler/AetherTranspiler.ts";
+import { KernelID } from "./src/types/Protocol.ts";
 
-console.log("--- HIVE BLOCKS ---");
-HIVE_KERNEL_BLOCKS.forEach((b, i) => console.log(`BLOCK ${i}:\n`, b));
-
-console.log("--- BATTLE BLOCKS ---");
-BATTLE_KERNEL_BLOCKS.forEach((b, i) => console.log(`BLOCK ${i}:\n`, b));
+const output = AetherTranspiler.transpile(PLATFORM_AJS_SOURCE, KernelID.PLATFORM);
+console.log(output);
