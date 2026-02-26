@@ -30,7 +30,8 @@ struct PlatPhysics {
     vy,
     fx,
     fy,
-    active
+    active,
+    cooldown
 }
 
 let entities = new Array(PlatEntity, MAX_ENTITIES, 0x90000);
@@ -165,19 +166,24 @@ function frog_ai(id) {
             }
         }
     } else if (entities[id].ptype == 2) { // aggressive frog 'F'
-        let dx = physics[id].fx - physics[0].fx;
-        let dy = physics[id].fy - physics[0].fy;
-        let dist = abs(dx/65536) + abs(dy/65536);
+        let dx = physics[0].fx - physics[id].fx;
+        let dy = physics[0].fy - physics[id].fy;
+        let dist_x = abs(dx / 65536);
+        let dist_y = abs(dy / 65536);
 
-        if (dist < 10) {
-            if (r < 5) {
+        if (dist_x < 15) {
+            // Horizontal Pursuit
+            if (dx > 32768) {
+                physics[id].vx = physics[id].vx + 2000;
+            } else if (dx < -32768) {
+                physics[id].vx = physics[id].vx - 2000;
+            }
+
+            // Occasional Jump
+            if (r < 3) {
                 if (get_collision(entities[id].px, entities[id].py + 1)) {
                     physics[id].vy = jump_force / 2;
-                    if (dx > 0) physics[id].vx = -15000; else physics[id].vx = 15000;
                 }
-            }
-            if (dist < 1) {
-                bus_send(EVT_DAMAGE, K_PLATFORM, K_BUS, 0, 1, 0);
             }
         }
     }
@@ -211,6 +217,29 @@ function update_physics() {
     while (i < ENTITY_COUNT) {
         if (physics[i].active) {
             update_entity_physics(i);
+
+            // Check Player Contact
+            let dx = abs(physics[0].fx - physics[i].fx);
+            let dy = abs(physics[0].fy - physics[i].fy);
+
+            if (dx < 40000 && dy < 40000) {
+                // 1. Contact Damage (Frogs)
+                if (entities[i].ptype == 1 || entities[i].ptype == 2) {
+                    if (physics[0].cooldown == 0) {
+                        // Deal 7 damage to Player (ID 0)
+                        // Send to combat_events channel so PlayerKernel logs and subtracts HP
+                        Chan("combat_events") <- [EVT_DAMAGE, i, 0, 7];
+                        physics[0].cooldown = 10; // 1 second invincibility
+                    }
+                }
+                // 2. Auto-pickup (Loot)
+                if (entities[i].ptype == 3) {
+                    bus_send(EVT_ITEM_GET, K_PLATFORM, K_PLAYER, 0, entities[i].char, 0);
+                    physics[i].active = 0;
+                    entities[i].char = 32; // Clear glyph
+                }
+            }
+
             if (entities[i].ptype == 1 || entities[i].ptype == 2) {
                 frog_ai(i);
             }
@@ -218,6 +247,7 @@ function update_physics() {
         i++;
     }
 
+    if (physics[0].cooldown > 0) physics[0].cooldown--;
     if (skill_timer > 0) skill_timer--;
 }
 
@@ -360,6 +390,7 @@ function init_platformer_logic() {
         p.vy = 0;
         p.fx = 0;
         p.fy = 0;
+        p.cooldown = 0;
         let ent = entities[i];
         ent.char = 0;
         ent.color = 0;

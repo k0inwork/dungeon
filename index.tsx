@@ -826,11 +826,42 @@ const App = () => {
       const gridId = String(getInstanceID(physicsRole, currentLevelIdx));
       const gridProc = forthService.get(gridId);
       if (!gridProc?.isLogicLoaded) return -1;
-      const gridMem = new Uint8Array(gridProc.getMemory());
-      const ENTITY_MAP_ADDR = 0x31000;
-      const idx = y * MEMORY.GRID_WIDTH + x;
-      const val = gridMem[ENTITY_MAP_ADDR + idx];
-      return val === 0 ? -1 : val - 1;
+
+      if (physicsRole === KernelID.PLATFORM) {
+          // SEARCH PLATFORM ENTITIES (with Lock-on)
+          const gridMem = new DataView(gridProc.getMemory());
+          const ENTITIES_ADDR = 0x90000;
+          const ENT_SIZE = 20;
+          const MAX_ENTS = 32;
+
+          let bestId = -1;
+          let bestDist = 2.5; // Radius for lock-on (Manhattan distance)
+
+          for (let i = 0; i < MAX_ENTS; i++) {
+              const base = ENTITIES_ADDR + (i * ENT_SIZE);
+              const char = gridMem.getInt32(base, true);
+              if (char === 0 || char === 32) continue; // Inactive or space
+
+              const py = gridMem.getInt32(base + 8, true);
+              const px = gridMem.getInt32(base + 12, true);
+
+              const dx = Math.abs(px - x);
+              const dy = Math.abs(py - y);
+              const dist = dx + dy;
+
+              if (dist < bestDist) {
+                  bestDist = dist;
+                  bestId = i;
+              }
+          }
+          return bestId;
+      } else {
+          const gridMem = new Uint8Array(gridProc.getMemory());
+          const ENTITY_MAP_ADDR = 0x31000;
+          const idx = y * MEMORY.GRID_WIDTH + x;
+          const val = gridMem[ENTITY_MAP_ADDR + idx];
+          return val === 0 ? -1 : val - 1;
+      }
   };
 
   const isWallAt = (x: number, y: number): boolean => {
@@ -856,7 +887,7 @@ const App = () => {
           if (!battleProc?.isLogicLoaded) return;
           const battleMem = new DataView(battleProc.getMemory());
           const RPG_TABLE_ADDR = 0xA0000; 
-          const RPG_ENT_SIZE = 32; 
+          const RPG_ENT_SIZE = 36; // Sync with Protocol.ts
           const base = RPG_TABLE_ADDR + (foundId * RPG_ENT_SIZE);
           
           const hp = battleMem.getInt32(base, true);
