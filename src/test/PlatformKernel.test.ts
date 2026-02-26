@@ -25,7 +25,8 @@ describe('PlatformKernel Logic Tests', () => {
     runner.proc.run('INIT_PLATFORMER');
     runner.proc.run('2 2 65535 64 0 SPAWN_ENTITY');
     // Set a block below the player (at y=3)
-    runner.proc.run('2 3 0 35 1 LOAD_TILE');
+    // Args: x y color char type target_id
+    runner.proc.run('2 3 0 35 1 -1 LOAD_TILE');
 
     // Run physics cycle multiple times
     for(let i=0; i<10; i++) {
@@ -41,7 +42,7 @@ describe('PlatformKernel Logic Tests', () => {
     runner.proc.run('INIT_PLATFORMER');
     runner.proc.run('2 2 65535 64 0 SPAWN_ENTITY');
     // Ensure on ground
-    runner.proc.run('2 3 0 35 1 LOAD_TILE');
+    runner.proc.run('2 3 0 35 1 -1 LOAD_TILE');
     runner.proc.run('UPDATE_PHYSICS');
 
     runner.proc.run('CMD_JUMP');
@@ -66,7 +67,8 @@ describe('PlatformKernel Logic Tests', () => {
     // Set level to 1 (P1)
     runner.proc.run('1 SET_LEVEL_ID');
 
-    runner.proc.run('1 18 0 62 0 LOAD_TILE');
+    // Args: x y color char type target_id
+    runner.proc.run('1 18 0 62 0 0 LOAD_TILE');
 
     // Use CMD_TELEPORT instead of manual memory write for tests now
     runner.proc.run('1 18 CMD_TELEPORT');

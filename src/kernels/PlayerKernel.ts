@@ -1,6 +1,6 @@
 
 // Aethelgard Player Kernel v3.0 (PURE AJS)
-import { STANDARD_KERNEL_FIRMWARE } from "./SharedBlocks";
+import { STANDARD_KERNEL_FIRMWARE, BLOCK_STANDARD_INBOX } from "./SharedBlocks";
 import { STANDARD_AJS_PREAMBLE, STANDARD_AJS_POSTAMBLE } from "./SharedAJS";
 import { AetherTranspiler } from "../compiler/AetherTranspiler";
 import { KernelID } from "../types/Protocol";
@@ -132,6 +132,7 @@ player_boot();
 
 export const PLAYER_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
+  BLOCK_STANDARD_INBOX,
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.PLAYER)
 ];
 

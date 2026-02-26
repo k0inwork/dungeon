@@ -1,5 +1,5 @@
 
-import { STANDARD_KERNEL_FIRMWARE } from "./SharedBlocks";
+import { STANDARD_KERNEL_FIRMWARE, BLOCK_STANDARD_INBOX } from "./SharedBlocks";
 import { STANDARD_AJS_PREAMBLE, STANDARD_AJS_POSTAMBLE } from "./SharedAJS";
 import { AetherTranspiler } from "../compiler/AetherTranspiler";
 import { KernelID } from "../types/Protocol";
@@ -171,9 +171,9 @@ function frog_ai(id) {
 
         if (dist < 10) {
             if (r < 5) {
-                if (get_collision(ent.px, ent.py + 1)) {
-                    p.vy = jump_force / 2;
-                    if (dx > 0) p.vx = -15000; else p.vx = 15000;
+                if (get_collision(entities[id].px, entities[id].py + 1)) {
+                    physics[id].vy = jump_force / 2;
+                    if (dx > 0) physics[id].vx = -15000; else physics[id].vx = 15000;
                 }
             }
             if (dist < 1) {
@@ -396,6 +396,7 @@ export const PLATFORM_AJS_SOURCE = AJS_LOGIC;
 
 export const PLATFORM_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
+  BLOCK_STANDARD_INBOX,
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.PLATFORM),
   ": RUN_PLATFORM_CYCLE PROCESS_INBOX UPDATE_PHYSICS RENDER_LOGIC ;",
   ": SET_LEVEL_ID SET_LEVEL_ID ;",

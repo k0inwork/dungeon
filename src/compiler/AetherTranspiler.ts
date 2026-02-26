@@ -398,7 +398,8 @@ export class AetherTranspiler {
         scope.variables.add(name);
 
         if (decl.init) {
-            const fullName = `LV_${scope.functionName}_${name}`;
+                const rawFullName = `LV_${scope.functionName}_${name}`;
+                const fullName = this.sanitizeName(rawFullName);
             if ((decl.init.type === "NewExpression" || decl.init.type === "CallExpression") &&
                 decl.init.callee.name && (decl.init.callee.name.includes("Uint8") || decl.init.callee.name.includes("Uint32") || decl.init.callee.name.includes("Int32"))) {
                 this.varTypes.set(fullName, decl.init.callee.name);

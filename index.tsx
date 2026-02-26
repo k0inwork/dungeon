@@ -119,8 +119,14 @@ const App = () => {
 
   // Auto-scroll Log
   useEffect(() => {
-      if (logContainerRef.current) {
-          logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+      const container = logContainerRef.current;
+      if (container) {
+          const { scrollTop, scrollHeight, clientHeight } = container;
+          // If we are within 20px of the bottom, we consider it "at bottom" for auto-scroll
+          const isAtBottom = scrollHeight - scrollTop <= clientHeight + 20;
+          if (isAtBottom) {
+              container.scrollTop = scrollHeight;
+          }
       }
   }, [log]);
 
@@ -211,13 +217,13 @@ const App = () => {
 
     console.error = (...args: any[]) => {
         const msg = args.map(safeStringify).join(" ");
-        setLog(prev => [`[SYS_ERR] ${msg}`, ...prev].slice(0, 50));
+        setLog(prev => [`[SYS_ERR] ${msg}`, ...prev].slice(0, 100));
         originalError.apply(console, args);
     };
 
     console.warn = (...args: any[]) => {
         const msg = args.map(safeStringify).join(" ");
-        setLog(prev => [`[SYS_WARN] ${msg}`, ...prev].slice(0, 50));
+        setLog(prev => [`[SYS_WARN] ${msg}`, ...prev].slice(0, 100));
         originalWarn.apply(console, args);
     };
 
@@ -1436,9 +1442,7 @@ const App = () => {
                     height: "120px", 
                     overflowY: "auto", 
                     background: "#000", 
-                    fontSize: "0.9em",
-                    display: "flex",
-                    flexDirection: "column-reverse"
+                    fontSize: "0.9em"
                 }}
             >
                <div style={{ display: 'flex', flexDirection: 'column' }}>

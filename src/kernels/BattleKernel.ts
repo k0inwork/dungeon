@@ -1,6 +1,6 @@
 
 // Aethelgard Battle Kernel v2.0 (PURE AJS)
-import { STANDARD_KERNEL_FIRMWARE } from "./SharedBlocks";
+import { STANDARD_KERNEL_FIRMWARE, BLOCK_STANDARD_INBOX } from "./SharedBlocks";
 import { STANDARD_AJS_PREAMBLE, STANDARD_AJS_POSTAMBLE } from "./SharedAJS";
 import { AetherTranspiler } from "../compiler/AetherTranspiler";
 import { KernelID } from "../types/Protocol";
@@ -229,6 +229,7 @@ function run_battle_step() {
 
 export const BATTLE_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
+  BLOCK_STANDARD_INBOX,
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.BATTLE),
   ": INIT_BATTLE INIT_BATTLE_LOGIC AJS_INIT_CHANNELS ;",
   ": RUN_BATTLE_CYCLE RUN_BATTLE_STEP ;"
