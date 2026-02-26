@@ -1,6 +1,6 @@
 
 // Aethelgard Grid Physics Kernel v6.0 (PURE AJS)
-import { STANDARD_KERNEL_FIRMWARE } from "./SharedBlocks";
+import { STANDARD_KERNEL_FIRMWARE, BLOCK_STANDARD_INBOX } from "./SharedBlocks";
 import { STANDARD_AJS_PREAMBLE, STANDARD_AJS_POSTAMBLE } from "./SharedAJS";
 import { AetherTranspiler } from "../compiler/AetherTranspiler";
 import { KernelID } from "../types/Protocol";
@@ -454,6 +454,7 @@ function redraw_all() {
 
 export const GRID_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
+  BLOCK_STANDARD_INBOX,
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.GRID),
   ": RUN_GRID_CYCLE PROCESS_INBOX RUN_ENV_CYCLE ;",
   ": SET_LEVEL_ID SET_LEVEL_ID ;",

@@ -20,7 +20,7 @@ test('transpiles Chan.on with arity-4 listener', () => {
   const hash = hashChannel("test_chan");
 
   // Check subscription in init word
-  expect(forth).toContain(`SYS_CHAN_SUB ${KernelID.GRID} K_HOST ${hash} 0 0 BUS_SEND`);
+  expect(forth).toContain(`SYS_CHAN_SUB MY_ID @ K_HOST 0 ${hash} 0 BUS_SEND`);
 
   // Check dispatcher in handle_events
   expect(forth).toContain(`M_TARGET @ ${hash} = IF`);
@@ -50,7 +50,7 @@ test('transpiles Chan.leave()', () => {
     const forth = AetherTranspiler.transpile(js, KernelID.GRID);
     const hash = hashChannel("test_chan");
 
-    expect(forth).toContain(`SYS_CHAN_UNSUB ${KernelID.GRID} K_HOST ${hash} 0 0 BUS_SEND`);
+    expect(forth).toContain(`SYS_CHAN_UNSUB MY_ID @ K_HOST 0 ${hash} 0 BUS_SEND`);
 });
 
 test('transpiles Chan with kernel name', () => {

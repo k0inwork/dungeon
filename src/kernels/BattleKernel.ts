@@ -1,6 +1,6 @@
 
 // Aethelgard Battle Kernel v2.0 (PURE AJS)
-import { STANDARD_KERNEL_FIRMWARE } from "./SharedBlocks";
+import { STANDARD_KERNEL_FIRMWARE, BLOCK_STANDARD_INBOX } from "./SharedBlocks";
 import { STANDARD_AJS_PREAMBLE, STANDARD_AJS_POSTAMBLE } from "./SharedAJS";
 import { AetherTranspiler } from "../compiler/AetherTranspiler";
 import { KernelID } from "../types/Protocol";
@@ -13,7 +13,6 @@ const MAX_ENTITIES = 32;
 const RPG_SIZE = 36;
 let ENTITY_COUNT = 0;
 
-// 2. LOGIC
 struct RpgEntity {
     hp,
     maxHp,
@@ -27,35 +26,34 @@ struct RpgEntity {
 }
 
 let rpg_table = new Array(RpgEntity, MAX_ENTITIES, 0xA0000);
-export rpg_table;
+
+// 2. LOGIC
 
 function get_rpg_ptr(id) {
     return RpgEntity(id);
 }
 
 function init_stats(id, type) {
-    let e = get_rpg_ptr(id);
-    
     // Default Stats
-    e.maxHp = 100;
-    e.hp = 100;
-    e.atk = 10;
-    e.def = 2;
-    e.level = 1;
-    e.state = 0; // 0=Alive
-    e.invItem = 0;
+    rpg_table[id].maxHp = 100;
+    rpg_table[id].hp = 100;
+    rpg_table[id].atk = 10;
+    rpg_table[id].def = 2;
+    rpg_table[id].level = 1;
+    rpg_table[id].state = 0; // 0=Alive
+    rpg_table[id].invItem = 0;
     
     if (id == 0) {
         // Sync from Player Kernel for Persistence
         let p = PlayerState(0);
         if (p.maxHp > 0 && p.maxHp < 100000) {
-            e.maxHp = p.maxHp;
-            e.hp = p.hp;
+            rpg_table[0].maxHp = p.maxHp;
+            rpg_table[0].hp = p.hp;
         } else {
-            e.maxHp = 200;
-            e.hp = 200;
+            rpg_table[0].maxHp = 200;
+            rpg_table[0].hp = 200;
         }
-        e.atk = 20; 
+        rpg_table[0].atk = 20;
     }
     
     Log("Stats Init for ID:");
@@ -74,59 +72,49 @@ function log_combat(srcId, tgtId, dmg) {
 }
 
 function skill_basic_attack(srcId, tgtId) {
-    let src = get_rpg_ptr(srcId);
-    let tgt = get_rpg_ptr(tgtId);
-    
-    let dmg = src.atk - tgt.def;
+    let dmg = rpg_table[srcId].atk - rpg_table[tgtId].def;
     if (dmg < 1) { dmg = 1; }
     
-    tgt.hp -= dmg;
+    rpg_table[tgtId].hp -= dmg;
     
     log_combat(srcId, tgtId, dmg);
     Chan("BUS") <- [EVT_DAMAGE, tgtId, dmg, 0];
     
-    return tgt.hp;
+    return rpg_table[tgtId].hp;
 }
 
 function skill_heavy_smash(srcId, tgtId) {
-    let src = get_rpg_ptr(srcId);
-    let tgt = get_rpg_ptr(tgtId);
-    
     // 2.0x Damage, Ignores Defense
-    let dmg = src.atk * 2;
+    let dmg = rpg_table[srcId].atk * 2;
     
-    tgt.hp -= dmg;
+    rpg_table[tgtId].hp -= dmg;
     
     log_combat(srcId, tgtId, dmg);
     Chan("BUS") <- [EVT_DAMAGE, tgtId, dmg, 2]; // Type 2 = Crit/Heavy
     
-    return tgt.hp;
+    return rpg_table[tgtId].hp;
 }
 
 function skill_heal_self(srcId) {
-    let src = get_rpg_ptr(srcId);
     let amount = 20;
-    src.hp += amount;
-    if (src.hp > src.maxHp) { src.hp = src.maxHp; }
+    rpg_table[srcId].hp += amount;
+    if (rpg_table[srcId].hp > rpg_table[srcId].maxHp) {
+        rpg_table[srcId].hp = rpg_table[srcId].maxHp;
+    }
     
     Log("You HEAL for "); Log(amount); Log(" HP");
     Chan("BUS") <- [EVT_DAMAGE, srcId, -amount, 4]; // Negative Damage = Heal
 }
 
 function skill_fireball(srcId, tgtId) {
-    let src = get_rpg_ptr(srcId);
-    let tgt = get_rpg_ptr(tgtId);
-    
     // Ranged Magic Attack
-    // Ignores standard DEF, but we'll use a flat damage for now.
     let dmg = 40;
-    
-    tgt.hp -= dmg;
+    rpg_table[tgtId].hp -= dmg;
     
     log_combat(srcId, tgtId, dmg);
     Chan("BUS") <- [EVT_DAMAGE, tgtId, dmg, 1]; // Type 1 = Thermal
     
-    return tgt.hp;
+    return rpg_table[tgtId].hp;
 }
 
 // --- MAIN DISPATCHER ---
@@ -135,12 +123,10 @@ function execute_skill(srcId, tgtId, skillId) {
     let remainingHp = 100;
     
     // Check if attacker is valid
-    let src = get_rpg_ptr(srcId);
-    if (src.state == 1) return;
+    if (rpg_table[srcId].state == 1) return;
 
     // Check if target is valid
-    let tgt = get_rpg_ptr(tgtId);
-    if (tgt.state == 1) {
+    if (rpg_table[tgtId].state == 1) {
         Log("Target already dead.");
         return;
     }
@@ -161,9 +147,9 @@ function execute_skill(srcId, tgtId, skillId) {
     
     // Check Death (Common Logic)
     if (remainingHp <= 0) {
-        if (tgt.state == 0) { // Only die once
-            tgt.state = 1; // Dead
-            Chan("BUS") <- [EVT_DEATH, tgtId, tgt.invItem, 0];
+        if (rpg_table[tgtId].state == 0) { // Only die once
+            rpg_table[tgtId].state = 1; // Dead
+            Chan("BUS") <- [EVT_DEATH, tgtId, rpg_table[tgtId].invItem, 0];
             Log("Entity Died:");
             Log(tgtId);
             if (tgtId == 0) Log("GAME OVER");
@@ -176,11 +162,10 @@ function on_npc_sync(opcode, sender, p1, p2, p3) {
         init_stats(p1, p2);
 
         // Assign Inventory for Testing
-        let e = get_rpg_ptr(p1);
         if (p2 == 2) { // Big Rats / Aggressive
-             e.invItem = 2001;
+             rpg_table[p1].invItem = 2001;
         } else if (p2 == 1) { // Regular Rats / Passive
-             e.invItem = 2003;
+             rpg_table[p1].invItem = 2003;
         }
     }
 }
@@ -195,16 +180,15 @@ function on_battle_request(op, sender, p1, p2, p3) {
 function init_battle_logic() {
     let i = 0;
     while (i < MAX_ENTITIES) {
-        let e = get_rpg_ptr(i);
-        e.hp = 0;
-        e.maxHp = 0;
-        e.atk = 0;
-        e.def = 0;
-        e.level = 0;
-        e.exp = 0;
-        e.state = 0;
-        e.targetId = 0;
-        e.invItem = 0;
+        rpg_table[i].hp = 0;
+        rpg_table[i].maxHp = 0;
+        rpg_table[i].atk = 0;
+        rpg_table[i].def = 0;
+        rpg_table[i].level = 0;
+        rpg_table[i].exp = 0;
+        rpg_table[i].state = 0;
+        rpg_table[i].targetId = 0;
+        rpg_table[i].invItem = 0;
         i++;
     }
     ENTITY_COUNT = 0;
@@ -229,6 +213,7 @@ function run_battle_step() {
 
 export const BATTLE_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
+  BLOCK_STANDARD_INBOX,
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.BATTLE),
   ": INIT_BATTLE INIT_BATTLE_LOGIC AJS_INIT_CHANNELS ;",
   ": RUN_BATTLE_CYCLE RUN_BATTLE_STEP ;"

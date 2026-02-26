@@ -1,6 +1,6 @@
 
 // Aethelgard Hive AI Kernel v3.0 (PURE AJS)
-import { STANDARD_KERNEL_FIRMWARE } from "./SharedBlocks";
+import { STANDARD_KERNEL_FIRMWARE, BLOCK_STANDARD_INBOX } from "./SharedBlocks";
 import { STANDARD_AJS_PREAMBLE, STANDARD_AJS_POSTAMBLE } from "./SharedAJS";
 import { AetherTranspiler } from "../compiler/AetherTranspiler";
 import { KernelID } from "../types/Protocol";
@@ -189,6 +189,7 @@ function init_hive_logic() {
 
 export const HIVE_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
+  BLOCK_STANDARD_INBOX,
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.HIVE),
   ": INIT_HIVE INIT_HIVE_LOGIC AJS_INIT_CHANNELS ;",
   ": RUN_HIVE_CYCLE RUN_HIVE_STEP ;"
