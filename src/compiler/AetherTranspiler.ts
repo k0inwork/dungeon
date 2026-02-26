@@ -143,8 +143,6 @@ export class AetherTranspiler {
       this.emitGlobals();
       this.compileNode(ast as ASTNode);
       this.emitSubscriptionWord();
-      // [AJS-CHANNELS] Automatically call initialization word at the end of transpilation
-      this.emit("AJS_INIT_CHANNELS");
       return this.output.join("\n");
     } catch (e: any) {
       console.error("Transpilation Failed:", e);
@@ -910,7 +908,7 @@ export class AetherTranspiler {
                     this.emit(`  ( Subscribed to Channel: ${chanName} )`);
                     return;
                 } else if (prop === "LEAVE") {
-                    this.emit(`  SYS_CHAN_UNSUB ${this.currentKernelId} K_HOST ${channelId} 0 0 BUS_SEND ( UNSUB FROM ${chanName} )`);
+                    this.emit(`  SYS_CHAN_UNSUB MY_ID @ K_HOST 0 ${channelId} 0 BUS_SEND ( UNSUB FROM ${chanName} )`);
                     return;
                 } else if (prop === "SEND") {
                     this.compileChannelSend(channelId, node.arguments[0]);
@@ -1160,7 +1158,7 @@ export class AetherTranspiler {
       const elements = argsNode.elements;
       // BUS_SEND expects: op sender target p1 p2 p3
       this.compileNode(elements[0] || { type: "Literal", value: 0 }); // op
-      this.emit(`  ${this.currentKernelId} ( Sender )`);
+      this.emit(`  MY_ID @ ( Sender )`);
       if (typeof target === "number") {
           this.emit(`  ${target} ( Target Channel )`);
       } else {
@@ -1189,8 +1187,11 @@ export class AetherTranspiler {
                   // [AJS-CHANNELS] Modern 5-arg callback: opcode, sender, p1, p2, p3
                   this.emit(`  M_OP @ M_SENDER @ M_P1 @ M_P2 @ M_P3 @ ${forthName}`);
               } else if (scope && scope.args.length === 4) {
-                  // [AJS-CHANNELS] Legacy 4-arg callback: opcode, p1, p2, p3
+                  // [AJS-CHANNELS] Mixed 4-arg callback: opcode, p1, p2, p3
                   this.emit(`  M_OP @ M_P1 @ M_P2 @ M_P3 @ ${forthName}`);
+              } else if (scope && scope.args.length === 3) {
+                  // [AJS-CHANNELS] Standard 3-arg callback: p1, p2, p3
+                  this.emit(`  M_P1 @ M_P2 @ M_P3 @ ${forthName}`);
               } else {
                   this.emit(`  ${forthName}`);
               }
@@ -1204,7 +1205,7 @@ export class AetherTranspiler {
       this.emit("\n: AJS_INIT_CHANNELS");
       // [AJS-CHANNELS] Avoid complex logic in this word to ensure it works across all Forth environments
       this.channelSubscriptions.forEach((_, hash) => {
-          this.emit(`  SYS_CHAN_SUB ${this.currentKernelId} K_HOST ${hash} 0 0 BUS_SEND`);
+          this.emit(`  SYS_CHAN_SUB MY_ID @ K_HOST 0 ${hash} 0 BUS_SEND`);
       });
       this.emit(";");
   }

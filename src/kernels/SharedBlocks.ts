@@ -20,6 +20,10 @@ export const BLOCK_CORE_POLYFILLS = `
 ( --- CORE POLYFILLS --- )
 ( Essential words that might be missing in minimal Forth kernels )
 
+: NOOP ;
+: PLAYER_BOOT ;
+: AJS_INIT_CHANNELS ;
+
 ( 1. 2DROP - Drop two items )
 : 2DROP ( n1 n2 -- ) DROP DROP ;
 
@@ -79,6 +83,12 @@ ${generateForthProtocolBlock()}
 `;
 
 export const BLOCK_MSG_REGISTERS = `
+VARIABLE MY_ID
+0 MY_ID !
+
+VARIABLE HANDLE_EVENTS_XT
+' NOOP HANDLE_EVENTS_XT !
+
 VARIABLE M_OP
 VARIABLE M_SENDER
 VARIABLE M_TARGET
@@ -243,7 +253,7 @@ export const BLOCK_STANDARD_INBOX = `
        R@ 24 + M_P2 ! 
        
        ( 3. Run Handler )
-       HANDLE_EVENTS
+       HANDLE_EVENTS_XT @ EXECUTE
        
        ( 4. Calc Step: 6 + Length )
        M_P1 @ 6 + 
@@ -252,7 +262,7 @@ export const BLOCK_STANDARD_INBOX = `
        DROP ( drop op )
        R@ @ R@ 4 + @ R@ 8 + @ R@ 12 + @ R@ 16 + @ R@ 20 + @
        UNPACK_MSG
-       HANDLE_EVENTS
+       HANDLE_EVENTS_XT @ EXECUTE
        6
     THEN
     

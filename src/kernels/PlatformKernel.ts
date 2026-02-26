@@ -361,12 +361,10 @@ function on_platform_request(op, sender, p1, p2, p3) {
     if (op == REQ_MOVE) { move_player(p1); }
     if (op == REQ_TELEPORT) { teleport_player(p1, p2); }
     if (op == CMD_INTERACT) { trigger_skill(); }
-    if (op == EVT_DAMAGE) {
+    if (op == EVT_DEATH) {
         if (p1 > 0) {
-            if (entities[p1].ptype == 3) return;
             physics[p1].active = 0;
             entities[p1].char = 32;
-            Chan("npc_sync") <- [EVT_DEATH, p1, 0, 0];
         }
     }
 }

@@ -133,7 +133,8 @@ player_boot();
 export const PLAYER_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   BLOCK_STANDARD_INBOX,
-  AetherTranspiler.transpile(AJS_LOGIC, KernelID.PLAYER)
+  AetherTranspiler.transpile(AJS_LOGIC, KernelID.PLAYER),
+  ": INIT_PLAYER_AUTO INIT_PLAYER AJS_INIT_CHANNELS ;"
 ];
 
 export const PLAYER_AJS_SOURCE = AJS_LOGIC;

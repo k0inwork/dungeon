@@ -12,11 +12,13 @@ export class IntegrationSimulator {
         this.kernels.set(id, runner);
 
         // Wire up JS_SYNC_OBJECT for this runner
-        runner.forth.bind("JS_SYNC_OBJECT", (stack: any) => {
-            const typeId = stack.pop();
-            const id = stack.pop();
-            return this.handleSync(runner, id, typeId, stack);
-        });
+        if (runner.forth) {
+            runner.forth.bind("JS_SYNC_OBJECT", (stack: any) => {
+                const typeId = stack.pop();
+                const id = stack.pop();
+                return this.handleSync(runner, id, typeId, stack);
+            });
+        }
     }
 
     handleSync(requestor: KernelTestRunner, id: number, typeId: number, stack: any) {
@@ -61,14 +63,12 @@ export class IntegrationSimulator {
                 let offset = 0;
                 while (offset < count) {
                     const op = data[offset];
-                    console.log(`[SIM] Pre-scan Kernel ${id} Packet at offset ${offset}: Op=${op} Target=${data[offset+2]} P1=${data[offset+3]}`);
                     if (op === Opcode.SYS_CHAN_SUB) {
-                        const chanId = data[offset + 3];
-                        console.log(`[SIM] Registering SUB: Kernel ${id} to Channel ${chanId}`);
+                        const chanId = data[offset + 4]; // P2 contains the channel ID
                         if (!this.channelSubscriptions.has(chanId)) this.channelSubscriptions.set(chanId, new Set());
                         this.channelSubscriptions.get(chanId)!.add(id);
                     } else if (op === Opcode.SYS_CHAN_UNSUB) {
-                        this.channelSubscriptions.get(data[offset + 3])?.delete(id);
+                        this.channelSubscriptions.get(data[offset + 4])?.delete(id);
                     }
                     offset += PACKET_SIZE_INTS;
                 }
