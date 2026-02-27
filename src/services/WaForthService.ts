@@ -421,6 +421,10 @@ class ForthProcessManager {
       }
   }
 
+  getPacketLog() {
+      return this.busHistory;
+  }
+
   // --- PERSISTENCE & HYBERNATION v3.0 ---
   private MAX_ACTIVE_KERNELS = 10;
 
