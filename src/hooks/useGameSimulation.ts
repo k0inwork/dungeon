@@ -65,9 +65,10 @@ export const useGameSimulation = (addLog: (msg: string) => void) => {
             const lIdx = LEVEL_IDS.indexOf(level.id);
             const config = LEVEL_CONFIGS[level.simulation_mode];
 
-            const kernels = await Promise.all(config.requiredKernels.map(k =>
-                ensureKernel(String(getInstanceID(k.role, lIdx)), k.blocks, lIdx)
-            ));
+            const kernels = await Promise.all(config.requiredKernels.map(k => {
+                const instId = k.role === KernelID.PLAYER ? "PLAYER" : String(getInstanceID(k.role, lIdx));
+                return ensureKernel(instId, k.blocks, lIdx);
+            }));
 
             if (kernels.some(k => !k)) return;
 
@@ -117,7 +118,12 @@ export const useGameSimulation = (addLog: (msg: string) => void) => {
 
                 level.entities.forEach((e: any) => {
                     if (e.x === spawnX && e.y === spawnY) return;
-                    physicsProc.run(`${e.x} ${e.y} ${e.glyph.color} ${e.glyph.char.charCodeAt(0)} ${e.taxonomy.class === "Aggressive" ? 2 : 1} SPAWN_ENTITY`);
+
+                    let type = 1; // Passive NPC
+                    if (e.taxonomy.class === "Aggressive") type = 2;
+                    if (e.taxonomy.race === "Loot" || e.glyph.char === "$") type = 3;
+
+                    physicsProc.run(`${e.x} ${e.y} ${e.glyph.color} ${e.glyph.char.charCodeAt(0)} ${type} SPAWN_ENTITY`);
                 });
 
                 initializedLevels.current.add(level.id);

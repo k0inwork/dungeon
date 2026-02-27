@@ -31,6 +31,14 @@ function set_level_id(id) {
 // 2. UTILS
 function calc_idx(x, y) { return (y * MAP_WIDTH + x); }
 
+function check_bounds(x, y) {
+  if (x < 0) return 0;
+  if (x >= MAP_WIDTH) return 0;
+  if (y < 0) return 0;
+  if (y >= MAP_HEIGHT) return 0;
+  return 1;
+}
+
 function draw_cell(x, y, color, char) {
     VRAM[calc_idx(x, y)] = (color << 8) | char;
 }
@@ -57,14 +65,6 @@ function get_ent_ptr(id) {
     return GridEntity(id);
 }
 
-function check_bounds(x, y) {
-  if (x < 0) return 0;
-  if (x >= MAP_WIDTH) return 0;
-  if (y < 0) return 0;
-  if (y >= MAP_HEIGHT) return 0;
-  return 1;
-}
-
 function system_reset_map() {
     let i = 0;
     let total = MAP_WIDTH * MAP_HEIGHT;
@@ -76,7 +76,7 @@ function system_reset_map() {
         TERRAIN_MAP[i] = 0;
         TRANSITION_MAP[i] = -1;
         VRAM[i] = 0;
-        draw_cell(i % 40, i / 40, 0, 32);
+        draw_cell(i % 40, Math.floor(i / 40), 0, 32);
         i++;
     }
 
@@ -432,7 +432,7 @@ function redraw_all() {
     let total = MAP_WIDTH * MAP_HEIGHT;
     while (i < total) {
         let x = i % MAP_WIDTH;
-        let y = i / MAP_WIDTH;
+        let y = Math.floor(i / MAP_WIDTH);
         let packed = TERRAIN_MAP[i];
         let char = packed & 255;
         let color = packed >>> 8;
