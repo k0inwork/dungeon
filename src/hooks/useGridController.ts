@@ -1,5 +1,5 @@
 
-import { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { forthService } from '../services/WaForthService';
 
 export interface PlayerSkill {
@@ -28,12 +28,12 @@ export const useGridController = (
     checkTarget: (x: number, y: number, skill: PlayerSkill) => boolean,
     currentLevelIdx: number
 ) => {
-    const [targetMode, setTargetMode] = useState(false);
-    const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
-    const [selectedSkill, setSelectedSkill] = useState<PlayerSkill | null>(null);
-    const [isValidTarget, setIsValidTarget] = useState(true);
+    const [targetMode, setTargetMode] = React.useState(false);
+    const [cursorPos, setCursorPos] = React.useState({ x: 0, y: 0 });
+    const [selectedSkill, setSelectedSkill] = React.useState<PlayerSkill | null>(null);
+    const [isValidTarget, setIsValidTarget] = React.useState(true);
 
-    const handleGridInput = useCallback((k: string) => {
+    const handleGridInput = React.useCallback((k: string) => {
         if (mode !== "GRID") return;
 
         let dx = 0;
@@ -106,6 +106,7 @@ export const useGridController = (
             const playerProc = forthService.get("PLAYER");
             if (playerProc && playerProc.isLogicLoaded) {
                 const cmd = `0 OUT_PTR ! 101 2 1 0 ${dx} ${dy} BUS_SEND`;
+                console.log(`[GRID INPUT] Sending move request: ${dx}, ${dy}`);
                 playerProc.run(cmd);
                 tickSimulation();
             }
@@ -116,7 +117,7 @@ export const useGridController = (
         }
     }, [mode, targetMode, cursorPos, selectedSkill, isValidTarget, playerPos, checkTarget, addLog, tickSimulation, triggerPickup]);
 
-    useEffect(() => {
+    React.useEffect(() => {
         const listener = (e: KeyboardEvent) => handleGridInput(e.key);
         window.addEventListener("keydown", listener);
         return () => window.removeEventListener("keydown", listener);

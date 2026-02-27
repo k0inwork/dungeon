@@ -45,10 +45,16 @@ export class SimulationEngine {
                     const packet = outMem.subarray(offset, offset + packetLen);
                     forthService.logPacket(senderRole, targetRole, op, header[3], header[4], header[5]);
 
-                    if (targetRole === KernelID.HOST) {
+                    if (targetRole === KernelID.HOST || targetRole === KernelID.BUS) {
                         if (op === Opcode.EVT_DEATH && header[3] === 0) this.state.onGameOver();
-                        if (op === Opcode.EVT_MOVED && header[3] === 0) this.state.onPlayerMoved(header[4], header[5]);
+                        if (op === Opcode.EVT_MOVED && header[3] === 0) {
+                            this.state.onPlayerMoved(header[4], header[5]);
+                        }
                         if (op === Opcode.EVT_LEVEL_TRANSITION) this.state.onLevelTransition(header[3]);
+                    }
+
+                    if (targetRole === KernelID.HOST) {
+                        // Already handled above
                     } else if (targetRole === KernelID.BUS) {
                         for (const [instId, inbox] of inboxes.entries()) {
                             if (instId !== kInstId) inbox.push(...packet);
@@ -58,8 +64,17 @@ export class SimulationEngine {
                             if (subInstId !== kInstId) inboxes.get(subInstId)?.push(...packet);
                         });
                     } else {
+                        // MAP ROLE TO INSTANCE ID
                         const targetInstId = getInstanceID(targetRole, levelIdx);
-                        inboxes.get(targetInstId)?.push(...packet);
+
+                        // Handle legacy "PLAYER" string vs role ID 2
+                        const destId = targetRole === KernelID.PLAYER ? 2 : targetInstId;
+
+                        if (inboxes.has(destId)) {
+                             inboxes.get(destId)?.push(...packet);
+                        } else {
+                             console.warn(`[BROKER] Target ${destId} (Role ${targetRole}) not in tick list`);
+                        }
                     }
 
                     if (op === Opcode.SYS_CHAN_SUB) {

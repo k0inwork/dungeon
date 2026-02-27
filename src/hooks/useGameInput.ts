@@ -1,10 +1,10 @@
 
-import { useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 export const useGameInput = () => {
-    const keysDown = useRef<Set<string>>(new Set());
+    const keysDown = React.useRef<Set<string>>(new Set());
 
-    useEffect(() => {
+    React.useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
             keysDown.current.add(e.key);
         };

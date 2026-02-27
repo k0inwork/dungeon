@@ -84,7 +84,8 @@ export class AetherTranspiler {
           def.fields.forEach((f, i) => {
               const offset = i * 4;
               structDef.fields.set(f, offset);
-              this.globalFieldOffsets.set(f, offset);
+              // DO NOT populate globalFieldOffsets here.
+              // VSO field offsets are handled via prefixed constants.
           });
           this.structs.set(name, structDef);
       }

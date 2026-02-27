@@ -30,6 +30,7 @@ export class ForthProcess {
   logicBlocks: string[] = []; // Store blocks for restoration
   lastUsed: number = Date.now();
   flashData: Uint8Array | null = null;
+  private bootPromise: Promise<void> | null = null;
 
   // Multicast Log Listeners
   private logListeners: Set<(msg: string) => void> = new Set();
@@ -54,6 +55,9 @@ export class ForthProcess {
   }
 
   async boot() {
+    if (this.bootPromise) return this.bootPromise;
+
+    this.bootPromise = (async () => {
     this.forth = new WAForth();
 
     // 1. Bind Low-Level Emit (Standard Output)
@@ -92,7 +96,11 @@ export class ForthProcess {
         console.error(`[${this.id}] Boot Failed:`, e);
         this.log(`[BOOT_ERR] ${e.message}`);
         this.isReady = false;
+    } finally {
+        this.bootPromise = null;
     }
+    })();
+    return this.bootPromise;
   }
 
   private bindHostFunctions() {
@@ -285,6 +293,16 @@ export class ForthProcess {
 
   log(msg: string) {
     this.lastUsed = Date.now();
+    // Aggressive Deduplication for boot messages
+    if (msg.includes("Booted") || msg.includes("Initialized") || msg.includes("READY") || msg.includes("Memory Reset") || msg.includes("Logic Loaded")) {
+        // Global check across all processes to stop flooding
+        let alreadyLogged = false;
+        this.manager.processes.forEach(p => {
+            if (p.outputLog.some(l => l.includes(msg))) alreadyLogged = true;
+        });
+        if (alreadyLogged) return;
+    }
+
     // Deduplication Logic
     if (msg === this.lastLogMsg) {
         this.lastLogCount++;
@@ -322,7 +340,10 @@ export class ForthProcess {
         console.warn(`[${this.id}] Attempted to run word while FLASHED. Ignoring.`);
         return;
     }
-    if (!this.forth || !this.isReady) return;
+    if (!this.forth || !this.isReady) {
+        console.warn(`[${this.id}] RUN skipped: Kernel not ready.`);
+        return;
+    }
     try {
       console.log(`[${this.id} RUN] ${word}`);
       this.forth.interpret(word + "\n");
@@ -353,8 +374,12 @@ export class ForthProcess {
   }
 
   getMemory(): ArrayBuffer {
-    if (!this.forth) return (this.flashData?.buffer as ArrayBuffer) || new ArrayBuffer(0);
-    return this.forth.memory().buffer;
+    if (!this.forth || !this.isReady) return (this.flashData?.buffer as ArrayBuffer) || new ArrayBuffer(0);
+    try {
+        return this.forth.memory().buffer;
+    } catch (e) {
+        return (this.flashData?.buffer as ArrayBuffer) || new ArrayBuffer(0);
+    }
   }
 }
 

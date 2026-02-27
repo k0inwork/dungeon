@@ -36,7 +36,9 @@ function draw_cell(x, y, color, char) {
 }
 
 function redraw_cell(x, y, color, char) {
-    draw_cell(x, y, color, char);
+    if (check_bounds(x, y)) {
+        VRAM[calc_idx(x, y)] = (color << 8) | char;
+    }
 }
 
 // 3. LOGIC
@@ -127,6 +129,7 @@ function find_entity_at(x, y) {
 function spawn_entity(x, y, color, char, type) {
   if (ENTITY_COUNT >= MAX_ENTITIES) return;
 
+  Log("[GRID] Spawning type:"); Log(type); Log("at"); Log(x); Log(y);
   let ent = get_ent_ptr(ENTITY_COUNT);
   ent.char = char;
   ent.color = color;
@@ -203,6 +206,7 @@ function move_entity(id, dx, dy) {
   let ent = get_ent_ptr(id);
   if (ent.char == 0 || ent.type == 3) return;
 
+  Log("[GRID] Moving ID:"); Log(id);
   let tx = ent.x + dx;
   let ty = ent.y + dy;
   if (check_bounds(tx, ty) == 0) return;
@@ -458,8 +462,9 @@ export const GRID_KERNEL_BLOCKS = [
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.GRID),
   ": RUN_GRID_CYCLE PROCESS_INBOX RUN_ENV_CYCLE ;",
   ": SET_LEVEL_ID SET_LEVEL_ID ;",
-  ": INIT_MAP SYSTEM_RESET_MAP AJS_INIT_CHANNELS ;",
+  ": INIT_MAP SYSTEM_RESET_MAP AJS_INIT_CHANNELS ' HANDLE_EVENTS HANDLE_EVENTS_XT ! ;",
   ": LOAD_TILE LOAD_TILE ;",
+  ": SPAWN_ENTITY SPAWN_ENTITY ;",
   ": REDRAW_ALL REDRAW_ALL ;",
   ": CMD_TELEPORT TELEPORT_PLAYER ;"
 ];

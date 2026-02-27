@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { createRoot } from "react-dom/client";
 import { forthService, BusPacket } from "./src/services/WaForthService";
 import { storageService } from "./src/services/StorageService";
@@ -47,6 +47,7 @@ const App = () => {
 
     // --- SHARED REFS ---
     const logContainerRef = useRef<HTMLDivElement>(null);
+    const loadingLevel = useRef<boolean>(false);
     const initializedLevels = useRef<Set<string>>(new Set());
     const [displayBuffer, setDisplayBuffer] = useState<ArrayBuffer | null>(null);
     const [playerPos, setPlayerPos] = useState({ x: 1, y: 1 });
@@ -61,60 +62,87 @@ const App = () => {
     const [busCategory, setBusCategory] = useState("ALL");
     const [loadedKernelIds, setLoadedKernelIds] = useState<string[]>([]);
 
-    const addLog = (msg: string) => setLog(prev => [msg, ...prev].slice(0, 100));
+    const logRef = useRef<((msg: string) => void) | null>(null);
+    const addLog = useCallback((msg: string) => {
+        setLog(prev => [msg, ...prev].slice(0, 100));
+        logRef.current?.(msg);
+    }, []);
 
     // --- SIMULATION ENGINE ---
     const channelSubscriptions = useRef<Map<number, Set<number>>>(new Map());
+    const simulationRef = useRef<{ worldInfo: WorldData | null, currentLevelId: string, currentLevelIdx: number }>({
+        worldInfo: null,
+        currentLevelId: "hub",
+        currentLevelIdx: 0
+    });
+
+    useEffect(() => {
+        simulationRef.current = { worldInfo, currentLevelId, currentLevelIdx };
+    }, [worldInfo, currentLevelId, currentLevelIdx]);
+
+    const transitionRef = useRef<any>(null);
+    const playerMoveRef = useRef<any>(null);
+    const gameOverRef = useRef<any>(null);
+
+    const handleLevelTransition = useCallback(async (targetLevelIdx: number) => {
+        const targetLevelId = LEVEL_IDS[targetLevelIdx];
+        const info = simulationRef.current.worldInfo;
+        if (!targetLevelId || !info || targetLevelId === simulationRef.current.currentLevelId) return;
+
+        addLog(`Transitioning to ${info.levels![targetLevelId].name}...`);
+        setCurrentLevelId(targetLevelId);
+        await loadLevel(info.levels![targetLevelId], simulationRef.current.currentLevelIdx);
+    }, [addLog]); // Stable dependencies
+
+    React.useEffect(() => {
+        transitionRef.current = handleLevelTransition;
+        playerMoveRef.current = (x: number, y: number) => {
+            setPlayerPos({ x, y });
+        };
+        gameOverRef.current = () => setGameOver(true);
+    }, [handleLevelTransition]);
 
     const engine = useMemo(() => new SimulationEngine({
         channelSubscriptions: channelSubscriptions.current,
-        onGameOver: () => setGameOver(true),
-        onPlayerMoved: (x, y) => setPlayerPos({ x, y }),
-        onLevelTransition: (targetLevelId: number) => handleLevelTransition(targetLevelId)
+        onGameOver: () => gameOverRef.current?.(),
+        onPlayerMoved: (x, y) => playerMoveRef.current?.(x, y),
+        onLevelTransition: (targetLevelId: number) => transitionRef.current?.(targetLevelId)
     }), []);
 
-    const tickSimulation = () => {
-        const simMode = worldInfo?.levels[currentLevelId]?.simulation_mode || "GRID";
-        engine.tickSimulation(currentLevelIdx, simMode, currentLevelId);
-    };
+    const tickSimulation = useCallback(() => {
+        const { worldInfo: info, currentLevelId: id, currentLevelIdx: idx } = simulationRef.current;
+        const simMode = info?.levels![id]?.simulation_mode || "GRID";
+        engine.tickSimulation(idx, simMode, id);
+    }, [engine]);
 
     // --- HOOKS ---
     const keysDown = useGameInput();
     const { ensureKernel, loadKernel } = useKernelManager(addLog);
 
-    const triggerPickup = () => {
+    const triggerPickup = React.useCallback(() => {
         const playerProc = forthService.get("PLAYER");
         if (playerProc && playerProc.isLogicLoaded) {
             playerProc.run(`0 OUT_PTR ! 305 2 1 ${playerPos.x} ${playerPos.y} 0 BUS_SEND`);
             tickSimulation();
         }
-    };
+    }, [playerPos, tickSimulation]);
 
-    const checkTarget = (x: number, y: number, skill: PlayerSkill): boolean => {
+    const checkTarget = React.useCallback((x: number, y: number, skill: PlayerSkill): boolean => {
         const dist = Math.abs(x - playerPos.x) + Math.abs(y - playerPos.y);
         if (dist > skill.range) return false;
         if (skill.name === "HEAL") return x === playerPos.x && y === playerPos.y;
         return true;
-    };
+    }, [playerPos]);
 
     const gridController = useGridController(
         mode, playerPos, tickSimulation, addLog, triggerPickup, checkTarget, currentLevelIdx
     );
 
-    const lastTickTimeRef = useRef(0);
+    const lastTickTimeRef = React.useRef(0);
     const { runPlatformCycle } = usePlatformController(
         mode, currentLevelIdx, keysDown, setDisplayBuffer, tickSimulation, lastTickTimeRef, SIMULATION_TICK_RATE_MS
     );
 
-    // --- ACTIONS ---
-    const handleLevelTransition = async (targetLevelIdx: number) => {
-        const targetLevelId = LEVEL_IDS[targetLevelIdx];
-        if (!targetLevelId || !worldInfo) return;
-
-        addLog(`Transitioning to ${worldInfo.levels[targetLevelId].name}...`);
-        setCurrentLevelId(targetLevelId);
-        await loadLevel(worldInfo.levels[targetLevelId], currentLevelIdx);
-    };
 
     const handleInspect = (x: number, y: number) => {
         const lIdx = currentLevelIdx;
@@ -145,86 +173,129 @@ const App = () => {
         }
     };
 
-    const loadLevel = async (level: any, sourceLevelIdx: number = -1) => {
-        const lIdx = LEVEL_IDS.indexOf(level.id);
-        const physicsRole = level.simulation_mode === 'PLATFORM' ? KernelID.PLATFORM : KernelID.GRID;
+    const loadLevel = React.useCallback(async (level: any, sourceLevelIdx: number = -1) => {
+        if (loadingLevel.current) return;
+        loadingLevel.current = true;
+        try {
+            const lIdx = LEVEL_IDS.indexOf(level.id);
+            const physicsRole = level.simulation_mode === 'PLATFORM' ? KernelID.PLATFORM : KernelID.GRID;
 
-        const gridId = String(getInstanceID(physicsRole, lIdx));
-        const hiveId = String(getInstanceID(KernelID.HIVE, lIdx));
-        const battleId = String(getInstanceID(KernelID.BATTLE, lIdx));
+            const gridId = String(getInstanceID(physicsRole, lIdx));
+            const hiveId = String(getInstanceID(KernelID.HIVE, lIdx));
+            const battleId = String(getInstanceID(KernelID.BATTLE, lIdx));
 
-        const physicsBlocks = level.simulation_mode === 'PLATFORM' ? PLATFORM_KERNEL_BLOCKS : GRID_KERNEL_BLOCKS;
+            const physicsBlocks = level.simulation_mode === 'PLATFORM' ? PLATFORM_KERNEL_BLOCKS : GRID_KERNEL_BLOCKS;
 
-        const mainProc = await ensureKernel(gridId, physicsBlocks, lIdx);
-        const hiveProc = await ensureKernel(hiveId, HIVE_KERNEL_BLOCKS, lIdx);
-        const battleProc = await ensureKernel(battleId, BATTLE_KERNEL_BLOCKS, lIdx);
-        const playerProc = await ensureKernel("PLAYER", PLAYER_KERNEL_BLOCKS, 0);
+            const playerProc = await ensureKernel("PLAYER", PLAYER_KERNEL_BLOCKS, 0);
+            const mainProc = await ensureKernel(gridId, physicsBlocks, lIdx);
+            const hiveProc = await ensureKernel(hiveId, HIVE_KERNEL_BLOCKS, lIdx);
+            const battleProc = await ensureKernel(battleId, BATTLE_KERNEL_BLOCKS, lIdx);
 
-        if (!mainProc || !hiveProc || !battleProc || !playerProc) return;
+            if (!mainProc || !hiveProc || !battleProc || !playerProc) return;
 
-        // Boot sequence
-        if (!initializedLevels.current.has(level.id)) {
-            if (level.simulation_mode === 'PLATFORM') {
-                mainProc.run("INIT_PLATFORMER");
+            const isNewLevel = !initializedLevels.current.has(level.id);
+
+            // 1. BOOT PHASE
+            if (isNewLevel) {
+                if (level.simulation_mode === 'PLATFORM') {
+                    mainProc.run("INIT_PLATFORMER");
+                } else {
+                    mainProc.run("INIT_MAP");
+                }
+                hiveProc.run("INIT_HIVE");
+                battleProc.run("INIT_BATTLE");
+            }
+
+            if (!playerProc.isWordDefined("PLAYER_LOADED_SIGNAL")) {
+                playerProc.run("INIT_PLAYER_AUTO : PLAYER_LOADED_SIGNAL ;");
+            }
+
+            mainProc.run(`${lIdx} SET_LEVEL_ID`);
+
+            // 2. DATA LOADING PHASE
+            if (isNewLevel) {
+                let spawnX = 1, spawnY = 1;
+                const defaultFloor = level.terrain_legend.find((t: any) => t.passable);
+                const floorSymbol = defaultFloor?.symbol || '.';
+
+                level.map_layout.forEach((row: string, y: number) => {
+                    for (let x = 0; x < 40; x++) {
+                        let char = row[x] || ' ';
+                        if (char === '@') {
+                            spawnX = x; spawnY = y;
+                            char = floorSymbol;
+                        }
+                        const terrain = level.terrain_legend.find((t: any) => t.symbol === char);
+                        let color = terrain?.color || 0x888888;
+                        let type = terrain?.passable ? 0 : 1;
+                        let targetId = terrain?.target_id ?? -1;
+                        mainProc.run(`${x} ${y} ${color} ${char.charCodeAt(0)} ${type} ${targetId} LOAD_TILE`);
+                    }
+                });
+
+                // Spawning Player first with green color
+                mainProc.run(`${spawnX} ${spawnY} 65280 64 1 SPAWN_ENTITY`);
+                setPlayerPos({ x: spawnX, y: spawnY });
+
+                // Spawning others
+                level.entities.forEach((e: any) => {
+                    if (e.x === spawnX && e.y === spawnY) return;
+                    mainProc.run(`${e.x} ${e.y} ${e.glyph.color} ${e.glyph.char.charCodeAt(0)} ${e.taxonomy.class === "Aggressive" ? 2 : 1} SPAWN_ENTITY`);
+                });
+
+                initializedLevels.current.add(level.id);
             } else {
-                mainProc.run("INIT_MAP");
+                // Teleport on re-entry
+                let spawnX = 1, spawnY = 1;
+                level.map_layout.forEach((row: string, y: number) => {
+                    if (row.includes('@')) {
+                        spawnX = row.indexOf('@');
+                        spawnY = y;
+                    }
+                });
+                mainProc.run(`${spawnX} ${spawnY} CMD_TELEPORT`);
+                setPlayerPos({ x: spawnX, y: spawnY });
             }
-            hiveProc.run("INIT_HIVE");
-            battleProc.run("INIT_BATTLE");
-            initializedLevels.current.add(level.id);
-        }
 
-        if (!playerProc.isWordDefined("PLAYER_LOADED_SIGNAL")) {
-            playerProc.run("INIT_PLAYER_AUTO : PLAYER_LOADED_SIGNAL ;");
-        }
+            // 3. SYNC PHASE
+            engine.runBroker([mainProc, hiveProc, battleProc, playerProc], lIdx);
+            [mainProc, hiveProc, battleProc, playerProc].forEach(p => {
+                if (p.isLogicLoaded) p.run("PROCESS_INBOX");
+            });
 
-        mainProc.run(`${lIdx} SET_LEVEL_ID`);
-
-        // Initial Broker sync
-        engine.runBroker([mainProc, hiveProc, battleProc, playerProc], lIdx);
-        [mainProc, hiveProc, battleProc, playerProc].forEach(p => {
-            if (p.isLogicLoaded) p.run("PROCESS_INBOX");
-        });
-
-        // Map Loading
-        level.map_layout.forEach((row: string, y: number) => {
-            for (let x = 0; x < 40; x++) {
-                const char = row[x] || ' ';
-                const terrain = level.terrain_legend.find((t: any) => t.symbol === char);
-                let color = terrain?.color || 0x888888;
-                let type = terrain?.passable ? 0 : 1;
-                let targetId = terrain?.target_id ?? -1;
-                mainProc.run(`${x} ${y} ${color} ${char.charCodeAt(0)} ${type} ${targetId} LOAD_TILE`);
+            if (level.simulation_mode === 'GRID') {
+                mainProc.run("REDRAW_ALL");
             }
-        });
 
-        // Entity Spawning
-        level.entities.forEach((e: any) => {
-            mainProc.run(`${e.x} ${e.y} ${e.glyph.color} ${e.glyph.char.charCodeAt(0)} ${e.taxonomy.class === "Aggressive" ? 2 : 1} SPAWN_ENTITY`);
-        });
+            setMode(level.simulation_mode);
+            addLog(`Simulation Ready.`);
+        } catch (e: any) {
+            console.error("Load Level Error:", e);
+            addLog(`ERR: Load Level Failed: ${e.message}`);
+        } finally {
+            loadingLevel.current = false;
+        }
+    }, [addLog, ensureKernel, engine]);
 
-        setMode(level.simulation_mode);
-        addLog(`Simulation Ready.`);
-    };
-
-    const handleGenerate = async (e: React.MouseEvent) => {
+    const handleGenerate = useCallback(async (e: React.MouseEvent) => {
         setMode("GENERATING");
+        initializedLevels.current = new Set();
         const world = e.shiftKey ? generatorService.generateMockWorld() : await generatorService.generateWorld(seed);
         setWorldInfo(world);
         setCurrentLevelId("hub");
-        await loadLevel(world.levels["hub"]);
-    };
+        await loadLevel(world.levels!["hub"]);
+    }, [seed, loadLevel]);
 
-    const saveGame = async () => {
+    const saveGame = useCallback(async () => {
         if (!worldInfo) return;
         const forthState = await forthService.serializeAll();
         const gameState = { worldInfo, currentLevelId, forthState };
         await storageService.saveGame(gameState);
         addLog("GAME SAVED TO INDEXEDDB.");
         setSaveExists(true);
-    };
+    }, [worldInfo, currentLevelId, addLog]);
 
-    const loadGame = async () => {
+    const loadGame = useCallback(async () => {
         try {
             const gameState = await storageService.loadGame();
             if (!gameState) {
@@ -247,28 +318,27 @@ const App = () => {
         } catch (e) {
             addLog("LOAD FAILED.");
         }
-    };
+    }, [addLog]);
 
     // --- EFFECTS ---
     useEffect(() => {
-        const bootSystem = async () => {
-            await loadKernel("PLAYER", PLAYER_KERNEL_BLOCKS, 0);
-        };
-        bootSystem();
-
         const checkSave = async () => { setSaveExists(await storageService.hasSave()); };
         checkSave();
-
-        return forthService.subscribe((ids) => {
-            setLoadedKernelIds([...ids]);
-            setBusHistory([...forthService.getPacketLog()]);
-        });
-    }, [loadKernel]);
+    }, []);
 
     useEffect(() => {
+        return forthService.subscribe((ids) => {
+            setLoadedKernelIds(prev => {
+                if (JSON.stringify(prev) === JSON.stringify(ids)) return prev;
+                return [...ids];
+            });
+            setBusHistory([...forthService.getPacketLog()]);
+        });
+    }, []);
+
+    React.useEffect(() => {
         const syncInterval = setInterval(() => {
             const playerProc = forthService.get("PLAYER");
-            const battleProc = forthService.get(String(getInstanceID(KernelID.BATTLE, currentLevelIdx)));
 
             if (playerProc?.isLogicLoaded) {
                 const mem = new DataView(playerProc.getMemory());
@@ -278,7 +348,11 @@ const App = () => {
                 const invCount = mem.getInt32(base + 12, true);
                 const inventory = [];
                 for(let i=0; i<invCount; i++) inventory.push(mem.getInt32(base + 16 + (i*4), true));
-                setPlayerStats({ hp, maxHp, gold: 0, invCount, inventory });
+
+                setPlayerStats(prev => {
+                    if (prev.hp === hp && prev.maxHp === maxHp && prev.invCount === invCount && prev.inventory.length === inventory.length) return prev;
+                    return { hp, maxHp, gold: 0, invCount, inventory };
+                });
             }
 
             if (mode === "GRID") {
@@ -287,15 +361,26 @@ const App = () => {
                 if (gridProc?.isLogicLoaded) {
                     const raw = gridProc.getMemory();
                     const vramSize = 40 * 20 * 4;
-                    setDisplayBuffer(raw.slice(MEMORY.VRAM_ADDR, MEMORY.VRAM_ADDR + vramSize));
+                    const newBuf = raw.slice(MEMORY.VRAM_ADDR, MEMORY.VRAM_ADDR + vramSize);
+
+                    setDisplayBuffer(prev => {
+                        if (prev && prev.byteLength === newBuf.byteLength) {
+                            const p32 = new Uint32Array(prev);
+                            const n32 = new Uint32Array(newBuf);
+                            let match = true;
+                            for(let i=0; i<p32.length; i++) if(p32[i] !== n32[i]) { match = false; break; }
+                            if (match) return prev;
+                        }
+                        return newBuf;
+                    });
                 }
             }
         }, 50);
 
         return () => clearInterval(syncInterval);
-    }, [mode, currentLevelId]);
+    }, [mode, currentLevelId, currentLevelIdx]);
 
-    const requestRef = useRef<number>(0);
+    const requestRef = React.useRef<number>(0);
     const animate = (time: number) => {
         if (mode === "PLATFORM") {
             runPlatformCycle(time);
@@ -303,7 +388,7 @@ const App = () => {
         requestRef.current = requestAnimationFrame(animate);
     };
 
-    useEffect(() => {
+    React.useEffect(() => {
         if (viewMode === "GAME") requestRef.current = requestAnimationFrame(animate);
         return () => cancelAnimationFrame(requestRef.current);
     }, [mode, viewMode, runPlatformCycle]);

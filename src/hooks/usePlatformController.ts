@@ -1,5 +1,5 @@
 
-import { useCallback, useEffect } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { forthService } from '../services/WaForthService';
 import { KernelID, getInstanceID } from '../types/Protocol';
 import { MEMORY } from '../constants/Memory';
@@ -13,7 +13,7 @@ export const usePlatformController = (
     lastTickTimeRef: React.MutableRefObject<number>,
     SIMULATION_TICK_RATE_MS: number
 ) => {
-    const handlePlatformInput = useCallback((k: string) => {
+    const handlePlatformInput = React.useCallback((k: string) => {
         if (mode !== "PLATFORM") return;
 
         const physicsRole = KernelID.PLATFORM;
@@ -26,7 +26,7 @@ export const usePlatformController = (
         }
     }, [mode, currentLevelIdx]);
 
-    const runPlatformCycle = useCallback((time: number) => {
+    const runPlatformCycle = React.useCallback((time: number) => {
         if (mode !== "PLATFORM") return;
 
         const physicsRole = KernelID.PLATFORM;
@@ -56,7 +56,7 @@ export const usePlatformController = (
         }
     }, [mode, currentLevelIdx, keysDown, setDisplayBuffer, tickSimulation, lastTickTimeRef, SIMULATION_TICK_RATE_MS]);
 
-    useEffect(() => {
+    React.useEffect(() => {
         const listener = (e: KeyboardEvent) => handlePlatformInput(e.key);
         window.addEventListener("keydown", listener);
         return () => window.removeEventListener("keydown", listener);
