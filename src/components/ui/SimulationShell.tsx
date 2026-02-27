@@ -26,21 +26,31 @@ export const SimulationShell: React.FC<SimulationShellProps> = ({
     children
 }) => {
     return (
-        <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', justifyContent: 'center' }}>
+            {/* LEFT: HUD */}
             <PlayerHUD playerStats={playerStats} groundItems={groundItems} />
 
-            <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-                {children}
+            {/* CENTER: GAME + LOGS */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                    {children}
+                </div>
+                <LogWindow log={log} worldInfo={worldInfo} logContainerRef={logContainerRef} />
             </div>
 
-            <LogWindow log={log} worldInfo={worldInfo} logContainerRef={logContainerRef} />
-
-            {inspectStats && (
-                <EntityInspector
-                    inspectStats={inspectStats}
-                    onClose={onCloseInspector}
-                />
-            )}
+            {/* RIGHT: INSPECTOR */}
+            <div style={{ width: '300px' }}>
+                {inspectStats ? (
+                    <EntityInspector
+                        inspectStats={inspectStats}
+                        onClose={onCloseInspector}
+                    />
+                ) : (
+                    <div style={{ border: '1px dashed #333', padding: '20px', color: '#333', textAlign: 'center' }}>
+                        NO ENTITY SELECTED
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
