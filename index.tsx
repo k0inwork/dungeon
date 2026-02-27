@@ -193,7 +193,8 @@ const App = () => {
                 const terrain = level.terrain_legend.find((t: any) => t.symbol === char);
                 let color = terrain?.color || 0x888888;
                 let type = terrain?.passable ? 0 : 1;
-                mainProc.run(`${x} ${y} ${color} ${char.charCodeAt(0)} ${type} LOAD_TILE`);
+                let targetId = terrain?.target_id ?? -1;
+                mainProc.run(`${x} ${y} ${color} ${char.charCodeAt(0)} ${type} ${targetId} LOAD_TILE`);
             }
         });
 
@@ -338,7 +339,7 @@ const App = () => {
                 {mode === "GENERATING" && <div style={{ textAlign: "center" }}><h1>SYNCING KERNELS...</h1></div>}
 
                 {viewMode === "GAME" && (mode === "GRID" || mode === "PLATFORM") && (
-                    <div style={{ position: 'relative' }}>
+                    <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start' }}>
                         <PlayerHUD playerStats={playerStats} groundItems={groundItems} />
 
                         {mode === "GRID" ? (
