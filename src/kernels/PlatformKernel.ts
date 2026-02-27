@@ -141,8 +141,8 @@ function update_entity_physics(id) {
     if (physics[id].fy > 19 * 65536) physics[id].fy = 19 * 65536;
 
     // Sync GridEntity for render/host
-    entities[id].px = physics[id].fx / 65536;
-    entities[id].py = physics[id].fy / 65536;
+    entities[id].px = Math.floor(physics[id].fx / 65536);
+    entities[id].py = Math.floor(physics[id].fy / 65536);
 
     // Player specific (Exit check)
     if (id == 0) {
@@ -274,15 +274,15 @@ function spawn_entity_logic(x, y, color, char, type) {
 
 function trigger_skill() {
     skill_timer = 10;
-    let px = physics[0].fx / 65536;
-    let py = physics[0].fy / 65536;
+    let px = Math.floor(physics[0].fx / 65536);
+    let py = Math.floor(physics[0].fy / 65536);
 
     let i = 1;
     while (i < ENTITY_COUNT) {
         if (physics[i].active) {
             if (entities[i].ptype == 1 || entities[i].ptype == 2) {
-                let ex = physics[i].fx / 65536;
-                let ey = physics[i].fy / 65536;
+                let ex = Math.floor(physics[i].fx / 65536);
+                let ey = Math.floor(physics[i].fy / 65536);
                 let dx = abs(px - ex);
                 let dy = abs(py - ey);
                 if (dx <= 1 && dy <= 1) {
@@ -303,8 +303,8 @@ function render_logic() {
     }
 
     if (skill_timer > 0) {
-        let px = physics[0].fx / 65536;
-        let py = physics[0].fy / 65536;
+        let px = Math.floor(physics[0].fx / 65536);
+        let py = Math.floor(physics[0].fy / 65536);
         let gx = px - 1;
         while (gx <= px + 1) {
             let gy = py - 1;
@@ -337,8 +337,8 @@ function move_player(m_dir) {
 }
 
 function jump_player() {
-    let bx = physics[0].fx / 65536;
-    let by = (physics[0].fy / 65536) + 1;
+    let bx = Math.floor(physics[0].fx / 65536);
+    let by = Math.floor(physics[0].fy / 65536) + 1;
     if (get_collision(bx, by) != 0) {
         physics[0].vy = jump_force;
     }
@@ -429,7 +429,7 @@ export const PLATFORM_KERNEL_BLOCKS = [
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.PLATFORM),
   ": RUN_PLATFORM_CYCLE PROCESS_INBOX UPDATE_PHYSICS RENDER_LOGIC ;",
   ": SET_LEVEL_ID SET_LEVEL_ID ;",
-  ": INIT_PLATFORMER INIT_PLATFORMER_LOGIC AJS_INIT_CHANNELS ;",
+  ": INIT_PLATFORMER INIT_PLATFORMER_LOGIC AJS_INIT_CHANNELS ' HANDLE_EVENTS HANDLE_EVENTS_XT ! ;",
   ": LOAD_TILE LOAD_TILE ;",
   ": SPAWN_ENTITY SPAWN_ENTITY_LOGIC ;",
   ": CMD_JUMP JUMP_PLAYER ;",

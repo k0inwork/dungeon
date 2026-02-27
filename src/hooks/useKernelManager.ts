@@ -1,12 +1,17 @@
 
-import { useRef, useCallback } from 'react';
+import React, { useRef, useCallback } from 'react';
 import { forthService } from '../services/WaForthService';
 import { PLAYER_KERNEL_BLOCKS } from '../kernels/PlayerKernel';
 
 export const useKernelManager = (addLog: (msg: string) => void) => {
-    const loadingKernels = useRef<Map<string, Promise<any>>>(new Map());
+    const loadingKernels = React.useRef<Map<string, Promise<any>>>(new Map());
 
-    const loadKernel = useCallback(async (id: string, blocks: string[], lIdx: number = 0) => {
+    const loadKernel = React.useCallback(async (id: string, blocks: string[], lIdx: number = 0) => {
+        if (loadingKernels.current.has(id)) {
+            return await loadingKernels.current.get(id);
+        }
+
+        const promise = (async () => {
         try {
             console.log(`[HOST] Loading Kernel ${id} for Level ${lIdx}...`);
             await forthService.bootProcess(id);
@@ -38,12 +43,18 @@ export const useKernelManager = (addLog: (msg: string) => void) => {
             console.error(`Failed to load ${id}`, e);
             addLog(`CRITICAL: ${id} Load Aborted.`);
             return null;
+        } finally {
+            loadingKernels.current.delete(id);
         }
+        })();
+
+        loadingKernels.current.set(id, promise);
+        return await promise;
     }, [addLog]);
 
-    const ensureKernel = useCallback(async (id: string, blocks: string[], lIdx: number) => {
+    const ensureKernel = React.useCallback(async (id: string, blocks: string[], lIdx: number) => {
         const proc = forthService.get(id);
-        const blocksChanged = proc.logicBlocks.length > 0 && JSON.stringify(proc.logicBlocks) !== JSON.stringify(blocks);
+        const blocksChanged = proc.logicBlocks.length > 0 && proc.logicBlocks !== blocks && JSON.stringify(proc.logicBlocks) !== JSON.stringify(blocks);
 
         if (proc.status === "FLASHED") {
             if (blocksChanged) {
@@ -74,16 +85,8 @@ export const useKernelManager = (addLog: (msg: string) => void) => {
             return proc;
         }
 
-        if (loadingKernels.current.has(id)) {
-            return await loadingKernels.current.get(id);
-        }
-
-        const loadPromise = loadKernel(id, blocks, lIdx);
-        loadingKernels.current.set(id, loadPromise);
-        const loadedProc = await loadPromise;
-        loadingKernels.current.delete(id);
-        return loadedProc;
+        return await loadKernel(id, blocks, lIdx);
     }, [loadKernel]);
 
-    return { ensureKernel, loadKernel };
+    return React.useMemo(() => ({ ensureKernel, loadKernel }), [ensureKernel, loadKernel]);
 };

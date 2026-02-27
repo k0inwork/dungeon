@@ -31,12 +31,22 @@ function set_level_id(id) {
 // 2. UTILS
 function calc_idx(x, y) { return (y * MAP_WIDTH + x); }
 
+function check_bounds(x, y) {
+  if (x < 0) return 0;
+  if (x >= MAP_WIDTH) return 0;
+  if (y < 0) return 0;
+  if (y >= MAP_HEIGHT) return 0;
+  return 1;
+}
+
 function draw_cell(x, y, color, char) {
     VRAM[calc_idx(x, y)] = (color << 8) | char;
 }
 
 function redraw_cell(x, y, color, char) {
-    draw_cell(x, y, color, char);
+    if (check_bounds(x, y)) {
+        VRAM[calc_idx(x, y)] = (color << 8) | char;
+    }
 }
 
 // 3. LOGIC
@@ -55,14 +65,6 @@ function get_ent_ptr(id) {
     return GridEntity(id);
 }
 
-function check_bounds(x, y) {
-  if (x < 0) return 0;
-  if (x >= MAP_WIDTH) return 0;
-  if (y < 0) return 0;
-  if (y >= MAP_HEIGHT) return 0;
-  return 1;
-}
-
 function system_reset_map() {
     let i = 0;
     let total = MAP_WIDTH * MAP_HEIGHT;
@@ -74,7 +76,7 @@ function system_reset_map() {
         TERRAIN_MAP[i] = 0;
         TRANSITION_MAP[i] = -1;
         VRAM[i] = 0;
-        draw_cell(i % 40, i / 40, 0, 32);
+        draw_cell(i % 40, Math.floor(i / 40), 0, 32);
         i++;
     }
 
@@ -127,6 +129,7 @@ function find_entity_at(x, y) {
 function spawn_entity(x, y, color, char, type) {
   if (ENTITY_COUNT >= MAX_ENTITIES) return;
 
+  Log("[GRID] Spawning type:"); Log(type); Log("at"); Log(x); Log(y);
   let ent = get_ent_ptr(ENTITY_COUNT);
   ent.char = char;
   ent.color = color;
@@ -203,6 +206,7 @@ function move_entity(id, dx, dy) {
   let ent = get_ent_ptr(id);
   if (ent.char == 0 || ent.type == 3) return;
 
+  Log("[GRID] Moving ID:"); Log(id);
   let tx = ent.x + dx;
   let ty = ent.y + dy;
   if (check_bounds(tx, ty) == 0) return;
@@ -428,7 +432,7 @@ function redraw_all() {
     let total = MAP_WIDTH * MAP_HEIGHT;
     while (i < total) {
         let x = i % MAP_WIDTH;
-        let y = i / MAP_WIDTH;
+        let y = Math.floor(i / MAP_WIDTH);
         let packed = TERRAIN_MAP[i];
         let char = packed & 255;
         let color = packed >>> 8;
@@ -458,8 +462,9 @@ export const GRID_KERNEL_BLOCKS = [
   AetherTranspiler.transpile(AJS_LOGIC, KernelID.GRID),
   ": RUN_GRID_CYCLE PROCESS_INBOX RUN_ENV_CYCLE ;",
   ": SET_LEVEL_ID SET_LEVEL_ID ;",
-  ": INIT_MAP SYSTEM_RESET_MAP AJS_INIT_CHANNELS ;",
+  ": INIT_MAP SYSTEM_RESET_MAP AJS_INIT_CHANNELS ' HANDLE_EVENTS HANDLE_EVENTS_XT ! ;",
   ": LOAD_TILE LOAD_TILE ;",
+  ": SPAWN_ENTITY SPAWN_ENTITY ;",
   ": REDRAW_ALL REDRAW_ALL ;",
   ": CMD_TELEPORT TELEPORT_PLAYER ;"
 ];

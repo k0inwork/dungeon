@@ -35,7 +35,7 @@ interface PlayerHUDProps {
 export const PlayerHUD: React.FC<PlayerHUDProps> = ({ playerStats, groundItems }) => {
     return (
         <div style={{
-            position: 'absolute', top: '10px', left: '10px', width: '200px',
+            width: '200px',
             background: 'rgba(0, 20, 0, 0.9)', border: '1px solid #0f0',
             padding: '10px', fontFamily: 'monospace', fontSize: '0.8em', zIndex: 20
         }}>

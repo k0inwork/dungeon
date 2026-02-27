@@ -20,16 +20,12 @@ interface EntityInspectorProps {
 export const EntityInspector: React.FC<EntityInspectorProps> = ({ inspectStats, onClose }) => {
     return (
         <div style={{
-            position: "absolute",
-            top: "10px",
-            right: "-220px",
-            width: "200px",
+            width: "100%",
             background: "rgba(0, 20, 0, 0.9)",
             border: "1px solid #0f0",
             padding: "10px",
             fontFamily: "monospace",
-            fontSize: "0.8em",
-            zIndex: 20
+            fontSize: "0.9em"
         }}>
             <div style={{ borderBottom: "1px solid #333", marginBottom: "5px", color: "#fff" }}>ENTITY INSPECTOR</div>
             <div>ID: <span style={{ color: "cyan" }}>{inspectStats.id}</span></div>

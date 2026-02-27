@@ -54,6 +54,18 @@ export class StorageService {
             request.onerror = () => reject(request.error);
         });
     }
+
+    async hasSave(): Promise<boolean> {
+        return this.exists("gameState");
+    }
+
+    async saveGame(data: any): Promise<void> {
+        return this.save("gameState", data);
+    }
+
+    async loadGame(): Promise<any> {
+        return this.load("gameState");
+    }
 }
 
 export const storageService = new StorageService();
