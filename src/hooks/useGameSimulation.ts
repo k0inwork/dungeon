@@ -82,6 +82,13 @@ export const useGameSimulation = (addLog: (msg: string) => void) => {
                     else if (p.id.startsWith(String(KernelID.HIVE))) p.run("INIT_HIVE");
                     else if (p.id.startsWith(String(KernelID.BATTLE))) p.run("INIT_BATTLE");
                 });
+
+                // FLUSH BROKER to ensure AJS_INIT_CHANNELS (subscriptions) are processed
+                // before we start spawning entities, so Battle Kernel gets the EVT_SPAWN.
+                engine.runBroker(kernels, lIdx);
+                kernels.forEach(p => {
+                    if (p.isLogicLoaded) p.run("PROCESS_INBOX");
+                });
             }
 
             const playerProc = forthService.get("PLAYER");
@@ -220,20 +227,26 @@ export const useGameSimulation = (addLog: (msg: string) => void) => {
 
         const gridMem = new Uint8Array(gridProc.getMemory());
         const entMapAddr = 0x31000;
-        const entId = gridMem[entMapAddr + (y * 40 + x)];
+        const rawId = gridMem[entMapAddr + (y * 40 + x)];
 
-        if (entId >= 0) {
+        // Entities in ENTITY_MAP are 1-indexed (0 means no entity)
+        if (rawId > 0) {
+            const entId = rawId - 1;
             const rpgBase = 0xA0000 + (entId * 36);
             const battleMem = new DataView(battleProc.getMemory());
             if (rpgBase + 36 <= battleMem.byteLength) {
-                return {
-                    id: entId, x, y,
-                    hp: battleMem.getInt32(rpgBase, true),
-                    maxHp: battleMem.getInt32(rpgBase + 4, true),
-                    atk: battleMem.getInt32(rpgBase + 8, true),
-                    def: battleMem.getInt32(rpgBase + 12, true),
-                    state: battleMem.getInt32(rpgBase + 24, true)
-                };
+                const hp = battleMem.getInt32(rpgBase, true);
+                // Only show if it's a valid entity with some maxHp
+                if (battleMem.getInt32(rpgBase + 4, true) > 0) {
+                    return {
+                        id: entId, x, y,
+                        hp: hp,
+                        maxHp: battleMem.getInt32(rpgBase + 4, true),
+                        atk: battleMem.getInt32(rpgBase + 8, true),
+                        def: battleMem.getInt32(rpgBase + 12, true),
+                        state: battleMem.getInt32(rpgBase + 24, true)
+                    };
+                }
             }
         }
         return null;

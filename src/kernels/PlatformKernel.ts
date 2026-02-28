@@ -12,6 +12,7 @@ const MAP_HEIGHT = 20;
 
 const COLLISION_MAP = new Uint8Array(0x30000);
 const TERRAIN_MAP   = new Uint32Array(0x40000);
+const ENTITY_MAP    = new Uint8Array(0x31000);
 const TRANSITION_MAP = new Int32Array(0x45000);
 const VRAM          = new Uint32Array(0x80000);
 
@@ -141,8 +142,20 @@ function update_entity_physics(id) {
     if (physics[id].fy > 19 * 65536) physics[id].fy = 19 * 65536;
 
     // Sync GridEntity for render/host
+    let oldX = entities[id].px;
+    let oldY = entities[id].py;
     entities[id].px = Math.floor(physics[id].fx / 65536);
     entities[id].py = Math.floor(physics[id].fy / 65536);
+
+    // Update ENTITY_MAP for Inspector
+    if (oldX != entities[id].px || oldY != entities[id].py) {
+        let oldIdx = calc_idx(oldX, oldY);
+        if (ENTITY_MAP[oldIdx] == (id + 1)) {
+            ENTITY_MAP[oldIdx] = 0;
+        }
+        let newIdx = calc_idx(entities[id].px, entities[id].py);
+        ENTITY_MAP[newIdx] = (id + 1);
+    }
 
     // Player specific (Exit check)
     if (id == 0) {
@@ -152,6 +165,9 @@ function update_entity_physics(id) {
             bus_send(EVT_LEVEL_TRANSITION, K_PLATFORM, K_HOST, exit_target, 0, 0);
             physics[id].fx = 5 * 65536; // reset pos
         }
+
+        // Sync player pos to host for HUD/Tracking
+        bus_send(EVT_MOVED, K_PLATFORM, K_HOST, id, entities[id].px, entities[id].py);
     }
 }
 
@@ -268,6 +284,8 @@ function spawn_entity_logic(x, y, color, char, type) {
     physics[id].vy = 0;
     physics[id].active = 1;
 
+    ENTITY_MAP[calc_idx(x, y)] = (id + 1);
+
     Chan("npc_sync") <- [EVT_SPAWN, id, type, 0];
     Chan("npc_sync") <- [EVT_MOVED, id, x, y];
 }
@@ -374,6 +392,7 @@ function init_platformer_logic() {
     let total = MAP_WIDTH * MAP_HEIGHT;
     while (i < total) {
         TERRAIN_MAP[i] = 0;
+        ENTITY_MAP[i] = 0;
         COLLISION_MAP[i] = 0;
         TRANSITION_MAP[i] = -1;
         VRAM[i] = 0;

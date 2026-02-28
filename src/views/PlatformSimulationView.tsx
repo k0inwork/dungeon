@@ -3,6 +3,7 @@ import { PlatformView } from "../components/views/PlatformView";
 import { usePlatformController } from "../hooks/usePlatformController";
 
 interface PlatformSimulationViewProps {
+    displayBuffer: ArrayBuffer | null;
     currentLevelIdx: number;
     keysDown: Set<string>;
     tickSimulation: () => void;
@@ -11,6 +12,7 @@ interface PlatformSimulationViewProps {
 }
 
 export const PlatformSimulationView: React.FC<PlatformSimulationViewProps> = ({
+    displayBuffer,
     currentLevelIdx,
     keysDown,
     tickSimulation,
@@ -42,7 +44,7 @@ export const PlatformSimulationView: React.FC<PlatformSimulationViewProps> = ({
 
     return (
         <PlatformView
-            displayBuffer={null} // Buffer is handled by setDisplayBuffer in controller
+            displayBuffer={displayBuffer}
             handleInspect={onInspect}
         />
     );

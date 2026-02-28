@@ -64,15 +64,14 @@ export const PresentationLayer: React.FC<PresentationLayerProps> = ({
                 });
             }
 
-            if (mode === "GRID") {
-                const gridId = String(getInstanceID(KernelID.GRID, currentLevelIdx));
-                const gridProc = forthService.get(gridId);
-                if (gridProc?.isLogicLoaded) {
-                    const raw = gridProc.getMemory();
-                    const vramSize = 40 * 20 * 4;
-                    const newBuf = raw.slice(MEMORY.VRAM_ADDR, MEMORY.VRAM_ADDR + vramSize);
-                    setDisplayBuffer(newBuf);
-                }
+            const physicsRole = mode === "PLATFORM" ? KernelID.PLATFORM : KernelID.GRID;
+            const gridId = String(getInstanceID(physicsRole, currentLevelIdx));
+            const gridProc = forthService.get(gridId);
+            if (gridProc?.isLogicLoaded) {
+                const raw = gridProc.getMemory();
+                const vramSize = 40 * 20 * 4;
+                const newBuf = raw.slice(MEMORY.VRAM_ADDR, MEMORY.VRAM_ADDR + vramSize);
+                setDisplayBuffer(newBuf);
             }
         }, 50);
         return () => clearInterval(syncInterval);
@@ -109,6 +108,7 @@ export const PresentationLayer: React.FC<PresentationLayerProps> = ({
                 />
             ) : (
                 <PlatformSimulationView
+                    displayBuffer={displayBuffer}
                     currentLevelIdx={currentLevelIdx}
                     keysDown={keysDown}
                     tickSimulation={tickSimulation}
