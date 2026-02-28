@@ -99,6 +99,7 @@ VARIABLE M_P2
 VARIABLE M_P3
 VARIABLE IB_COUNT
 VARIABLE IB_OFFSET
+VARIABLE IB_STEP
 VARIABLE LAST_PLAYER_X
 VARIABLE LAST_PLAYER_Y
 
@@ -235,37 +236,36 @@ export const BLOCK_STANDARD_INBOX = `
 
 : PROCESS_INBOX
   0 OUT_PTR !
-  BUS_READ_INPUT ( total_count )
-  0 ( total_count offset )
+  BUS_READ_INPUT IB_COUNT !
+  0 IB_OFFSET !
   
-  BEGIN 2DUP > WHILE
-    IB_OFFSET ! IB_COUNT ! ( Move loop state to variables )
-    
+  BEGIN
+    IB_OFFSET @ IB_COUNT @ <
+  WHILE
     IB_OFFSET @ GET_MSG_ADDR >R
     R@ @ SYS_BLOB = IF
        ( --- BLOB PACKET --- )
+       R@ 12 + @ 6 + IB_STEP !
        R@ 16 + @ M_OP !
        R@ 4 + @ M_SENDER !
        R@ 8 + @ M_TARGET !
        R@ 12 + @ M_P1 ! ( Len )
        R@ 24 + M_P2 ! ( Payload ptr )
        HANDLE_EVENTS_XT @ EXECUTE
-       M_P1 @ 6 + ( step )
     ELSE
        ( --- STANDARD PACKET --- )
+       6 IB_STEP !
        R@ @ R@ 4 + @ R@ 8 + @ R@ 12 + @ R@ 16 + @ R@ 20 + @
        UNPACK_MSG
        HANDLE_EVENTS_XT @ EXECUTE
-       6 ( step )
     THEN
     R> DROP
 
-    ( Robust stack cleanup: ensure exactly one 'step' remains )
-    BEGIN DEPTH 1 > WHILE NIP REPEAT
-    
-    IB_COUNT @ IB_OFFSET @ ROT + ( Restore loop state )
+    ( Robust stack cleanup )
+    BEGIN DEPTH 0 > WHILE DROP REPEAT
+    IB_STEP @ DUP 0 <= IF DROP 6 THEN
+    IB_OFFSET +!
   REPEAT
-  2DROP
   0 INPUT_QUEUE !
 ;
 `;

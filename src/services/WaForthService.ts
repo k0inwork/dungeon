@@ -144,16 +144,15 @@ export class ForthProcess {
         const typeId = stack.pop();
         const addr = stack.pop();
 
-        // Find numerical ID of current kernel
-        const currentKernelId = Object.entries(KernelID).find(([name, val]) => val === Number(this.id) || name === this.id)?.[1];
+        const role = getRoleID(this.id === "PLAYER" ? 2 : parseInt(this.id));
 
-        if (currentKernelId !== undefined) {
+        if (role !== undefined) {
             this.manager.dynamicVsoRegistry.set(typeId, {
-                owner: Number(currentKernelId),
+                owner: role,
                 baseAddr: addr,
                 sizeBytes: sizeBytes
             });
-            this.log(`[STDOUT] VSO Registered: Type ${typeId} at ${addr} (size ${sizeBytes}) owned by ${this.id}`);
+            this.log(`[STDOUT] VSO Registered: Type ${typeId} at ${addr} (size ${sizeBytes}) owned by Role ${role}`);
         }
     });
 
@@ -175,7 +174,8 @@ export class ForthProcess {
         // 2. Locate Source Kernel (Level-Aware)
         const ownerRole = typeof entry.owner === 'number' ? entry.owner : (KernelID as any)[entry.owner];
         const targetInstanceID = getInstanceID(ownerRole, this.levelIdx);
-        const ownerName = String(targetInstanceID);
+        let ownerName = String(targetInstanceID);
+        if (ownerRole === KernelID.PLAYER) ownerName = "PLAYER";
 
         let srcProc = this.manager.processes.get(ownerName);
 
@@ -543,8 +543,8 @@ class ForthProcessManager {
       };
       
       this.busHistory.unshift(packet);
-      // Increased buffer size to prevent valid events (Damage) being pushed out by noise (Movement)
-      if (this.busHistory.length > 5000) this.busHistory.pop();
+      // Limit buffer size to prevent UI lag
+      if (this.busHistory.length > 500) this.busHistory.pop();
       this.busListeners.forEach(cb => cb());
   }
 

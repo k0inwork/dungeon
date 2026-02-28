@@ -128,6 +128,7 @@ function apply_damage(srcId, tgtId, dmg, type) {
     
     Log("[BATTLE] Applying DMG:"); Log(dmg); Log("to ID:"); Log(tgtId);
     rpg_table[tgtId].hp -= dmg;
+    if (rpg_table[tgtId].hp < 0) { rpg_table[tgtId].hp = 0; }
     log_combat(srcId, tgtId, dmg);
     Chan("BUS") <- [EVT_DAMAGE, tgtId, dmg, type];
     

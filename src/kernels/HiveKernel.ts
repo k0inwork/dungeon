@@ -107,10 +107,12 @@ function decide_action(id) {
   if (ent.type == 3) return; // Skip items/loot
 
   let stats = RpgEntity(id);
+  if (stats == 0) return;
   if (stats.state == 1) return; // Skip dead entities
   
   if (ent.type == 2) {
       let playerStats = RpgEntity(0);
+      if (playerStats == 0) return;
       if (playerStats.hp < 20) { Log("Target weak! Pressing attack!"); }
 
       let dx = abs(ent.x - LAST_PLAYER_X);

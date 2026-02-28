@@ -39,7 +39,12 @@ export class SimulationEngine {
 
                     let packetLen = PACKET_SIZE_INTS;
                     if (op === Opcode.SYS_BLOB) {
-                        packetLen += header[3];
+                        packetLen += Math.max(0, header[3]);
+                    }
+
+                    if (packetLen < 6 || offset + packetLen > count + 1) {
+                        console.error(`[BROKER] Corrupt packet detected in KERNEL=${k.id}: op=${op} len=${packetLen} offset=${offset} count=${count}`);
+                        break;
                     }
 
                     const packet = outMem.subarray(offset, offset + packetLen);
@@ -60,13 +65,17 @@ export class SimulationEngine {
                                     console.warn(`[ENGINE] Suppressed BOGUS Game Over. Player HP is ${hp}`);
                                 }
                             } else {
-                                this.state.onGameOver();
+                                // If player kernel isn't even loaded, we shouldn't be dying.
+                                console.warn(`[ENGINE] Ignoring death packet: Player Kernel logic not loaded.`);
                             }
                         }
                         if (op === Opcode.EVT_MOVED && header[3] === 0) {
                             this.state.onPlayerMoved(header[4], header[5]);
                         }
-                        if (op === Opcode.EVT_LEVEL_TRANSITION) this.state.onLevelTransition(header[3]);
+                        if (op === Opcode.EVT_LEVEL_TRANSITION) {
+                            console.log(`[ENGINE] Transition detected to Level ${header[3]}`);
+                            this.state.onLevelTransition(header[3]);
+                        }
                     }
 
                     if (targetRole === KernelID.HOST) {

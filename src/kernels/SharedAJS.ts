@@ -82,7 +82,5 @@ export const STANDARD_AJS_PREAMBLE = [
 
 // Postamble: The Inbox Processor (must be included AFTER handle_events is defined)
 export const STANDARD_AJS_POSTAMBLE = `
-function process_inbox() {
-    // Handled by Firmware PROCESS_INBOX
-}
+// Handled by Firmware PROCESS_INBOX
 `;
