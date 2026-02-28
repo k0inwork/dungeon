@@ -23,6 +23,7 @@ export const BLOCK_CORE_POLYFILLS = `
 : NOOP ;
 : PLAYER_BOOT ;
 : AJS_INIT_CHANNELS ;
+: MATH_FLOOR DROP ; ( No-op for now, drops argument )
 
 ( 1. 2DROP - Drop two items )
 : 2DROP ( n1 n2 -- ) DROP DROP ;

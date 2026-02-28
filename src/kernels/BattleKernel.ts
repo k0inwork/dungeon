@@ -34,6 +34,8 @@ function get_rpg_ptr(id) {
 }
 
 function init_stats(id, type) {
+    Log("Stats Init for ID:");
+    Log(id);
     // Default Stats
     rpg_table[id].maxHp = 100;
     rpg_table[id].hp = 100;
