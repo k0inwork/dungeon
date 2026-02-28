@@ -67,8 +67,10 @@ function init_stats(id, type) {
 function log_combat(srcId, tgtId, dmg) {
     if (srcId == 0) {
         Log("You deal damage:"); Log(dmg);
-    } else {
+    } else if (tgtId == 0) {
         Log("Enemy hits YOU for "); Log(dmg); Log(" dmg");
+    } else {
+        Log("Combat: Entity "); Log(srcId); Log(" hits "); Log(tgtId);
     }
     Chan("combat_events") <- [EVT_DAMAGE, srcId, tgtId, dmg];
 }
@@ -111,19 +113,35 @@ function skill_heal_self(srcId) {
 function skill_fireball(srcId, tgtId) {
     // Ranged Magic Attack
     let dmg = 40;
-    rpg_table[tgtId].hp -= dmg;
-    
-    log_combat(srcId, tgtId, dmg);
-    Chan("BUS") <- [EVT_DAMAGE, tgtId, dmg, 1]; // Type 1 = Thermal
-    
-    return rpg_table[tgtId].hp;
+    return apply_damage(srcId, tgtId, dmg, 1);
 }
 
 // --- MAIN DISPATCHER ---
 
-function execute_skill(srcId, tgtId, skillId) {
-    let remainingHp = 100;
+function check_death(tgtId) {
+    if (rpg_table[tgtId].hp <= 0) {
+        if (rpg_table[tgtId].state == 0) { // Only die once
+            rpg_table[tgtId].state = 1; // Dead
+            Chan("BUS") <- [EVT_DEATH, tgtId, rpg_table[tgtId].invItem, 0];
+            Log("Entity Died:");
+            Log(tgtId);
+            if (tgtId == 0) Log("GAME OVER");
+        }
+    }
+}
+
+function apply_damage(srcId, tgtId, dmg, type) {
+    if (rpg_table[tgtId].state == 1) return 0;
     
+    rpg_table[tgtId].hp -= dmg;
+    log_combat(srcId, tgtId, dmg);
+    Chan("BUS") <- [EVT_DAMAGE, tgtId, dmg, type];
+    
+    check_death(tgtId);
+    return rpg_table[tgtId].hp;
+}
+
+function execute_skill(srcId, tgtId, skillId) {
     // Check if attacker is valid
     if (rpg_table[srcId].state == 1) return;
 
@@ -135,27 +153,16 @@ function execute_skill(srcId, tgtId, skillId) {
     
     // Simple Dispatch Table
     if (skillId == 0) {
-        remainingHp = skill_basic_attack(srcId, tgtId);
+        skill_basic_attack(srcId, tgtId);
     }
     if (skillId == 1) {
-        remainingHp = skill_heavy_smash(srcId, tgtId);
+        skill_heavy_smash(srcId, tgtId);
     }
     if (skillId == 2) {
         skill_heal_self(srcId);
     }
     if (skillId == 3) {
-        remainingHp = skill_fireball(srcId, tgtId);
-    }
-    
-    // Check Death (Common Logic)
-    if (remainingHp <= 0) {
-        if (rpg_table[tgtId].state == 0) { // Only die once
-            rpg_table[tgtId].state = 1; // Dead
-            Chan("BUS") <- [EVT_DEATH, tgtId, rpg_table[tgtId].invItem, 0];
-            Log("Entity Died:");
-            Log(tgtId);
-            if (tgtId == 0) Log("GAME OVER");
-        }
+        skill_fireball(srcId, tgtId);
     }
 }
 
@@ -176,6 +183,10 @@ function on_battle_request(op, sender, p1, p2, p3) {
     if (op == CMD_ATTACK) {
         // p1 = Attacker, p2 = Target, p3 = SkillID
         execute_skill(p1, p2, p3);
+    }
+    if (op == EVT_DAMAGE) {
+        // Raw damage from Physics (p1=Target, p2=Amount, p3=Type)
+        apply_damage(sender, p1, p2, p3);
     }
 }
 

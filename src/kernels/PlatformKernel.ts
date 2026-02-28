@@ -214,7 +214,9 @@ function check_player_stomps() {
             if (entities[i].ptype == 1 || entities[i].ptype == 2) {
                 let dx = abs(physics[0].fx - physics[i].fx);
                 let dy = physics[0].fy - physics[i].fy;
-                if (dx < 40000 && dy > -32768 && dy < 32768) {
+                // Stomp detection: player is falling and within X range and slightly above
+                if (dx < 40000 && dy > -48000 && dy < 0) {
+                    Log("STOMP!");
                     bus_send(EVT_DAMAGE, K_PLATFORM, K_BUS, i, 10, 0);
                     physics[0].vy = jump_force / 2;
                     return;
@@ -233,6 +235,16 @@ function update_physics() {
     while (i < ENTITY_COUNT) {
         if (physics[i].active) {
             update_entity_physics(i);
+
+            // Separation Force to prevent perfect overlap
+            let pdx = physics[0].fx - physics[i].fx;
+            let pdy = physics[0].fy - physics[i].fy;
+            let adx = abs(pdx);
+            let ady = abs(pdy);
+            if (adx < 32768 && ady < 32768) {
+                if (pdx > 0) { physics[0].vx += 1000; physics[i].vx -= 1000; }
+                else { physics[0].vx -= 1000; physics[i].vx += 1000; }
+            }
 
             // Check Player Contact
             let dx = abs(physics[0].fx - physics[i].fx);
@@ -291,6 +303,7 @@ function spawn_entity_logic(x, y, color, char, type) {
 }
 
 function trigger_skill() {
+    Log("LUMA BURST!");
     skill_timer = 10;
     let px = Math.floor(physics[0].fx / 65536);
     let py = Math.floor(physics[0].fy / 65536);
