@@ -46,7 +46,23 @@ export class SimulationEngine {
                     forthService.logPacket(senderRole, targetRole, op, header[3], header[4], header[5]);
 
                     if (targetRole === KernelID.HOST || targetRole === KernelID.BUS) {
-                        if (op === Opcode.EVT_DEATH && header[3] === 0) this.state.onGameOver();
+                        if (op === Opcode.EVT_DEATH && header[3] === 0) {
+                            console.log(`[ENGINE] GAME OVER triggered by KERNEL=${k.id} packet: op=${op} sender=${senderRole} p1=${header[3]} p2=${header[4]} p3=${header[5]}`);
+
+                            // Authoritative Verification: Check Player Kernel Memory
+                            const playerProc = forthService.get("PLAYER");
+                            if (playerProc?.isLogicLoaded) {
+                                const mem = new DataView(playerProc.getMemory());
+                                const hp = mem.getInt32(0xC0000, true);
+                                if (hp <= 0) {
+                                    this.state.onGameOver();
+                                } else {
+                                    console.warn(`[ENGINE] Suppressed BOGUS Game Over. Player HP is ${hp}`);
+                                }
+                            } else {
+                                this.state.onGameOver();
+                            }
+                        }
                         if (op === Opcode.EVT_MOVED && header[3] === 0) {
                             this.state.onPlayerMoved(header[4], header[5]);
                         }

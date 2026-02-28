@@ -242,8 +242,8 @@ function update_physics() {
             let adx = abs(pdx);
             let ady = abs(pdy);
             if (adx < 32768 && ady < 32768) {
-                if (pdx > 0) { physics[0].vx += 1000; physics[i].vx -= 1000; }
-                else { physics[0].vx -= 1000; physics[i].vx += 1000; }
+                if (pdx > 0) { physics[0].vx += 5000; physics[i].vx -= 5000; }
+                else { physics[0].vx -= 5000; physics[i].vx += 5000; }
             }
 
             // Check Player Contact

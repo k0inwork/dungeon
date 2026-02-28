@@ -34,6 +34,7 @@ function get_rpg_ptr(id) {
 }
 
 function init_stats(id, type) {
+    if (id < 0 || id >= MAX_ENTITIES) return;
     Log("Stats Init for ID:");
     Log(id);
     // Default Stats
@@ -48,12 +49,13 @@ function init_stats(id, type) {
     if (id == 0) {
         // Sync from Player Kernel for Persistence
         let p = PlayerState(0);
-        if (p.maxHp > 0 && p.maxHp < 100000) {
+        // Only trust VSO if memory looks initialized
+        if (p > 0x80000 && p.maxHp > 0 && p.maxHp < 100000) {
             rpg_table[0].maxHp = p.maxHp;
             rpg_table[0].hp = p.hp;
         } else {
-            rpg_table[0].maxHp = 200;
-            rpg_table[0].hp = 200;
+            rpg_table[0].maxHp = 100;
+            rpg_table[0].hp = 100;
         }
         rpg_table[0].atk = 20;
     }
@@ -78,25 +80,13 @@ function log_combat(srcId, tgtId, dmg) {
 function skill_basic_attack(srcId, tgtId) {
     let dmg = rpg_table[srcId].atk - rpg_table[tgtId].def;
     if (dmg < 1) { dmg = 1; }
-    
-    rpg_table[tgtId].hp -= dmg;
-    
-    log_combat(srcId, tgtId, dmg);
-    Chan("BUS") <- [EVT_DAMAGE, tgtId, dmg, 0];
-    
-    return rpg_table[tgtId].hp;
+    apply_damage(srcId, tgtId, dmg, 0);
 }
 
 function skill_heavy_smash(srcId, tgtId) {
     // 2.0x Damage, Ignores Defense
     let dmg = rpg_table[srcId].atk * 2;
-    
-    rpg_table[tgtId].hp -= dmg;
-    
-    log_combat(srcId, tgtId, dmg);
-    Chan("BUS") <- [EVT_DAMAGE, tgtId, dmg, 2]; // Type 2 = Crit/Heavy
-    
-    return rpg_table[tgtId].hp;
+    apply_damage(srcId, tgtId, dmg, 2);
 }
 
 function skill_heal_self(srcId) {
@@ -113,13 +103,15 @@ function skill_heal_self(srcId) {
 function skill_fireball(srcId, tgtId) {
     // Ranged Magic Attack
     let dmg = 40;
-    return apply_damage(srcId, tgtId, dmg, 1);
+    apply_damage(srcId, tgtId, dmg, 1);
 }
 
 // --- MAIN DISPATCHER ---
 
 function check_death(tgtId) {
     if (rpg_table[tgtId].hp <= 0) {
+        Log("[BATTLE] Death check triggered for ID:"); Log(tgtId);
+        Log("HP:"); Log(rpg_table[tgtId].hp);
         if (rpg_table[tgtId].state == 0) { // Only die once
             rpg_table[tgtId].state = 1; // Dead
             Chan("BUS") <- [EVT_DEATH, tgtId, rpg_table[tgtId].invItem, 0];
@@ -131,8 +123,10 @@ function check_death(tgtId) {
 }
 
 function apply_damage(srcId, tgtId, dmg, type) {
+    if (tgtId < 0 || tgtId >= MAX_ENTITIES) return 0;
     if (rpg_table[tgtId].state == 1) return 0;
     
+    Log("[BATTLE] Applying DMG:"); Log(dmg); Log("to ID:"); Log(tgtId);
     rpg_table[tgtId].hp -= dmg;
     log_combat(srcId, tgtId, dmg);
     Chan("BUS") <- [EVT_DAMAGE, tgtId, dmg, type];
@@ -142,6 +136,9 @@ function apply_damage(srcId, tgtId, dmg, type) {
 }
 
 function execute_skill(srcId, tgtId, skillId) {
+    if (srcId < 0 || srcId >= MAX_ENTITIES) return;
+    if (tgtId < 0 || tgtId >= MAX_ENTITIES) return;
+
     // Check if attacker is valid
     if (rpg_table[srcId].state == 1) return;
 
@@ -205,6 +202,11 @@ function init_battle_logic() {
         i++;
     }
     ENTITY_COUNT = 0;
+
+    // Bootstrap Player Stats immediately to prevent premature death from junk messages
+    rpg_table[0].hp = 100;
+    rpg_table[0].maxHp = 100;
+    rpg_table[0].atk = 20;
 
     Log("[BATTLE] Battle Kernel Initialized");
     Chan("npc_sync").on(on_npc_sync);

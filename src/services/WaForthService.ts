@@ -446,6 +446,11 @@ class ForthProcessManager {
       }
   }
 
+  clearPacketLog() {
+      this.busHistory = [];
+      this.busListeners.forEach(cb => cb());
+  }
+
   getPacketLog() {
       return this.busHistory;
   }

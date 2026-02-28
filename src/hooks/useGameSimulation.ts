@@ -168,6 +168,7 @@ export const useGameSimulation = (addLog: (msg: string) => void) => {
 
     const handleGenerate = useCallback(async (seed: string, isMock: boolean) => {
         setMode("GENERATING");
+        forthService.clearPacketLog();
         initializedLevels.current = new Set();
         const world = isMock ? generatorService.generateMockWorld() : await generatorService.generateWorld(seed);
         setWorldInfo(world);

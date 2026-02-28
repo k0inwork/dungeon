@@ -69,35 +69,7 @@ function bus_read_input() {
 `;
 
 export const BLOCK_AJS_STANDARD_INBOX = `
-function process_inbox() {
-    OUT_PTR = 0;
-    let totalCount = bus_read_input();
-    let offset = 0;
-
-    while (offset < totalCount) {
-        let op = INBOX[offset];
-
-        if (op == SYS_BLOB) {
-            M_OP = INBOX[offset + 4];
-            M_SENDER = INBOX[offset + 1];
-            M_TARGET = INBOX[offset + 2];
-            M_P1 = INBOX[offset + 3];
-            M_P2 = INPUT_QUEUE + 4 + (offset + 6) * 4;
-            handle_events();
-            offset += (M_P1 + 6);
-        } else {
-            M_OP = op;
-            M_SENDER = INBOX[offset + 1];
-            M_TARGET = INBOX[offset + 2];
-            M_P1 = INBOX[offset + 3];
-            M_P2 = INBOX[offset + 4];
-            M_P3 = INBOX[offset + 5];
-            handle_events();
-            offset += 6;
-        }
-    }
-    IN_COUNT[0] = 0;
-}
+// Handled by Firmware PROCESS_INBOX
 `;
 
 // Preamble: Constants and Variables
@@ -109,6 +81,8 @@ export const STANDARD_AJS_PREAMBLE = [
 ].join("\n");
 
 // Postamble: The Inbox Processor (must be included AFTER handle_events is defined)
-export const STANDARD_AJS_POSTAMBLE = [
-    BLOCK_AJS_STANDARD_INBOX
-].join("\n");
+export const STANDARD_AJS_POSTAMBLE = `
+function process_inbox() {
+    // Handled by Firmware PROCESS_INBOX
+}
+`;

@@ -23,7 +23,8 @@ export const BLOCK_CORE_POLYFILLS = `
 : NOOP ;
 : PLAYER_BOOT ;
 : AJS_INIT_CHANNELS ;
-: MATH_FLOOR DROP ; ( No-op for now, drops argument )
+: MATH_FLOOR ; ( No-op for now )
+: MATH_FLOOR_JS ; ( No-op for now )
 
 ( 1. 2DROP - Drop two items )
 : 2DROP ( n1 n2 -- ) DROP DROP ;
@@ -96,6 +97,8 @@ VARIABLE M_TARGET
 VARIABLE M_P1
 VARIABLE M_P2
 VARIABLE M_P3
+VARIABLE IB_COUNT
+VARIABLE IB_OFFSET
 VARIABLE LAST_PLAYER_X
 VARIABLE LAST_PLAYER_Y
 
@@ -233,45 +236,37 @@ export const BLOCK_STANDARD_INBOX = `
 : PROCESS_INBOX
   0 OUT_PTR !
   BUS_READ_INPUT ( total_count )
-  0 ( total_count current_offset )
+  0 ( total_count offset )
   
   BEGIN 2DUP > WHILE
-    DUP GET_MSG_ADDR >R ( R: addr )
+    IB_OFFSET ! IB_COUNT ! ( Move loop state to variables )
     
-    R@ @ ( op )
-    DUP SYS_BLOB = IF
-       ( --- IT IS A BLOB --- )
-       DROP ( drop op )
-       ( Packet: [ BLOB, SENDER, TARGET, LEN, REAL_OP, 0 ] [ ...DATA... ] )
-       
-       ( 1. Setup Registers with Real Op )
-       R@ 16 + @ M_OP ! ( Real Op )
+    IB_OFFSET @ GET_MSG_ADDR >R
+    R@ @ SYS_BLOB = IF
+       ( --- BLOB PACKET --- )
+       R@ 16 + @ M_OP !
        R@ 4 + @ M_SENDER !
        R@ 8 + @ M_TARGET !
-       R@ 12 + @ M_P1 ! ( Length )
-       
-       ( 2. Set M_P2 to Point to Data Payload )
-       R@ 24 + M_P2 ! 
-       
-       ( 3. Run Handler )
+       R@ 12 + @ M_P1 ! ( Len )
+       R@ 24 + M_P2 ! ( Payload ptr )
        HANDLE_EVENTS_XT @ EXECUTE
-       
-       ( 4. Calc Step: 6 + Length )
-       M_P1 @ 6 + 
+       M_P1 @ 6 + ( step )
     ELSE
        ( --- STANDARD PACKET --- )
-       DROP ( drop op )
        R@ @ R@ 4 + @ R@ 8 + @ R@ 12 + @ R@ 16 + @ R@ 20 + @
        UNPACK_MSG
        HANDLE_EVENTS_XT @ EXECUTE
-       6
+       6 ( step )
     THEN
+    R> DROP
+
+    ( Robust stack cleanup: ensure exactly one 'step' remains )
+    BEGIN DEPTH 1 > WHILE NIP REPEAT
     
-    R> DROP ( clean R )
-    + ( Add step to current_offset )
+    IB_COUNT @ IB_OFFSET @ ROT + ( Restore loop state )
   REPEAT
   2DROP
-  0 INPUT_QUEUE ! ( Clear Count )
+  0 INPUT_QUEUE !
 ;
 `;
 
