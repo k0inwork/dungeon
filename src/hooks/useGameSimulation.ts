@@ -77,10 +77,12 @@ export const useGameSimulation = (addLog: (msg: string) => void) => {
             // 1. BOOT PHASE
             if (isNewLevel) {
                 kernels.forEach(p => {
-                    if (p.id.startsWith(String(KernelID.PLATFORM))) p.run("INIT_PLATFORMER");
+                    if (p.id.startsWith(String(KernelID.PLATFORM_HIVE))) p.run("INIT_HIVE");
+                    else if (p.id.startsWith(String(KernelID.PLATFORM_BATTLE))) p.run("INIT_BATTLE");
+                    else if (p.id.startsWith(String(KernelID.PLATFORM))) p.run("INIT_PLATFORMER");
+                    else if (p.id.startsWith(String(KernelID.GRID_HIVE))) p.run("INIT_HIVE");
+                    else if (p.id.startsWith(String(KernelID.GRID_BATTLE))) p.run("INIT_BATTLE");
                     else if (p.id.startsWith(String(KernelID.GRID))) p.run("INIT_MAP");
-                    else if (p.id.startsWith(String(KernelID.HIVE))) p.run("INIT_HIVE");
-                    else if (p.id.startsWith(String(KernelID.BATTLE))) p.run("INIT_BATTLE");
                 });
             }
 
@@ -209,7 +211,8 @@ export const useGameSimulation = (addLog: (msg: string) => void) => {
 
     const handleInspect = useCallback((x: number, y: number) => {
         const lIdx = currentLevelIdx;
-        const battleId = String(getInstanceID(KernelID.BATTLE, lIdx));
+        const battleRole = mode === "PLATFORM" ? KernelID.PLATFORM_BATTLE : KernelID.GRID_BATTLE;
+        const battleId = String(getInstanceID(battleRole, lIdx));
         const battleProc = forthService.get(battleId);
 
         const config = LEVEL_CONFIGS[mode === "PLATFORM" ? "PLATFORM" : "GRID"];

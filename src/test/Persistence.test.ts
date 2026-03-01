@@ -1,7 +1,7 @@
 import { expect, test, describe } from 'vitest';
 import { forthService } from '../services/WaForthService';
 import { GRID_KERNEL_BLOCKS } from '../kernels/GridKernel';
-import { HIVE_KERNEL_BLOCKS } from '../kernels/HiveKernel';
+import { GRID_HIVE_KERNEL_BLOCKS } from '../kernels/GridHiveKernel';
 
 describe('Persistence: Kernel Hibernate & Restore', () => {
   test('Kernel preserves state across hibernation', async () => {
@@ -47,8 +47,8 @@ describe('Persistence: Kernel Hibernate & Restore', () => {
   test('Hive Kernel preserves state and logic across hibernation', async () => {
     const id = "HIVE_TEST";
     const proc = await forthService.bootProcess(id);
-    proc.logicBlocks = HIVE_KERNEL_BLOCKS;
-    for (const block of HIVE_KERNEL_BLOCKS) {
+    proc.logicBlocks = GRID_HIVE_KERNEL_BLOCKS;
+    for (const block of GRID_HIVE_KERNEL_BLOCKS) {
         proc.run(block);
     }
     proc.run("INIT_HIVE");

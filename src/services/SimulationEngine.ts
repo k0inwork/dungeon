@@ -108,9 +108,11 @@ export class SimulationEngine {
     public tickSimulation(currentLevelIdx: number, simulationMode: string, currentLevelId: string) {
         const lIdx = currentLevelIdx;
         const physicsRole = simulationMode === 'PLATFORM' ? KernelID.PLATFORM : KernelID.GRID;
+        const hiveRole = simulationMode === 'PLATFORM' ? KernelID.PLATFORM_HIVE : KernelID.GRID_HIVE;
+        const battleRole = simulationMode === 'PLATFORM' ? KernelID.PLATFORM_BATTLE : KernelID.GRID_BATTLE;
         const gridId = String(getInstanceID(physicsRole, lIdx));
-        const hiveId = String(getInstanceID(KernelID.HIVE, lIdx));
-        const battleId = String(getInstanceID(KernelID.BATTLE, lIdx));
+        const hiveId = String(getInstanceID(hiveRole, lIdx));
+        const battleId = String(getInstanceID(battleRole, lIdx));
 
         const main = forthService.get(gridId);
         const hive = forthService.get(hiveId);

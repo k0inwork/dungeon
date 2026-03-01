@@ -4,8 +4,8 @@ import * as fs from 'fs';
 import { KernelTestRunner } from './KernelRunner';
 import { IntegrationSimulator } from './IntegrationSimulator';
 import { GRID_KERNEL_BLOCKS } from '../kernels/GridKernel';
-import { HIVE_KERNEL_BLOCKS } from '../kernels/HiveKernel';
-import { BATTLE_KERNEL_BLOCKS } from '../kernels/BattleKernel';
+import { GRID_HIVE_KERNEL_BLOCKS } from '../kernels/GridHiveKernel';
+import { GRID_BATTLE_KERNEL_BLOCKS } from '../kernels/GridBattleKernel';
 import { PLAYER_KERNEL_BLOCKS } from '../kernels/PlayerKernel';
 import { KernelID } from '../types/Protocol';
 
@@ -22,13 +22,13 @@ describe('Integration: Rat Chase', () => {
     await grid.boot(GRID_KERNEL_BLOCKS);
     sim.addKernel(KernelID.GRID, 'GRID', grid);
 
-    hive = new KernelTestRunner('HIVE', KernelID.HIVE);
-    await hive.boot(HIVE_KERNEL_BLOCKS);
-    sim.addKernel(KernelID.HIVE, 'HIVE', hive);
+    hive = new KernelTestRunner('HIVE', KernelID.GRID_HIVE);
+    await hive.boot(GRID_HIVE_KERNEL_BLOCKS);
+    sim.addKernel(KernelID.GRID_HIVE, 'HIVE', hive);
 
-    battle = new KernelTestRunner('BATTLE', KernelID.BATTLE);
-    await battle.boot(BATTLE_KERNEL_BLOCKS);
-    sim.addKernel(KernelID.BATTLE, 'BATTLE', battle);
+    battle = new KernelTestRunner('BATTLE', KernelID.GRID_BATTLE);
+    await battle.boot(GRID_BATTLE_KERNEL_BLOCKS);
+    sim.addKernel(KernelID.GRID_BATTLE, 'BATTLE', battle);
 
     // Initialize Kernels
     grid.run('INIT_MAP');

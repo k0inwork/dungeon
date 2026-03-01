@@ -1,7 +1,9 @@
 import { GRID_KERNEL_BLOCKS } from "../kernels/GridKernel";
-import { HIVE_KERNEL_BLOCKS } from "../kernels/HiveKernel";
+import { GRID_HIVE_KERNEL_BLOCKS } from "../kernels/GridHiveKernel";
 import { PLAYER_KERNEL_BLOCKS } from "../kernels/PlayerKernel";
-import { BATTLE_KERNEL_BLOCKS } from "../kernels/BattleKernel";
+import { GRID_BATTLE_KERNEL_BLOCKS } from "../kernels/GridBattleKernel";
+import { PLATFORM_BATTLE_KERNEL_BLOCKS } from "../kernels/PlatformBattleKernel";
+import { PLATFORM_HIVE_KERNEL_BLOCKS } from "../kernels/PlatformHiveKernel";
 import { PLATFORM_KERNEL_BLOCKS } from "../kernels/PlatformKernel";
 import { KernelID } from "../types/Protocol";
 
@@ -23,8 +25,8 @@ export const LEVEL_CONFIGS: Record<string, LevelSimulationConfig> = {
         requiredKernels: [
             { role: KernelID.PLAYER, blocks: PLAYER_KERNEL_BLOCKS },
             { role: KernelID.GRID, blocks: GRID_KERNEL_BLOCKS },
-            { role: KernelID.HIVE, blocks: HIVE_KERNEL_BLOCKS },
-            { role: KernelID.BATTLE, blocks: BATTLE_KERNEL_BLOCKS }
+            { role: KernelID.GRID_HIVE, blocks: GRID_HIVE_KERNEL_BLOCKS },
+            { role: KernelID.GRID_BATTLE, blocks: GRID_BATTLE_KERNEL_BLOCKS }
         ]
     },
     "PLATFORM": {
@@ -33,8 +35,8 @@ export const LEVEL_CONFIGS: Record<string, LevelSimulationConfig> = {
         requiredKernels: [
             { role: KernelID.PLAYER, blocks: PLAYER_KERNEL_BLOCKS },
             { role: KernelID.PLATFORM, blocks: PLATFORM_KERNEL_BLOCKS },
-            { role: KernelID.HIVE, blocks: HIVE_KERNEL_BLOCKS },
-            { role: KernelID.BATTLE, blocks: BATTLE_KERNEL_BLOCKS }
+            { role: KernelID.PLATFORM_HIVE, blocks: PLATFORM_HIVE_KERNEL_BLOCKS },
+            { role: KernelID.PLATFORM_BATTLE, blocks: PLATFORM_BATTLE_KERNEL_BLOCKS }
         ]
     }
 };

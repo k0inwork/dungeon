@@ -1,5 +1,5 @@
 
-// Aethelgard Battle Kernel v2.0 (PURE AJS)
+// Aethelgard Grid Battle Kernel v2.0 (PURE AJS)
 import { STANDARD_KERNEL_FIRMWARE, BLOCK_STANDARD_INBOX } from "./SharedBlocks";
 import { STANDARD_AJS_PREAMBLE, STANDARD_AJS_POSTAMBLE } from "./SharedAJS";
 import { AetherTranspiler } from "../compiler/AetherTranspiler";
@@ -211,13 +211,13 @@ function run_battle_step() {
 }
 `;
 
-export const BATTLE_KERNEL_BLOCKS = [
+export const GRID_BATTLE_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   BLOCK_STANDARD_INBOX,
-  AetherTranspiler.transpile(AJS_LOGIC, KernelID.BATTLE),
+  AetherTranspiler.transpile(AJS_LOGIC, KernelID.GRID_BATTLE),
   ": INIT_BATTLE INIT_BATTLE_LOGIC AJS_INIT_CHANNELS ' HANDLE_EVENTS HANDLE_EVENTS_XT ! ;",
   ": RUN_BATTLE_CYCLE RUN_BATTLE_STEP ;"
 ];
 
-export const BATTLE_AJS_SOURCE = AJS_LOGIC;
-export const BATTLE_FORTH_SOURCE = BATTLE_KERNEL_BLOCKS.join("\n");
+export const GRID_BATTLE_AJS_SOURCE = AJS_LOGIC;
+export const GRID_BATTLE_FORTH_SOURCE = GRID_BATTLE_KERNEL_BLOCKS.join("\n");

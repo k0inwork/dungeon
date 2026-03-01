@@ -1,6 +1,6 @@
 
 import WAForthPkg from "waforth";
-import { KernelID, Opcode, PACKET_SIZE_INTS, VSO_REGISTRY, hashChannel,getInstanceID } from "../types/Protocol";
+import { KernelID, Opcode, PACKET_SIZE_INTS, VSO_REGISTRY, hashChannel,getInstanceID, getRoleID } from "../types/Protocol";
 
 const WAForth = (WAForthPkg as any).default || WAForthPkg;
 
@@ -145,7 +145,15 @@ export class ForthProcess {
         const addr = stack.pop();
 
         // Find numerical ID of current kernel
-        const currentKernelId = Object.entries(KernelID).find(([name, val]) => val === Number(this.id) || name === this.id)?.[1];
+        let currentKernelId: number | undefined;
+        // Check if ID is a number string first (e.g. "400" for GRID_BATTLE instance)
+        const parsedId = parseInt(this.id);
+        if (!isNaN(parsedId)) {
+            // Role ID is usually Math.floor(instanceID / 100)
+            currentKernelId = getRoleID(parsedId);
+        } else {
+            currentKernelId = Object.entries(KernelID).find(([name, val]) => val === Number(this.id) || name === this.id)?.[1] as number;
+        }
 
         if (currentKernelId !== undefined) {
             this.manager.dynamicVsoRegistry.set(typeId, {
@@ -173,7 +181,14 @@ export class ForthProcess {
         }
 
         // 2. Locate Source Kernel (Level-Aware)
-        const ownerRole = typeof entry.owner === 'number' ? entry.owner : (KernelID as any)[entry.owner];
+        let ownerRole = typeof entry.owner === 'number' ? entry.owner : (KernelID as any)[entry.owner];
+        // Handle dynamic platform role mapping
+        if (ownerRole === KernelID.GRID_BATTLE && this.id.startsWith(String(KernelID.PLATFORM))) {
+            ownerRole = KernelID.PLATFORM_BATTLE;
+        } else if (ownerRole === KernelID.GRID_HIVE && this.id.startsWith(String(KernelID.PLATFORM))) {
+            ownerRole = KernelID.PLATFORM_HIVE;
+        }
+
         const targetInstanceID = getInstanceID(ownerRole, this.levelIdx);
         const ownerName = String(targetInstanceID);
 

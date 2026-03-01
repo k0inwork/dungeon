@@ -63,12 +63,30 @@ function set_level_id(id) {
 
 function calc_idx(x, y) { return (y * MAP_WIDTH + x); }
 
-function get_collision(cx, cy) {
+function get_collision(cx, cy, ignore_entity_id) {
     if (cx < 0) return 1;
     if (cx >= MAP_WIDTH) return 1;
     if (cy < 0) return 0;
     if (cy >= MAP_HEIGHT) return 1;
-    return COLLISION_MAP[calc_idx(cx, cy)];
+
+    let col = COLLISION_MAP[calc_idx(cx, cy)];
+    if (col != 0) return 1;
+
+    // Check entity collision
+    let i = 0;
+    while (i < ENTITY_COUNT) {
+        if (physics[i].active && i != ignore_entity_id && (entities[i].ptype == 1 || entities[i].ptype == 2 || entities[i].ptype == 0)) {
+            let ex = entities[i].px;
+            let ey = entities[i].py;
+            // A simple bounding box check
+            if (cx == ex && cy == ey) {
+                return 1;
+            }
+        }
+        i++;
+    }
+
+    return 0;
 }
 
 
@@ -94,7 +112,7 @@ function update_entity_physics(id) {
     let by_head = ny / 65536;
 
     if (physics[id].vy > 0) {
-        if (get_collision(lx, by_foot) || get_collision(rx, by_foot)) {
+        if (get_collision(lx, by_foot, id) || get_collision(rx, by_foot, id)) {
             physics[id].vy = 0;
             physics[id].fy = (by_foot - 1) * 65536;
             ny = physics[id].fy;
@@ -102,7 +120,7 @@ function update_entity_physics(id) {
             physics[id].fy = ny;
         }
     } else if (physics[id].vy < 0) {
-        if (get_collision(lx, by_head) || get_collision(rx, by_head)) {
+        if (get_collision(lx, by_head, id) || get_collision(rx, by_head, id)) {
             physics[id].vy = 0;
             physics[id].fy = (by_head + 1) * 65536;
             ny = physics[id].fy;
@@ -119,14 +137,14 @@ function update_entity_physics(id) {
     let pyy = physics[id].fy / 65536;
 
     if (physics[id].vx > 0) {
-        if (get_collision(h_rx, pyy)) {
+        if (get_collision(h_rx, pyy, id)) {
             physics[id].vx = 0;
             physics[id].fx = (h_rx - 1) * 65536;
         } else {
             physics[id].fx = nx;
         }
     } else if (physics[id].vx < 0) {
-        if (get_collision(h_lx, pyy)) {
+        if (get_collision(h_lx, pyy, id)) {
             physics[id].vx = 0;
             physics[id].fx = (h_lx + 1) * 65536;
         } else {
@@ -160,7 +178,7 @@ function frog_ai(id) {
 
     if (entities[id].ptype == 1) { // passive frog 'f'
         if (r < 2) {
-            if (get_collision(entities[id].px, entities[id].py + 1)) {
+            if (get_collision(entities[id].px, entities[id].py + 1, id)) {
                 physics[id].vy = jump_force / 2;
                 physics[id].vx = (Random() % 20000) - 10000;
             }
@@ -181,7 +199,7 @@ function frog_ai(id) {
 
             // Occasional Jump
             if (r < 3) {
-                if (get_collision(entities[id].px, entities[id].py + 1)) {
+                if (get_collision(entities[id].px, entities[id].py + 1, id)) {
                     physics[id].vy = jump_force / 2;
                 }
             }
@@ -191,6 +209,7 @@ function frog_ai(id) {
 
 function check_player_stomps() {
     if (physics[0].vy <= 0) return;
+    if (physics[0].active == 0) return;
 
     let i = 1;
     while (i < ENTITY_COUNT) {
@@ -199,7 +218,7 @@ function check_player_stomps() {
                 let dx = abs(physics[0].fx - physics[i].fx);
                 let dy = physics[0].fy - physics[i].fy;
                 if (dx < 40000 && dy > -32768 && dy < 32768) {
-                    bus_send(EVT_DAMAGE, K_PLATFORM, K_BUS, i, 10, 0);
+                    Chan("combat_events") <- [EVT_DAMAGE, 0, i, 50]; // Deal 50 dmg to enemy i
                     physics[0].vy = jump_force / 2;
                     return;
                 }
@@ -222,12 +241,13 @@ function update_physics() {
             let dx = abs(physics[0].fx - physics[i].fx);
             let dy = abs(physics[0].fy - physics[i].fy);
 
-            if (dx < 40000 && dy < 40000) {
+            // Using exactly 65536 to account for edge-to-edge bounding box collision
+            if (dx <= 66000 && dy <= 66000) {
                 // 1. Contact Damage (Frogs)
                 if (entities[i].ptype == 1 || entities[i].ptype == 2) {
                     if (physics[0].cooldown == 0) {
                         // Deal 7 damage to Player (ID 0)
-                        // Send to combat_events channel so PlayerKernel logs and subtracts HP
+                        // Send to combat_events channel so PlatformBattleKernel processes HP
                         Chan("combat_events") <- [EVT_DAMAGE, i, 0, 7];
                         physics[0].cooldown = 10; // 1 second invincibility
                     }
@@ -273,6 +293,7 @@ function spawn_entity_logic(x, y, color, char, type) {
 }
 
 function trigger_skill() {
+    if (physics[0].active == 0) return;
     skill_timer = 10;
     let px = Math.floor(physics[0].fx / 65536);
     let py = Math.floor(physics[0].fy / 65536);
@@ -286,7 +307,7 @@ function trigger_skill() {
                 let dx = abs(px - ex);
                 let dy = abs(py - ey);
                 if (dx <= 1 && dy <= 1) {
-                    bus_send(EVT_DAMAGE, K_PLATFORM, K_BUS, i, 15, 0);
+                    Chan("combat_events") <- [EVT_DAMAGE, 0, i, 50];
                 }
             }
         }
@@ -333,13 +354,15 @@ function render_logic() {
 }
 
 function move_player(m_dir) {
+    if (physics[0].active == 0) return;
     physics[0].vx = physics[0].vx + (m_dir * move_speed);
 }
 
 function jump_player() {
+    if (physics[0].active == 0) return;
     let bx = Math.floor(physics[0].fx / 65536);
     let by = Math.floor(physics[0].fy / 65536) + 1;
-    if (get_collision(bx, by) != 0) {
+    if (get_collision(bx, by, 0) != 0) {
         physics[0].vy = jump_force;
     }
 }
@@ -362,9 +385,33 @@ function on_platform_request(op, sender, p1, p2, p3) {
     if (op == REQ_TELEPORT) { teleport_player(p1, p2); }
     if (op == CMD_INTERACT) { trigger_skill(); }
     if (op == EVT_DEATH) {
-        if (p1 > 0) {
-            physics[p1].active = 0;
-            entities[p1].char = 32;
+        if (p1 == 0) {
+            physics[0].active = 0;
+        } else if (p1 > 0) {
+            // Drop Loot Instead of clearing
+            entities[p1].color = 8947848; // 0x888888 gray
+            entities[p1].ptype = 3; // ITEM/LOOT
+            Log("[PLATFORM] Entity Died (Corpse) at:");
+            Log(entities[p1].px); Log(entities[p1].py);
+
+            // Pop extra Item (Gold Coin $)
+            let f_id = ENTITY_COUNT;
+            if (f_id < MAX_ENTITIES) {
+                ENTITY_COUNT++;
+                entities[f_id].char = 36; // '$'
+                entities[f_id].color = 16766720;
+                entities[f_id].px = entities[p1].px;
+                entities[f_id].py = entities[p1].py - 1;
+                entities[f_id].ptype = 3;
+                physics[f_id].fx = entities[f_id].px * 65536;
+                physics[f_id].fy = entities[f_id].py * 65536;
+                physics[f_id].vx = (Random() % 40000) - 20000;
+                physics[f_id].vy = jump_force / 2;
+                physics[f_id].active = 1;
+                Chan("npc_sync") <- [EVT_SPAWN, f_id, 3, 0];
+                Chan("npc_sync") <- [EVT_MOVED, f_id, entities[f_id].px, entities[f_id].py];
+                Log("[PLATFORM] Item Popped on Ground!");
+            }
         }
     }
 }
