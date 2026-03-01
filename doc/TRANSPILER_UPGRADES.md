@@ -79,9 +79,13 @@ Currently, arrays in AJS are strict, manually allocated, fixed-size contiguous m
 *   **Implementation:** Instead of contiguous reallocation, we propose a **Chunked Linked-List Allocation Strategy**.
     *   The kernel firmware (`SharedBlocks.ts`) pre-allocates a large "Heap" divided into fixed-size chunks (e.g., 64 bytes each).
     *   An AJS dynamic array is a "Fat Pointer" struct: `{ head_ptr: Address, tail_ptr: Address, total_length: Cell }`.
-    *   Each chunk in the list holds metadata (a `next_chunk` pointer) followed by data cells.
+    *   Each chunk in the list holds metadata (a `next_chunk` pointer) followed by a fixed number of data cells (e.g., `CHUNK_CAPACITY = 64`).
     *   When the transpiler sees `arr.push(val)`, it appends the value to the current `tail_chunk`. If the chunk is full, the firmware instantly pops a free chunk from a global Free-List (O(1) allocation), updates `tail_ptr->next_chunk`, and writes the new value.
     *   This makes dynamic growth fast, deterministic, and completely immune to fragmentation.
+    *   **Dynamic Indexing (`arr[i]`):** Because memory is non-contiguous, array access requires resolving the target chunk.
+        *   The transpiler will inject a special Forth word (e.g., `ARRAY_GET_ADDR`).
+        *   Since `CHUNK_CAPACITY` is a power of 2 (e.g., 64), calculating the target chunk is a fast bitwise shift (`index >> 6`), and finding the internal offset is a bitwise AND (`index & 63`).
+        *   `ARRAY_GET_ADDR` hops through the `next_chunk` pointers `target_chunk` times, then returns the raw memory address at `chunk_data_ptr + (offset * element_size)`. While traversing takes a few operations, the depth of the linked list is shallow, making this O(N/64) lookup extremely fast in WebAssembly.
 
 ### D. Safe Arithmetic Logging
 Currently, `Log(number)` prints the number to standard output. We should introduce string interpolation for logging to make debugging and narrative generation easier:
