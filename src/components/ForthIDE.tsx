@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { GRID_FORTH_SOURCE, GRID_AJS_SOURCE } from "../kernels/GridKernel";
-import { HIVE_FORTH_SOURCE, HIVE_AJS_SOURCE } from "../kernels/HiveKernel";
+import { GRID_HIVE_FORTH_SOURCE, GRID_HIVE_AJS_SOURCE } from "../kernels/GridHiveKernel";
 import { PLAYER_FORTH_SOURCE, PLAYER_AJS_SOURCE } from "../kernels/PlayerKernel";
-import { BATTLE_FORTH_SOURCE, BATTLE_AJS_SOURCE } from "../kernels/BattleKernel";
+import { GRID_BATTLE_FORTH_SOURCE, GRID_BATTLE_AJS_SOURCE } from "../kernels/GridBattleKernel";
 import { STANDARD_KERNEL_FIRMWARE } from "../kernels/SharedBlocks";
 import { forthService, BusPacket } from "../services/WaForthService";
 import { AetherTranspiler } from "../compiler/AetherTranspiler";
@@ -35,16 +35,16 @@ export const ForthIDE: React.FC = () => {
             setAjsCode(GRID_AJS_SOURCE);
             break;
         case "HIVE":
-            setForthCode(HIVE_FORTH_SOURCE);
-            setAjsCode(HIVE_AJS_SOURCE);
+            setForthCode(GRID_HIVE_FORTH_SOURCE);
+            setAjsCode(GRID_HIVE_AJS_SOURCE);
             break;
         case "PLAYER":
             setForthCode(PLAYER_FORTH_SOURCE);
             setAjsCode(PLAYER_AJS_SOURCE);
             break;
         case "BATTLE":
-            setForthCode(BATTLE_FORTH_SOURCE);
-            setAjsCode(BATTLE_AJS_SOURCE);
+            setForthCode(GRID_BATTLE_FORTH_SOURCE);
+            setAjsCode(GRID_BATTLE_AJS_SOURCE);
             break;
         case "SCRATCH": 
             setForthCode(": TEST S\" Hello World\" S. ; \nTEST");
