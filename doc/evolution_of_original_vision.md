@@ -207,18 +207,18 @@ To prove the robustness of this architecture, let us emulate three complex gamep
 
 ---
 
-## 8. Areas for Future Improvement (Known Unknowns)
+## 8. Systemic Refinements & Mechanics
 
-While the blueprint resolves the major systemic blockers, a few critical "Known Unknowns" remain that will require refinement during actual implementation:
+To ensure the architecture remains performant and avoids systemic thrashing, the engine relies on three core operational rules regarding how these proposals are processed:
 
-### 8.1 The "Stat vs. Skill" Boundary
-*   **The Critique:** Using the Overseer Proposal pipeline to pass behavioral logic snippets (like `CAST_FIREBALL`) is elegant. However, using the same pipeline to pass flat stat modifiers (e.g., a Race Overseer saying `HP += 5`) is inefficient. If the Hive Kernel has to evaluate complex structs and execute logic snippets just to calculate an NPC's base health during load, initialization will drag.
-*   **Room for Improvement:** The engine needs a distinct, fast-path resolution layer for **Integer Stat Modifiers** that operates separately from the **Behavioral Snippet** pipeline, allowing stats to be cleanly summed via simple math before behavioral logic is even loaded.
+### 8.1 Passive Skills (The Stat vs. Skill Boundary)
+Using the Overseer Proposal pipeline to execute mathematical logic snippets (e.g., executing `HP += 5` every tick) would be horribly inefficient.
+Instead, static stat modifiers are proposed as **Passive Skills**. When an Overseer proposes a `GRANT_PASSIVE` action, the Hive Kernel interprets this once during load, permanently mutating the NPC's base `RpgEntity` VSO struct, and then caches the result. The engine does not need a separate "fast math" pipeline; passives naturally absorb numerical stat buffs.
 
-### 8.2 The "Schizophrenic NPC" (Thrashing)
-*   **The Critique:** Scenario D (The Polymorphed Keyholder) sounds fun on paper, but mechanically, if the weight of `FLEE` and `DEFEND` are close, the NPC might rapidly alternate between the two behaviors tick-by-tick based on minor distance calculations. The result is an NPC that just vibrates in place and does nothing.
-*   **Room for Improvement:** The Hive Kernel's resolver must implement a concept of **Behavioral Inertia** (or "Commitment"). Once an NPC adopts a high-priority, overriding behavior state, it must lock into that state for a minimum number of ticks (e.g., fleeing for at least 10 ticks) to prevent systemic thrashing.
+### 8.2 Event-Driven Evaluation (Preventing the Schizophrenic NPC)
+In Scenario D (The Polymorphed Keyholder), there is a risk that an NPC might rapidly alternate ("thrash") between `FLEE` and `DEFEND` tick-by-tick based on fluctuating priority weights.
+This is prevented because **Hive Kernels do not re-evaluate proposals on every tick.** They evaluate the Distributed VSO *only* on level load, or when a major narrative event (like the polymorph spell) explicitly triggers a state-change request. Once evaluated, the dominant behavior array is cached and locked in until the next event, ensuring stable, committed actions without requiring complex "inertia" timers.
 
-### 8.3 The Death of the Overseer (Garbage Collection)
-*   **The Critique:** We have defined how static Overseers (Race, Terrain) populate their VSO registries at startup. But Narrative/Quest Overseers are *dynamic*. If a player abandons or fails a quest, that Quest Overseer must be destroyed. If the JS Host simply drops the Overseer object, its static proposals might remain orphaned in the VSO registry memory space.
-*   **Room for Improvement:** The JS Host must enforce a strict **Overseer Teardown Lifecycle**. When a dynamic Overseer dies, it must trigger a deregistration event that cleanly wipes its specific segment of the Distributed VSO Registry, ensuring sleeping Hive Kernels don't wake up and read phantom proposals for quests that no longer exist.
+### 8.3 Decentralized Garbage Collection (The Death of an Overseer)
+Because we utilize a **Distributed VSO Architecture** (Section 5.1), garbage collection of dynamic Quest proposals requires zero complex cleanup logic.
+A Quest Overseer is not writing proposals into a shared, centralized database; it is *hosting* its own VSO block. If a player fails a quest and the JS Host destroys the Quest Overseer, its VSO memory block is implicitly destroyed alongside it. As long as the JS Host removes the Overseer from the active Registry, sleeping Hive Kernels will simply never ask it for proposals when they wake up. There are no orphaned records.
