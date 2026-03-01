@@ -119,3 +119,27 @@ Crucially, because the `OverseerProposal` structs live in a foreign kernel, the 
     *   **Skill Granting:** This allows for emergent "Regional Variants" without extra code—a standard Goblin spawning in a Volcano level might be granted a `CAST_SMALL_FIREBALL` snippet directly from the Terrain/Regional Overseer during initialization, naturally differentiating it from a Forest Goblin.
     *   **Skill Blocking:** Conversely, the Terrain/Regional Overseer can explicitly **block or suppress** skills. If a Pyromancer (PC or NPC) enters an "Anti-Magic Grid Level", the Terrain Overseer will explicitly veto the `CAST_FIREBALL` VSO pointer from being loaded or executed, forcing the entity to rely on secondary tactical arrays.
 3.  **Emergent Gameplay:** By allowing multiple independent Overseers (Race, Class, Origin, and Quests) to simultaneously suggest behavior arrays during load, entities will exhibit deep, complex, and sometimes delightfully contradictory actions (e.g., a cowardly goblin trying to fulfill a brave quest objective) without the need for monolithic AI scripts.
+
+---
+
+## 6. Critical Analysis & Refinements
+
+While the theoretical blueprint above is powerful, a critical evaluation against Aethelgard's strict WAForth constraints reveals several architectural risks that must be mitigated before implementation:
+
+### 6.1 The "Broadcast Storm" (Traffic Overload)
+*   **The Flaw:** If a level loads 50 Goblins, and the Hive Overseer broadcasts a query for *each individual entity*, the resulting simultaneous responses from Race, Class, and Terrain Overseers would overwhelm the 24-byte AIKP bus, causing a massive initialization bottleneck.
+*   **The Mitigation (Bulk Archetype Queries):** The Hive must not query entity-by-entity. It must use **Archetype Queries**. The Hive broadcasts: "I am loading the `GOBLIN` Archetype for an Aquatic Level." The Race and Terrain Overseers respond exactly once. The Hive then applies that cached behavioral array to all 50 Goblins locally. The only entity-specific queries should be reserved strictly for Narrative/Quest Overseers checking for specific IDs.
+
+### 6.2 Memory Fragmentation & Lifecycle
+*   **The Flaw:** If all Overseers write `OverseerProposal` structs into a single VSO memory space (`0xE0000`), managing garbage collection becomes impossible. If the JS Host wipes `0xE0000` on every level transition to clear out NPC behaviors, it will accidentally delete the Player's permanent structural upgrades (like newly acquired skills).
+*   **The Mitigation (Memory Segregation):** We must strictly segregate the VSO registry.
+    *   `TransientProposals`: Wiped on every level load. Used by the Hive Overseer to populate NPC arrays.
+    *   `PermanentProposals`: Never wiped. Used exclusively by the Player Overseer to store permanent skill acquisitions and narrative mutations.
+
+### 6.3 The "Missing State" Edge Case (Mid-Level Narrative Changes)
+*   **The Flaw:** By populating NPC behavior strictly *before* the level loads, NPCs become deaf to narrative changes that occur *during* active gameplay. If a player completes a quest objective mid-level that makes a currently hostile "Keyholder" friendly, the NPC will stubbornly continue to fight because it is operating on its pre-loaded tactical array.
+*   **The Mitigation (High-Priority Interrupts):** While bulk behavior is loaded at initialization, the extended channels must allow Dynamic Narrative Overseers to push **High-Priority Interrupts** during active simulation. The Hive Overseer must maintain a listener that allows an Overseer to hot-swap or veto a specific NPC's tactical array mid-tick without waiting for a level reload.
+
+### 6.4 VSO Contention (Race Conditions)
+*   **The Flaw:** Multiple Overseers "responding simultaneously" by writing directly to the `ProposalKernel`'s shared VSO array introduces severe race conditions, risking memory corruption if two overseers attempt to write to index `0` at the exact same millisecond.
+*   **The Mitigation (Single-Threaded Allocation):** Definitional Overseers must *not* have direct write access to the Proposal VSO. Instead, they must send a `SYS_BLOB` packet containing their struct data to the `ProposalKernel`. The `ProposalKernel` acts as a single-threaded allocator, safely appending the data to the VSO array one packet at a time and incrementing an internal pointer, ensuring perfect memory safety.
