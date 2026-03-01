@@ -1,15 +1,15 @@
 
 import { expect, test, describe, beforeAll } from 'vitest';
 import { KernelTestRunner } from './KernelRunner';
-import { BATTLE_KERNEL_BLOCKS } from '../kernels/BattleKernel';
+import { GRID_BATTLE_KERNEL_BLOCKS } from '../kernels/GridBattleKernel';
 import { KernelID } from '../types/Protocol';
 
 describe('BattleKernel Logic Tests', () => {
   let runner: KernelTestRunner;
 
   beforeAll(async () => {
-    runner = new KernelTestRunner('BATTLE', KernelID.BATTLE);
-    await runner.boot(BATTLE_KERNEL_BLOCKS);
+    runner = new KernelTestRunner('BATTLE', KernelID.GRID_BATTLE);
+    await runner.boot(GRID_BATTLE_KERNEL_BLOCKS);
   });
 
   test('RPG Stats Initialization', () => {

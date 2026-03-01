@@ -1,5 +1,5 @@
 
-// Aethelgard Hive AI Kernel v3.0 (PURE AJS)
+// Aethelgard Grid Hive AI Kernel v3.0 (PURE AJS)
 import { STANDARD_KERNEL_FIRMWARE, BLOCK_STANDARD_INBOX } from "./SharedBlocks";
 import { STANDARD_AJS_PREAMBLE, STANDARD_AJS_POSTAMBLE } from "./SharedAJS";
 import { AetherTranspiler } from "../compiler/AetherTranspiler";
@@ -187,13 +187,13 @@ function init_hive_logic() {
 }
 `;
 
-export const HIVE_KERNEL_BLOCKS = [
+export const GRID_HIVE_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   BLOCK_STANDARD_INBOX,
-  AetherTranspiler.transpile(AJS_LOGIC, KernelID.HIVE),
+  AetherTranspiler.transpile(AJS_LOGIC, KernelID.GRID_HIVE),
   ": INIT_HIVE INIT_HIVE_LOGIC AJS_INIT_CHANNELS ' HANDLE_EVENTS HANDLE_EVENTS_XT ! ;",
   ": RUN_HIVE_CYCLE RUN_HIVE_STEP ;"
 ];
 
-export const HIVE_AJS_SOURCE = AJS_LOGIC;
-export const HIVE_FORTH_SOURCE = HIVE_KERNEL_BLOCKS.join("\n");
+export const GRID_HIVE_AJS_SOURCE = AJS_LOGIC;
+export const GRID_HIVE_FORTH_SOURCE = GRID_HIVE_KERNEL_BLOCKS.join("\n");

@@ -3,7 +3,7 @@ import { expect, test, describe, beforeAll } from 'vitest';
 import { KernelTestRunner } from './KernelRunner';
 import { IntegrationSimulator } from './IntegrationSimulator';
 import { GRID_KERNEL_BLOCKS } from '../kernels/GridKernel';
-import { BATTLE_KERNEL_BLOCKS } from '../kernels/BattleKernel';
+import { GRID_BATTLE_KERNEL_BLOCKS } from '../kernels/GridBattleKernel';
 import { KernelID, Opcode } from '../types/Protocol';
 
 describe('Integration: Loot Drop', () => {
@@ -18,9 +18,9 @@ describe('Integration: Loot Drop', () => {
     await grid.boot(GRID_KERNEL_BLOCKS);
     sim.addKernel(KernelID.GRID, 'GRID', grid);
 
-    battle = new KernelTestRunner('BATTLE', KernelID.BATTLE);
-    await battle.boot(BATTLE_KERNEL_BLOCKS);
-    sim.addKernel(KernelID.BATTLE, 'BATTLE', battle);
+    battle = new KernelTestRunner('BATTLE', KernelID.GRID_BATTLE);
+    await battle.boot(GRID_BATTLE_KERNEL_BLOCKS);
+    sim.addKernel(KernelID.GRID_BATTLE, 'BATTLE', battle);
 
     // Initialize Kernels
     grid.run('INIT_MAP');

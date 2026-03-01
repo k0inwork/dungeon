@@ -3,7 +3,7 @@ import { expect, test, describe, beforeAll } from 'vitest';
 import { KernelTestRunner } from './KernelRunner';
 import { IntegrationSimulator } from './IntegrationSimulator';
 import { GRID_KERNEL_BLOCKS } from '../kernels/GridKernel';
-import { HIVE_KERNEL_BLOCKS } from '../kernels/HiveKernel';
+import { GRID_HIVE_KERNEL_BLOCKS } from '../kernels/GridHiveKernel';
 import { KernelID, Opcode, hashChannel } from '../types/Protocol';
 
 describe('Integration: Named Channels', () => {
@@ -18,9 +18,9 @@ describe('Integration: Named Channels', () => {
     sim.addKernel(KernelID.GRID, 'GRID', grid);
     await grid.boot(GRID_KERNEL_BLOCKS);
 
-    hive = new KernelTestRunner('HIVE', KernelID.HIVE);
-    sim.addKernel(KernelID.HIVE, 'HIVE', hive);
-    await hive.boot(HIVE_KERNEL_BLOCKS);
+    hive = new KernelTestRunner('HIVE', KernelID.GRID_HIVE);
+    sim.addKernel(KernelID.GRID_HIVE, 'HIVE', hive);
+    await hive.boot(GRID_HIVE_KERNEL_BLOCKS);
 
     // Initialize Kernels
     grid.run('INIT_MAP');
@@ -37,7 +37,7 @@ describe('Integration: Named Channels', () => {
 
     // 1. Verify subscription was registered in the simulator
     expect(sim.channelSubscriptions.get(hash)).toBeDefined();
-    expect(sim.channelSubscriptions.get(hash)).toContain(KernelID.HIVE);
+    expect(sim.channelSubscriptions.get(hash)).toContain(KernelID.GRID_HIVE);
 
     // 2. Spawn Player in Grid (Grid will broadcast to channel)
     grid.run('10 10 65535 64 0 SPAWN_ENTITY');

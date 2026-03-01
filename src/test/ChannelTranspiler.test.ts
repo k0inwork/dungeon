@@ -56,10 +56,10 @@ test('transpiles Chan.leave()', () => {
 test('transpiles Chan with kernel name', () => {
     const js = `
       function test() {
-          Chan("HIVE") <- [100, 1, 2, 3];
+            Chan("GRID_HIVE") <- [100, 1, 2, 3];
       }
     `;
     const forth = AetherTranspiler.transpile(js, KernelID.GRID);
-    expect(forth).toContain(`K_HIVE`);
+    expect(forth).toContain(`K_GRID_HIVE`);
     expect(forth).toContain(`BUS_SEND`);
 });

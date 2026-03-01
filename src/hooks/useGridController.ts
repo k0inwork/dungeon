@@ -58,7 +58,7 @@ export const useGridController = (
                     const playerProc = forthService.get("PLAYER");
                     const gridId = String(getInstanceID(KernelID.GRID, currentLevelIdx));
                     const gridProc = forthService.get(gridId);
-                    const battleId = String(getInstanceID(KernelID.BATTLE, currentLevelIdx));
+                    const battleId = String(getInstanceID(KernelID.GRID_BATTLE, currentLevelIdx));
 
                     if (playerProc?.isLogicLoaded && gridProc?.isLogicLoaded) {
                         const tx = cursorPos.x;
