@@ -217,6 +217,7 @@ function move_entity(id, dx, dy) {
   if (id == 0) {
       let target = TRANSITION_MAP[ti];
       if (target != -1) {
+          Log("[GRID] Portal touched! Target ID:"); Log(target);
           bus_send(EVT_LEVEL_TRANSITION, K_GRID, K_HOST, target, 0, 0);
           return;
       }
