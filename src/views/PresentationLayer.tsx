@@ -112,6 +112,7 @@ export const PresentationLayer: React.FC<PresentationLayerProps> = ({
                     currentLevelIdx={currentLevelIdx}
                     keysDown={keysDown}
                     tickSimulation={tickSimulation}
+                    displayBuffer={displayBuffer}
                     setDisplayBuffer={setDisplayBuffer}
                     onInspect={onInspect}
                 />

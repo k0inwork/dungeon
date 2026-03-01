@@ -6,6 +6,7 @@ interface PlatformSimulationViewProps {
     currentLevelIdx: number;
     keysDown: Set<string>;
     tickSimulation: () => void;
+    displayBuffer: ArrayBuffer | null;
     setDisplayBuffer: (buf: ArrayBuffer | null) => void;
     onInspect: (x: number, y: number) => void;
 }
@@ -14,6 +15,7 @@ export const PlatformSimulationView: React.FC<PlatformSimulationViewProps> = ({
     currentLevelIdx,
     keysDown,
     tickSimulation,
+    displayBuffer,
     setDisplayBuffer,
     onInspect
 }) => {
@@ -42,7 +44,7 @@ export const PlatformSimulationView: React.FC<PlatformSimulationViewProps> = ({
 
     return (
         <PlatformView
-            displayBuffer={null} // Buffer is handled by setDisplayBuffer in controller
+            displayBuffer={displayBuffer}
             handleInspect={onInspect}
         />
     );
