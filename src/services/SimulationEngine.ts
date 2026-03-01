@@ -6,6 +6,7 @@ import { MEMORY } from '../constants/Memory';
 export interface BrokerState {
     channelSubscriptions: Map<number, Set<number>>;
     onGameOver: () => void;
+    isGameOver: () => boolean;
     onPlayerMoved: (x: number, y: number) => void;
     onLevelTransition: (targetLevelId: number) => void;
 }
@@ -131,6 +132,7 @@ export class SimulationEngine {
     }
 
     public tickSimulation(currentLevelIdx: number, simulationMode: string, currentLevelId: string) {
+        if (this.state.isGameOver()) return;
         const lIdx = currentLevelIdx;
         const physicsRole = simulationMode === 'PLATFORM' ? KernelID.PLATFORM : KernelID.GRID;
         const gridId = String(getInstanceID(physicsRole, lIdx));

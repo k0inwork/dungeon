@@ -108,6 +108,9 @@ export const useGridController = (
                 const cmd = `0 OUT_PTR ! 101 2 1 0 ${dx} ${dy} BUS_SEND`;
                 console.log(`[GRID INPUT] Sending move request: ${dx}, ${dy}`);
                 playerProc.run(cmd);
+                // Extra broker runs to ensure transition resolves
+                tickSimulation();
+                tickSimulation();
                 tickSimulation();
             }
         }

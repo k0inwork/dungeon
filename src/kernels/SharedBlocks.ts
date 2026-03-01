@@ -263,7 +263,7 @@ export const BLOCK_STANDARD_INBOX = `
 
     ( Robust stack cleanup )
     BEGIN DEPTH 0 > WHILE DROP REPEAT
-    IB_STEP @ DUP 0 <= IF DROP 6 THEN
+    IB_STEP @ DUP 1 < IF DROP 6 THEN
     IB_OFFSET +!
   REPEAT
   0 INPUT_QUEUE !

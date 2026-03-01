@@ -241,7 +241,8 @@ export class AetherTranspiler {
       node.body.forEach((n: any) => {
         if (n.type === "VariableDeclaration") {
           n.declarations.forEach((decl: any) => {
-            const name = decl.id.name.toUpperCase();
+            const rawName = decl.id.name.toUpperCase();
+            const name = this.sanitizeName(rawName);
 
             // Detect Type Hints: const x = new Uint8Array(...)
             if (decl.init && decl.init.type === "NewExpression" && decl.init.callee.name && (decl.init.callee.name.includes("Uint8") || decl.init.callee.name.includes("Uint32") || decl.init.callee.name.includes("Int32"))) {

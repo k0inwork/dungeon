@@ -49,7 +49,11 @@ export const useGameSimulation = (addLog: (msg: string) => void) => {
 
     const engine = useMemo(() => new SimulationEngine({
         channelSubscriptions: channelSubscriptions.current,
-        onGameOver: () => setGameOver(true),
+        onGameOver: () => {
+             setGameOver(true);
+             gameOverRef.current = true;
+        },
+        isGameOver: () => !!gameOverRef.current,
         onPlayerMoved: (x, y) => playerMoveRef.current?.(x, y),
         onLevelTransition: (targetLevelIdx: number) => transitionRef.current?.(targetLevelIdx)
     }), []);
@@ -168,6 +172,8 @@ export const useGameSimulation = (addLog: (msg: string) => void) => {
 
     const handleGenerate = useCallback(async (seed: string, isMock: boolean) => {
         setMode("GENERATING");
+        setGameOver(false);
+        gameOverRef.current = false;
         forthService.clearPacketLog();
         initializedLevels.current = new Set();
         const world = isMock ? generatorService.generateMockWorld() : await generatorService.generateWorld(seed);
@@ -192,6 +198,8 @@ export const useGameSimulation = (addLog: (msg: string) => void) => {
                 addLog("NO SAVE DATA FOUND.");
                 return;
             }
+            setGameOver(false);
+            gameOverRef.current = false;
             setWorldInfo(gameState.worldInfo);
             setCurrentLevelId(gameState.currentLevelId);
             await forthService.deserializeAll(gameState.forthState);

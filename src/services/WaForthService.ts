@@ -1,6 +1,6 @@
 
 import WAForthPkg from "waforth";
-import { KernelID, Opcode, PACKET_SIZE_INTS, VSO_REGISTRY, hashChannel,getInstanceID } from "../types/Protocol";
+import { KernelID, Opcode, PACKET_SIZE_INTS, VSO_REGISTRY, hashChannel, getInstanceID, getRoleID } from "../types/Protocol";
 
 const WAForth = (WAForthPkg as any).default || WAForthPkg;
 
