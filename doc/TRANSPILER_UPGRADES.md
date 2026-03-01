@@ -74,16 +74,20 @@ Currently, only `while` and a strictly formatted `for(let i=0; i<N; i++)` are su
 *   **Implementation:** Map `switch` statements to a series of Forth `OVER = IF ... ELSE ... THEN` blocks or use an execution token array (jump table) for large switch cases (O(1) dispatching). This is vital for the `BattleKernel` dispatch table.
 
 ### C. First-Class Array Abstractions (Chunked Linked-List Allocation)
-Currently, arrays in AJS are strict, manually allocated, fixed-size contiguous memory blocks (e.g., `new Uint32Array(0x40000)`). Contiguous allocation (like standard `malloc/realloc`) suffers heavily from memory fragmentation in WebAssembly's linear memory.
+Currently, arrays in AJS are strict, manually allocated, fixed-size contiguous memory blocks (e.g., `new Uint32Array(0x40000)`). While contiguous memory is perfect for dense maps (like VRAM or Physics Grids), dynamic lists (like an entity's status effects) suffer heavily from memory fragmentation in WebAssembly if we try to use standard `malloc/realloc`.
+
 *   **Goal:** Introduce a dynamic Array type abstraction that the LLM can use safely and dynamically grow without fragmentation: `let arr = [1, 2, 3]; arr.push(4);`.
-*   **Implementation:** Instead of contiguous reallocation, we propose a **Chunked Linked-List Allocation Strategy**.
+*   **Syntax Distinction:** The transpiler must distinguish between Fixed Flat Memory and Dynamic Arrays based on initialization:
+    1.  **Fixed Arrays:** `const MAP = new Uint32Array(0x40000);`. The transpiler tracks this as a raw pointer. `MAP[i]` compiles to standard pointer arithmetic (`0x40000 + (i * 4)`).
+    2.  **Dynamic Arrays:** `let arr = [1, 2, 3];` or `let arr = [];`. The transpiler tracks this variable's type as a `DynamicArray` Fat Pointer.
+*   **Implementation:** Instead of contiguous reallocation, we propose a **Chunked Linked-List Allocation Strategy** for Dynamic Arrays.
     *   The kernel firmware (`SharedBlocks.ts`) pre-allocates a large "Heap" divided into fixed-size chunks (e.g., 64 bytes each).
-    *   An AJS dynamic array is a "Fat Pointer" struct: `{ head_ptr: Address, tail_ptr: Address, total_length: Cell }`.
+    *   A dynamic array is instantiated as a "Fat Pointer" struct: `{ head_ptr: Address, tail_ptr: Address, total_length: Cell }`.
     *   Each chunk in the list holds metadata (a `next_chunk` pointer) followed by a fixed number of data cells (e.g., `CHUNK_CAPACITY = 64`).
     *   When the transpiler sees `arr.push(val)`, it appends the value to the current `tail_chunk`. If the chunk is full, the firmware instantly pops a free chunk from a global Free-List (O(1) allocation), updates `tail_ptr->next_chunk`, and writes the new value.
     *   This makes dynamic growth fast, deterministic, and completely immune to fragmentation.
-    *   **Dynamic Indexing (`arr[i]`):** Because memory is non-contiguous, array access requires resolving the target chunk.
-        *   The transpiler will inject a special Forth word (e.g., `ARRAY_GET_ADDR`).
+    *   **Dynamic Indexing (`arr[i]`):** Because the transpiler knows `arr` is a `DynamicArray`, it intercepts the array access.
+        *   Instead of raw pointer math, it injects a special Forth word (e.g., `ARRAY_GET_ADDR`).
         *   Since `CHUNK_CAPACITY` is a power of 2 (e.g., 64), calculating the target chunk is a fast bitwise shift (`index >> 6`), and finding the internal offset is a bitwise AND (`index & 63`).
         *   `ARRAY_GET_ADDR` hops through the `next_chunk` pointers `target_chunk` times, then returns the raw memory address at `chunk_data_ptr + (offset * element_size)`. While traversing takes a few operations, the depth of the linked list is shallow, making this O(N/64) lookup extremely fast in WebAssembly.
 
