@@ -50,10 +50,11 @@ export const BLOCK_CORE_POLYFILLS = `
 ;
 
 ( 5. MATH HELPERS )
-: MAX ( n1 n2 -- max ) 2DUP < IF SWAP THEN DROP ;
-: MIN ( n1 n2 -- min ) 2DUP > IF SWAP THEN DROP ;
-: NEGATE ( n -- -n ) 0 SWAP - ;
-: ABS ( n -- |n| ) DUP 0 < IF NEGATE THEN ;
+( Note: MAX, MIN, NEGATE, ABS are typically built-in. Only define if missing )
+: MATH_MAX ( n1 n2 -- max ) 2DUP < IF SWAP THEN DROP ;
+: MATH_MIN ( n1 n2 -- min ) 2DUP > IF SWAP THEN DROP ;
+: MATH_NEGATE ( n -- -n ) 0 SWAP - ;
+: MATH_ABS ( n -- |n| ) DUP 0 < IF MATH_NEGATE THEN ;
 
 ( 6. COMPARISONS )
 : <= ( n1 n2 -- f ) > 0= ;
@@ -63,12 +64,8 @@ export const BLOCK_CORE_POLYFILLS = `
 
 export const BLOCK_MATH = `
 ( --- BITWISE MATH --- )
-( Ensure standard bitwise words exist. WAForth usually has them, but explicit defs help portability )
-: LSHIFT ( x u -- x' ) LSHIFT ; 
-: RSHIFT ( x u -- x' ) RSHIFT ;
-: OR ( x1 x2 -- x3 ) OR ;
-: AND ( x1 x2 -- x3 ) AND ;
-: XOR ( x1 x2 -- x3 ) XOR ;
+( WAForth includes LSHIFT, RSHIFT, OR, AND, XOR as built-ins )
+( Explicit redefinitions removed to avoid infinite recursion )
 `;
 
 export const BLOCK_COMMON_CONSTANTS = `
