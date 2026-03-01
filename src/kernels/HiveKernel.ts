@@ -38,16 +38,6 @@ struct RpgEntity {
     targetId,
     invItem
 }
-
-// Map the Proposal Kernel VSO memory (from Protocol.ts VSO_REGISTRY baseAddr)
-struct OverseerProposal {
-    overseerType,
-    actionType,
-    targetId,
-    weight
-}
-let proposal_memory = new Array(OverseerProposal, 128, 0xE0000);
-
 let hive_entities = new Array(HiveEntity, MAX_ENTITIES, 0x90000);
 export hive_entities;
 
@@ -190,7 +180,6 @@ function init_hive_logic() {
     HIVE_ENT_COUNT = 0;
 
     Log("[HIVE] Memory Reset");
-
     Chan("npc_sync").on(on_npc_sync);
     Chan().on(on_bus_event);
     Chan("BUS").on(on_bus_event);

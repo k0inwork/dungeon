@@ -87,7 +87,32 @@ Once the level begins, the Hive Overseer operates completely decoupled. It acts 
 *   **Contextual Weighting:** Narrative/Quest behaviors (like `DEFEND_KEY`) carry a significantly higher weight than standard Definitional responses. If a Quest Overseer provided a "Defend" array during load, the NPC will generally suppress its default racial desire to wander or sleep.
 *   **Dynamic Synthesis:** However, the weight is not absolute. If the Water Elemental Race Overseer provided a critical `FLEE_FIRE` instinct during load, the Hive Overseer will dynamically synthesize conflicts during active gameplay. The existential directive to flee fire might override the quest directive to defend the key if a fire hazard appears.
 
-### 4.1 Summary of Benefits
+---
+
+## 5. Technical Implementation Blueprint
+
+To realize this vision without breaking Aethelgard's strict AJS/WAForth constraints, we must formalize how these complex behavior proposals are transmitted and evaluated.
+
+### 5.1 The Proposal VSO Host Kernel
+We will introduce a dedicated `ProposalKernel`. This kernel performs very little active logic; its primary purpose is to act as a **Virtual Shared Object (VSO) Registry** for all active Overseer Proposals.
+
+When a Hive Overseer broadcasts a load query, the responding Definitional and Narrative Overseers write their answers directly into the `ProposalKernel`'s VSO memory space (e.g., base address `0xE0000`).
+
+### 5.2 The Overseer Proposal Struct
+Because standard JavaScript objects (`{}`) are forbidden in AJS, every proposal must adhere to a strict, flat C-style memory struct. We will define an `OverseerProposal` VSO struct containing:
+*   `[0] OverseerType`: (e.g., `OS_RACE`, `OS_QUEST`, `OS_TERRAIN`)
+*   `[1] ActionType`: (e.g., `ACT_GRANT_SKILL`, `ACT_BLOCK_SKILL`, `ACT_OVERRIDE_BEHAVIOR`)
+*   `[2] TargetID`: The specific Skill ID or Action Code (e.g., `FIREBALL_SKILL_ID`)
+*   `[3] Weight/Priority`: A numeric value determining how this proposal interacts with others.
+
+### 5.3 Shared Resolution Logic
+The logic to iterate through these proposals, calculate affinities, and apply vetoes (e.g., a `BLOCK_SKILL` from a Terrain Overseer vetoing a `GRANT_SKILL` from a Class Overseer) must be identical for both PCs and NPCs.
+
+We will write a shared AJS/Forth function (e.g., `resolve_proposals`) that will be injected universally into the preamble of both the `HiveKernel` and the `PlayerKernel`.
+
+Crucially, because the `OverseerProposal` structs live in a foreign kernel, the shared resolution logic will not iterate over a local array. It will utilize the `AetherTranspiler`'s auto-generated VSO getter syntax (e.g., `OverseerProposal(index)`), which automatically compiles down to a cross-kernel `JS_SYNC_OBJECT` call to fetch the struct data safely.
+
+### 5.4 Summary of Benefits
 
 1.  **Extreme Decoupling:** Hive Overseers become pure aggregators and executors; they no longer need to know the specific logic of every race and class in the game, nor do they rely on constant network chatter during active gameplay.
 2.  **Context-Aware Initialization & Regional Variants:** NPCs and PCs are deeply rooted in their environment because their skills and behaviors are filtered and populated based on the specific level context *before* they spawn.
