@@ -73,12 +73,15 @@ Currently, only `while` and a strictly formatted `for(let i=0; i<N; i++)` are su
 *   **Goal:** Support `switch (expr) { case A: ... }`.
 *   **Implementation:** Map `switch` statements to a series of Forth `OVER = IF ... ELSE ... THEN` blocks or use an execution token array (jump table) for large switch cases (O(1) dispatching). This is vital for the `BattleKernel` dispatch table.
 
-### C. First-Class Array Abstractions (The "Fat Pointer")
-Currently, arrays in AJS are manual memory pointers (`new Uint32Array(0x40000)`).
-*   **Goal:** Introduce a dynamic Array type abstraction that the LLM can use safely: `let arr = [1, 2, 3]; arr.push(4);`.
-*   **Implementation:** The transpiler will allocate a block in the kernel's memory heap (we will need to implement a basic `malloc`/`free` or bump allocator in the `SharedBlocks.ts` firmware).
-    *   An array in AJS will be a "Fat Pointer" struct: `{ ptr: Address, length: Cell, capacity: Cell }`.
-    *   When the transpiler sees `arr.push(val)`, it emits Forth code to write to `ptr + length`, increment `length`, and (if necessary) reallocate.
+### C. First-Class Array Abstractions (Chunked Linked-List Allocation)
+Currently, arrays in AJS are strict, manually allocated, fixed-size contiguous memory blocks (e.g., `new Uint32Array(0x40000)`). Contiguous allocation (like standard `malloc/realloc`) suffers heavily from memory fragmentation in WebAssembly's linear memory.
+*   **Goal:** Introduce a dynamic Array type abstraction that the LLM can use safely and dynamically grow without fragmentation: `let arr = [1, 2, 3]; arr.push(4);`.
+*   **Implementation:** Instead of contiguous reallocation, we propose a **Chunked Linked-List Allocation Strategy**.
+    *   The kernel firmware (`SharedBlocks.ts`) pre-allocates a large "Heap" divided into fixed-size chunks (e.g., 64 bytes each).
+    *   An AJS dynamic array is a "Fat Pointer" struct: `{ head_ptr: Address, tail_ptr: Address, total_length: Cell }`.
+    *   Each chunk in the list holds metadata (a `next_chunk` pointer) followed by data cells.
+    *   When the transpiler sees `arr.push(val)`, it appends the value to the current `tail_chunk`. If the chunk is full, the firmware instantly pops a free chunk from a global Free-List (O(1) allocation), updates `tail_ptr->next_chunk`, and writes the new value.
+    *   This makes dynamic growth fast, deterministic, and completely immune to fragmentation.
 
 ### D. Safe Arithmetic Logging
 Currently, `Log(number)` prints the number to standard output. We should introduce string interpolation for logging to make debugging and narrative generation easier:
