@@ -1,92 +1,124 @@
-# AETHER SCRIPT SPECIFICATION (v3.0)
+# Aethelgard JavaScript (AJS) Language Specification
 
-> **Purpose:** Guidelines for the "Flesh" (AI) on how to write code that the "Skeleton" (Transpiler) can understand.
+## 1. Introduction
+Aethelgard JavaScript (AJS) is a strict, highly specialized subset of JavaScript. It is designed to be written like high-level JS but is transpiled directly into WebAssembly Forth (via `AetherTranspiler`) to run within isolated, high-performance execution kernels.
 
-## 1. THE LANGUAGE: AETHER JS (Expanded)
-We use a **Restricted Subset** of JavaScript that maps efficiently to Forth's stack and memory model.
+AJS lacks standard JS features like garbage collection, closures, standard dynamic arrays, or the DOM. Instead, it provides direct, deterministic control over the kernel's memory space and high-speed message passing via channels.
 
-### 1.1 The Whitelist (What is allowed)
-*   **Control Flow:** `if`, `else`, `return`.
-*   **Loops:** `for`, `while` (Mapped to `DO...LOOP` and `BEGIN...WHILE`).
-*   **Variables:** `let`, `const`.
-*   **Types:** `Integer`, `String` (Literals), `Boolean`, `Array` (Typed Pointers).
-*   **Math:** `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `>`, `<`.
-*   **API Calls:** Functions defined in the Kernel Reference.
+## 2. Currently Supported Syntax & Features
 
-### 1.2 The Blacklist (What is FORBIDDEN)
-*   **Complex Objects:** `let x = { a: 1, b: 2 }`. *Use Memory Structs instead.*
-*   **Closures/Functions:** No defining `function` inside the script.
-*   **Native API:** No `Math.random()`, `console.log()`. *Use `Roll()` and `Log()`.*
-*   **String Manipulation:** No `str.split()` or regex. Strings are immutable tokens.
+### A. Variables & Constants
+All variables are essentially 32-bit integers (cells).
+*   **Constants**: `const MAX_ENTITIES = 32;` (Transpiled as a Forth `CONSTANT`)
+*   **Variables**: `let count = 0;` (Transpiled as a Forth `VARIABLE` and accessed via `@` and `!`)
 
----
+### B. Functions
+Functions operate normally, but with strict scoping rules.
+*   Arguments and local variables are managed via local variable scopes in Forth (`LV_FuncName_VarName`).
+*   Example:
+    ```javascript
+    function calc_dist(x, y) {
+        let dx = x * x;
+        let dy = y * y;
+        return dx + dy;
+    }
+    ```
 
-## 2. LOOPS AND ITERATION
+### C. Control Flow
+Control flow is significantly restricted compared to standard JS:
+*   **If/Else**: Standard `if (condition) { ... } else { ... }` is supported.
+*   **While Loops**: `while (condition) { ... }` is supported.
+*   **For Loops**: *Highly Restricted*. Only simple `for(let i=0; i<N; i++)` is partially supported. Nested loops or complex loop updates will fail to transpile correctly.
 
-The Transpiler maps standard JS loops to Forth's high-performance hardware loops.
+### D. Math & Bitwise Operations
+Standard mathematical and bitwise operators are supported and map directly to their Forth equivalents:
+`+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&`, `|`, `^`, `<<`, `>>`, `>>>`.
+*(Note: Math object support is limited to specific methods like `Math.floor`, `Math.max`, `Math.min`, `Math.abs`, and `Math.random`)*
 
-### 2.1 Range Loops (The `DO` Loop)
-Used for iterating N times.
-*   **JS:** `for (let i = 0; i < 10; i++) { Log(i); }`
-*   **Forth:** `10 0 DO I LOG LOOP`
-*   **Rule:** The variable *must* be defined in the loop header. The step must be incremental (`i++`).
+## 3. AJS Unique Syntax: Structs and Memory
 
-### 2.2 Condition Loops (The `WHILE` Loop)
-Used for state checks.
-*   **JS:** `while (GetHP(Target) > 0) { Damage(Target, 1); }`
-*   **Forth:** `BEGIN TARGET GET_HP 0 > WHILE 1 TARGET DAMAGE REPEAT`
+Because AJS runs in a raw memory space, object creation is handled via C-style structs and direct memory addressing.
 
----
-
-## 3. MEMORY AND ARRAYS
-
-Arrays in AetherScript are **Raw Pointers** to memory blocks.
-
-### 3.1 Allocation
-You can allocate a temporary scratch buffer.
-*   **JS:** `let stats = Alloc(5);` (Allocates 5 integers).
-*   **Forth:** `5 ALLOC_SCRATCH -> stats`
-
-### 3.2 Access (Read/Write)
-Standard bracket notation is transpiled to pointer arithmetic.
-*   **JS:** `stats[0] = 10;`
-*   **Forth:** `10 stats 0 CELLS + !`
-*   **JS:** `let val = stats[1];`
-*   **Forth:** `stats 1 CELLS + @ -> val`
-
----
-
-## 4. VARIABLE SCOPING RULES
-
-### 4.1 Script-Local Scope
-Variables declared with `let` exist only for the duration of the script execution. They are mapped to Wasm Registers.
-
+### A. Structs (Not standard JS)
+AJS introduces a non-standard `struct` keyword used by the transpiler to generate byte-offsets.
 ```javascript
-// Valid
-let dmg = 10;
-for (let i = 0; i < 3; i++) {
-   dmg = dmg + 5;
+struct GridEntity {
+    char,
+    color,
+    y,
+    x,
+    type
 }
-Damage(Target, dmg, TYPE_PHYSICAL);
 ```
 
-### 4.2 Global Persistence
-To persist data between script executions, you **MUST** use the `SetFlag` / `GetFlag` API. You cannot use global variables.
+### B. Struct Arrays & Virtual Shared Objects (VSO)
+To instantiate an array of structs at a specific memory address:
+```javascript
+// Array of GridEntity, size 32, starting at memory address 0x90000
+let entities = new Array(GridEntity, 32, 0x90000);
+
+// Accessing the struct (Returns a pointer to the specific struct instance)
+function get_ent(id) {
+    return GridEntity(id);
+}
+
+// Accessing fields:
+let ent = get_ent(0);
+ent.x = 10;
+ent.y = 20;
+```
+*Note: The `export entities;` syntax allows this array to be accessed by other kernels via the VSO system.*
+
+### C. Direct Memory Access (Pointers)
+AJS allows direct byte (`C@`/`C!`) and cell (`@`/`!`) memory manipulation via reserved identifiers:
+*   `MEM8[address] = value` (Write Byte)
+*   `let val = MEM32[address]` (Read 32-bit Cell)
+Typed arrays (`Uint8Array`, `Uint32Array`, `Int32Array`) are also used to map arrays to specific raw memory addresses:
+```javascript
+const VRAM = new Uint32Array(0x80000);
+VRAM[calc_idx(x, y)] = (color << 8) | char;
+```
+
+## 4. AJS Unique Syntax: Channels (Go-Style Message Passing)
+
+The most significant departure from standard JS in AJS is the **Channel System**, heavily inspired by Go channels. Aethelgard relies on a Star Topology for inter-kernel communication (AIKP).
+
+### A. Sending Messages
+The left-arrow `<-` operator is used to send a packet over the message bus.
+**Syntax:** `Chan("ChannelName") <- [Opcode, Param1, Param2, Param3]`
 
 ```javascript
-// INVALID
-global_count = global_count + 1; 
+// Example: Requesting the GridKernel to move entity ID 5 by (dx: 1, dy: 0)
+Chan("GRID") <- [REQ_MOVE, 5, 1, 0];
 
-// VALID
-let c = GetFlag("count");
-SetFlag("count", c + 1);
+// Sending to the global bus
+Chan("BUS") <- [EVT_DAMAGE, targetId, damageAmount, type];
+
+// Sending to self
+Chan() <- [CMD_INTERNAL_UPDATE, 0, 0, 0];
 ```
 
----
+### B. Receiving Messages
+To handle incoming messages, you register a listener function to a specific channel:
+```javascript
+function on_grid_request(op, sender, p1, p2, p3) {
+    if (op == REQ_MOVE) { move_entity(p1, p2, p3); }
+}
 
-## 5. ERROR CODES
-If the Transpiler fails, it returns these codes to the AI:
-*   **ERR_ILLEGAL_SYNTAX**: Usage of objects or closures.
-*   **ERR_UNKNOWN_VERB**: Function not in API Whitelist.
-*   **ERR_SCOPE_LEAK**: Variable used without declaration.
-*   **ERR_STRING_OP**: Attempted to concatenate or mutate a string.
+// In initialization phase:
+Chan("BUS").on(on_grid_request);
+```
+
+## 5. Built-in Kernel Functions
+AJS has several built-in global functions injected by the transpiler environment:
+*   `Log("Message")`: Outputs a string to the engine's standard log.
+*   `Log(number)`: Outputs a number.
+*   `bus_send(op, sender, target, p1, p2, p3)`: The low-level functional equivalent of the `Chan()` operator.
+
+## 6. What AJS Does NOT Support (Currently)
+An LLM attempting to write AJS will fail if it tries to use standard modern JS conventions:
+1.  **NO Objects:** `let obj = { x: 10, y: 20 }` (Syntax Error)
+2.  **NO Standard Arrays:** `let arr = [1, 2, 3]` (Syntax Error)
+3.  **NO Closures:** Functions cannot access variables from a parent function's scope.
+4.  **NO Strings:** Strings are only supported as constants in `Log("string")`. You cannot assign strings to variables or manipulate them (`let s = "hello" + "world"` will fail).
+5.  **NO Switch Statements:** Must use `if / else if / else`.
