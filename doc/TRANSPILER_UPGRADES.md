@@ -64,12 +64,29 @@ We will add these functions to `WaForthService.ts` via the `bindHostFunctions()`
 
 To allow LLMs to freely generate logic, AJS needs to be less brittle. We propose the following transpilation upgrades:
 
-### A. Robust Loop Structures
-Currently, only `while` and a strictly formatted `for(let i=0; i<N; i++)` are supported.
-*   **Goal:** Add AST transpilation for `for...of` (for iterating over VSO Struct Arrays) and standard arbitrary `for` loops.
-*   **Implementation:** The transpiler must map arbitrary loop conditions into Forth's `BEGIN ... WHILE ... REPEAT` structure rather than relying solely on the fragile `DO ... LOOP` limits.
+### A. Complex Boolean Expressions & Control Structures
+Currently, AJS only reliably supports simple conditions like `if (a < b)`. Complex compound expressions fail because mapping JavaScript's Infix notation (`a && b || c`) to Forth's Postfix (Reverse Polish Notation) (`a b AND c OR`) requires deep Abstract Syntax Tree (AST) traversal.
+*   **Goal:** Support complex logical expressions like `if ((hp < 50 && is_poisoned) || distance > 10)`.
+*   **Implementation:** The transpiler must recursively traverse `LogicalExpression` (`&&`, `||`) and `BinaryExpression` (`<`, `==`) nodes in the Acorn AST.
+    *   Left side is compiled first (pushes to stack).
+    *   Right side is compiled next (pushes to stack).
+    *   The operator is emitted (`AND`, `OR`, `<`, `=`).
+    *   *Short-Circuiting:* In JS, `a && b` stops evaluating if `a` is false. Forth's bitwise `AND` does not. The transpiler must optionally wrap the right side in an `IF` block to mirror standard JS short-circuit behavior if function calls with side-effects are present.
 
-### B. Enhanced Control Flow (`switch`)
+### B. Robust Loop Structures (`for...of`)
+Currently, only `while` and a strictly formatted `for(let i=0; i<N; i++)` are supported, utilizing Forth's rigid `DO ... LOOP`.
+*   **Goal:** Add AST transpilation for `for (let item of arr)` loops to easily iterate over the new Dynamic Arrays.
+*   **Implementation:** The transpiler will map `for...of` into Forth's flexible `BEGIN ... WHILE ... REPEAT` structure:
+    1.  Initialize a hidden index variable to 0.
+    2.  `BEGIN`
+    3.  Check condition: `index < arr.total_length`
+    4.  `WHILE`
+    5.  Assign `item = arr[index]` (Using the `ARRAY_GET_ADDR` word).
+    6.  Execute the loop body.
+    7.  Increment index.
+    8.  `REPEAT`
+
+### C. Enhanced Control Flow (`switch`)
 *   **Goal:** Support `switch (expr) { case A: ... }`.
 *   **Implementation:** Map `switch` statements to a series of Forth `OVER = IF ... ELSE ... THEN` blocks or use an execution token array (jump table) for large switch cases (O(1) dispatching). This is vital for the `BattleKernel` dispatch table.
 
