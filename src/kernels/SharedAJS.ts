@@ -43,6 +43,41 @@ let M_P2 = 0;
 let M_P3 = 0;
 `;
 
+export const BLOCK_AJS_OVERSEER_PROPOSALS = `
+// --- OVERSEER PROPOSAL CONSTANTS ---
+// Action Types
+const ACT_GRANT_SKILL = 1;
+const ACT_BLOCK_SKILL = 2;
+const ACT_OVERRIDE_BEHAVIOR = 3;
+
+// Overseer Types
+const OS_RACE = 1;
+const OS_CLASS = 2;
+const OS_ORIGIN = 3;
+const OS_QUEST = 4;
+const OS_TERRAIN = 5;
+
+// Struct Size (in 32-bit words)
+const PROPOSAL_STRUCT_SIZE = 4;
+
+// --- PROPOSAL RESOLUTION LOGIC ---
+// AJS does not support standard objects, so we process an array of flat structs
+// [0]: Overseer Type (e.g. OS_QUEST)
+// [1]: Action Type (e.g. ACT_GRANT_SKILL)
+// [2]: Target ID (e.g. FIREBALL_SKILL_ID)
+// [3]: Weight/Priority (e.g. 100)
+function resolve_proposals(proposal_array_ptr, proposal_count, output_array_ptr) {
+    // 1. First pass: Find all blocks/vetoes (highest priority)
+    let block_count = 0;
+    // ... logic to aggregate blocks ...
+
+    // 2. Second pass: Gather grants and overrides, filtering out blocks
+    // ... logic to weigh and filter ...
+
+    // 3. Output final active actions/skills to output_array_ptr
+}
+`;
+
 export const BLOCK_AJS_BUS_UTILS = `
 let OUT_PTR = 0;
 const INBOX = new Uint32Array(0x404); // INPUT_QUEUE + 4
@@ -105,7 +140,8 @@ export const STANDARD_AJS_PREAMBLE = [
     generateAjsProtocolBlock(),
     BLOCK_AJS_MEMORY_MAP,
     BLOCK_AJS_MSG_REGISTERS,
-    BLOCK_AJS_BUS_UTILS
+    BLOCK_AJS_BUS_UTILS,
+    BLOCK_AJS_OVERSEER_PROPOSALS
 ].join("\n");
 
 // Postamble: The Inbox Processor (must be included AFTER handle_events is defined)

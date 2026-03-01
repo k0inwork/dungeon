@@ -8,11 +8,13 @@ export enum KernelID {
     HIVE = 3,
     BATTLE = 4,
     PLATFORM = 5,
+    PROPOSAL = 6,
     BUS = 255
 }
 
 export function getInstanceID(role: number, levelIdx: number): number {
     if (role === KernelID.PLAYER) return 2;
+    if (role === KernelID.PROPOSAL) return 6;
     return (role * 100) + levelIdx;
 }
 
@@ -121,6 +123,13 @@ export const VSO_REGISTRY: Record<string, VsoStructDef> = {
             "inv20", "inv21", "inv22", "inv23", "inv24", "inv25", "inv26", "inv27", "inv28", "inv29",
             "inv30", "inv31"
         ]
+    },
+    "OverseerProposal": {
+        typeId: 5,
+        owner: KernelID.PROPOSAL,
+        baseAddr: 0xE0000,
+        sizeBytes: 16,
+        fields: ["overseerType", "actionType", "targetId", "weight"]
     }
 };
 
