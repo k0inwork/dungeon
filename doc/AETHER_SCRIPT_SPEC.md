@@ -37,11 +37,15 @@ Standard mathematical and bitwise operators are supported and map directly to th
 
 ## 3. AJS Unique Syntax: Structs and Memory
 
-Because AJS runs in a raw memory space, object creation is handled via C-style structs and direct memory addressing.
+Because AJS runs in a raw memory space, standard JavaScript Objects (dynamic, garbage-collected key-value maps) are **strictly forbidden**. Object creation is handled via C-style structs and direct memory addressing.
 
-### A. Structs (Not standard JS)
-AJS introduces a non-standard `struct` keyword used by the transpiler to generate byte-offsets.
+### A. Structs vs. JS Objects
+*   **JS Objects (Forbidden):** `let obj = { x: 10, name: "Goblin" };`. Attempting to use this syntax will cause a transpilation error. You cannot add/remove keys dynamically.
+*   **AJS Structs (Required):** A `struct` defines a rigid, fixed-size memory layout. When you access a struct via `let ent = GridEntity(0);`, you are retrieving a raw 32-bit integer pointer (a memory address) into WebAssembly linear memory. When you assign a property `ent.x = 10`, the transpiler emits raw Forth instructions to calculate the byte-offset and store the value directly at that memory address.
+
+AJS introduces a non-standard `struct` keyword used by the transpiler to generate these byte-offsets:
 ```javascript
+// Defines a 20-byte struct (5 fields * 4 bytes/cell)
 struct GridEntity {
     char,
     color,
@@ -52,7 +56,7 @@ struct GridEntity {
 ```
 
 ### B. Struct Arrays & Virtual Shared Objects (VSO)
-To instantiate an array of structs at a specific memory address:
+You cannot instantiate a loose struct (e.g., `let x = new GridEntity()`). You must allocate a block of raw memory for it, usually as an array:
 ```javascript
 // Array of GridEntity, size 32, starting at memory address 0x90000
 let entities = new Array(GridEntity, 32, 0x90000);

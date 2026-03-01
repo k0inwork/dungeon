@@ -75,16 +75,20 @@ Currently, AJS only reliably supports simple conditions like `if (a < b)`. Compl
 
 ### B. Robust Loop Structures (`for...of`)
 Currently, only `while` and a strictly formatted `for(let i=0; i<N; i++)` are supported, utilizing Forth's rigid `DO ... LOOP`.
-*   **Goal:** Add AST transpilation for `for (let item of arr)` loops to easily iterate over the new Dynamic Arrays.
-*   **Implementation:** The transpiler will map `for...of` into Forth's flexible `BEGIN ... WHILE ... REPEAT` structure:
-    1.  Initialize a hidden index variable to 0.
-    2.  `BEGIN`
-    3.  Check condition: `index < arr.total_length`
-    4.  `WHILE`
-    5.  Assign `item = arr[index]` (Using the `ARRAY_GET_ADDR` word).
-    6.  Execute the loop body.
-    7.  Increment index.
-    8.  `REPEAT`
+*   **Goal:** Add AST transpilation for `for (let item of arr)` loops to iterate over both Fixed and Dynamic Arrays efficiently.
+*   **Implementation:** The transpiler will generate entirely different Forth loops depending on the array's type to guarantee O(N) traversal.
+    1.  **Fixed Arrays (Flat Memory):** The transpiler generates a simple index-offset loop.
+        *   It maintains a `ptr = base_address` and an `end_ptr`.
+        *   `BEGIN ptr end_ptr < WHILE ... ptr item_size +! REPEAT`.
+    2.  **Dynamic Arrays (Chunked Linked-List):** Using `ARRAY_GET_ADDR(index)` for every item is highly inefficient because it re-traverses the linked list from the head every time. Instead, the transpiler generates a specialized, highly optimized chunk-traversing loop.
+        *   The loop maintains `current_chunk_ptr`, `internal_index` (0 to 63), and `items_processed`.
+        *   `BEGIN items_processed total_length < WHILE`
+        *   `item = current_chunk_ptr + metadata_size + (internal_index * item_size)`
+        *   Execute loop body.
+        *   Increment `internal_index` and `items_processed`.
+        *   `IF internal_index == 64 THEN` -> Follow `next_chunk` pointer, update `current_chunk_ptr`, reset `internal_index = 0`.
+        *   `REPEAT`
+        *   *Result:* True O(N) traversal with zero redundant chunk hopping.
 
 ### C. Enhanced Control Flow (`switch`)
 *   **Goal:** Support `switch (expr) { case A: ... }`.
