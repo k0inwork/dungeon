@@ -94,6 +94,15 @@ Currently, only `while` and a strictly formatted `for(let i=0; i<N; i++)` are su
 *   **Goal:** Support `switch (expr) { case A: ... }`.
 *   **Implementation:** Map `switch` statements to a series of Forth `OVER = IF ... ELSE ... THEN` blocks or use an execution token array (jump table) for large switch cases (O(1) dispatching). This is vital for the `BattleKernel` dispatch table.
 
+### D. Closure Support (Architectural Decision: UNSUPPORTED)
+*   **Question:** Could we support Closures by fixing the local variable stack position of the enclosing variable and transpiling it correctly?
+*   **The Problem:** In Forth (and C), local variables live on the Return Stack. If Function A declares `let x = 10`, creates a closure Function B that uses `x`, and then Function A returns, the stack frame for `x` is destroyed. If Function B is executed later (e.g., as an event callback), it will read garbage memory because the original stack position of `x` is gone.
+*   **The Theoretical Solution:** To make closures work, the AetherTranspiler would need to perform **Closure Hoisting / Environment Allocation**.
+    1.  When the transpiler detects a closure, it must automatically allocate a hidden `Environment Struct` on the **Heap** (using our new Chunked Allocation strategy).
+    2.  It must copy `x` from the stack into this Heap Environment.
+    3.  The closure function (Function B) is transpiled to accept a hidden pointer to this Heap Environment as its first argument.
+*   **Conclusion:** While technically possible, this adds massive complexity to the transpiler and introduces hidden heap allocations that the developer (or LLM) cannot predict, violating AJS's core philosophy of deterministic, high-performance, predictable memory layouts. Therefore, **Closures will remain officially unsupported in AJS**. Developers and LLMs must use Global Structs, Arrays, or VSOs for state sharing across callbacks.
+
 ### C. First-Class Array Abstractions (Chunked Linked-List Allocation)
 Currently, arrays in AJS are strict, manually allocated, fixed-size contiguous memory blocks (e.g., `new Uint32Array(0x40000)`). While contiguous memory is perfect for dense maps (like VRAM or Physics Grids), dynamic lists (like an entity's status effects) suffer heavily from memory fragmentation in WebAssembly if we try to use standard `malloc/realloc`.
 
