@@ -21,6 +21,10 @@ Instead of a flat topology of kernels, we conceptualize a strict hierarchy and c
     *   *Role:* These act as encyclopedias of behavior, stats, and innate reactions. They answer the fundamental question: *"What does it mean to be a Goblin in this specific situation?"*
     *   *Note:* While initially conceptualized for PCs, **NPCs can (and eventually will) also possess Race, Class, and Origin definitions**. A generic "Goblin" NPC is fundamentally an entity guided by the "Goblin Race Overseer".
 
+*   **Narrative / Quest Overseers** (The Dynamic State)
+    *   *Examples:* The "Stolen Chalice" Quest Overseer, The "Defend the Gate" Scenario Overseer.
+    *   *Role:* Unlike Definitional Overseers, these are dynamically spawned when a quest begins and destroyed when it ends. They track narrative state (e.g., "Has the player found the key?") and inject highly prioritized, stateful behavior modifications specifically to the NPCs bound to their narrative.
+
 ---
 
 ## 2. Extending Transport Capabilities on Global Named Channels
@@ -43,38 +47,42 @@ Rather than abandoning the highly efficient 24-byte bus, we extend these specifi
 
 ---
 
-## 3. Multi-Overseer Query and Aggregation
+## 3. PC vs. NPC Usecases: Structural and Behavioral Population
 
-The true power of this evolved architecture lies in how an **Entity Overseer** (like the Hive) interacts with the **Definitional Overseers** via these extended channels.
+The extended channels serve two distinct paradigms for acquiring skills and behaviors, depending on whether the entity is a **Player (PC)** managed by the Player Overseer or a **Non-Player Character (NPC)** managed by the Hive Overseer.
 
-### 3.1 The Broadcast Query
+The core difference lies not in *what* they receive (both receive structural upgrades and logic pointers), but *when* and *why* they receive it.
 
-When a Hive Overseer needs to determine an entity's next action, it does not hardcode the logic. Instead, it broadcasts a query on a global named channel, such as the `Behavior` channel.
+### 3.1 The Player Usecase: Dynamic Narrative Progression
 
-*Example Query:*
-> "Entity 402 (Orc Pyromancer) is surrounded by water. What are their innate impulses?"
+For PCs, structural progression is highly dynamic and triggers during active gameplay. When the Player Overseer broadcasts a significant narrative action (e.g., "Player completed the Trial of Fire" or "Player betrayed the Elven King"), higher-order Overseers (like a Deity Overseer, Class Overseer, or Faction Overseer) listen to the event.
 
-### 3.2 Simultaneous Definitional Responses
+Instead of just updating their internal state, these Overseers can **push permanent or semi-permanent structural upgrades** back to the Player Overseer via the extended channels.
 
-Because the channel is global, multiple Definitional Overseers can "hear" the query and respond simultaneously with their specific domain logic:
+*   *Example:* The Fire God Overseer hears the trial completion broadcast. It responds by transmitting a VSO pointer containing the executable `CAST_FIREBALL` logic snippet directly to the Player Overseer, permanently appending it to the player's spellbook.
 
-1.  **Race Overseer (Orc):** "I am an Orc. I must maintain aggression. I propose action: `MELEE_CHARGE`."
-2.  **Class Overseer (Pyromancer):** "I am a Pyromancer. Water dampens my core abilities. I propose action: `FLEE_TO_DRY_LAND` or snippet `CAST_STEAM_CLOAK`."
-3.  **Origin Overseer (Cave Dweller):** "I fear open skies but I am currently underground. I propose a neutral modifier to morale."
+### 3.2 The NPC Usecase: Pre-Level Contextual Population
 
-These responses are sent back over the extended channel, utilizing chunked arrays or VSO pointers to transmit the full scope of their proposed behaviors.
+Conversely, the Hive Overseer does not query the global behavior channels tick-by-tick for every tactical decision. Instead, the Hive Overseer gathers and populates its NPCs' behaviors **during level load, initialization, or entity spawn.**
 
-### 3.3 The Hive Aggregator
+Before the level even begins, the Hive Overseer broadcasts a query about the NPCs it is preparing to manage, including the context of the specific Terrain Overseer (e.g., "I am loading 10 Orc Pyromancers into an Aquatic Level").
 
-The Hive Overseer acts as the final judge. It gathers the responses from the various definitional Overseers and combines them.
+The Definitional (Race/Class) and Narrative (Quest) Overseers listen and respond by streaming relevant skills, chunked action arrays, and VSO pointers back to the Hive Overseer.
 
-Crucially, **every Hive Overseer can interpret these answers differently based on the active Terrain Overseer.**
+*   *Example:* The Pyromancer Class Overseer receives the load query. Because the level context is aquatic, it intentionally *withholds* the `CAST_FIREBALL` VSO pointer, instead sending the `CAST_STEAM_CLOAK` snippet and an overriding `FLEE_TO_DRY_LAND` instinct array.
+*   *Example:* A Quest Overseer recognizes one of the loading NPCs as its designated "Keyholder." It sends a highly-weighted `DEFEND_KEY` behavioral array to the Hive Overseer specifically for that NPC ID.
 
-*   If the Terrain Overseer (Platform) reports that jumping is disabled, the Hive Overseer will automatically filter out the `LEAP_ATTACK` proposed by the Class Overseer.
-*   If the entity is in a Grid Kernel environment, the Hive Overseer synthesizes the conflicting desires (Orc's `MELEE_CHARGE` vs. Pyromancer's `FLEE_TO_DRY_LAND`) using its own internal weighting algorithm, ultimately deciding the entity's single action for that tick.
+---
 
-### 3.4 Summary of Benefits
+## 4. The Hive Aggregator & Weighting
 
-1.  **Extreme Decoupling:** Hive Kernels become pure aggregators and executors; they no longer need to know the specific logic of every race and class in the game.
-2.  **Memory Efficiency:** Complex behavior trees are stored exactly once in the Definitional Overseers, rather than duplicated across hundreds of entities in the Hive Kernel's memory.
-3.  **Emergent Gameplay:** By allowing multiple independent Overseers (Race, Class, Origin) to simultaneously suggest behaviors, entities will exhibit deep, complex, and sometimes delightfully contradictory actions without the need for monolithic AI scripts.
+Once the level begins, the Hive Overseer operates completely decoupled. It acts as the final judge, actively running the logic and snippets it acquired during the initialization phase using its internal weighting algorithm.
+
+*   **Contextual Weighting:** Narrative/Quest behaviors (like `DEFEND_KEY`) carry a significantly higher weight than standard Definitional responses. If a Quest Overseer provided a "Defend" array during load, the NPC will generally suppress its default racial desire to wander or sleep.
+*   **Dynamic Synthesis:** However, the weight is not absolute. If the Water Elemental Race Overseer provided a critical `FLEE_FIRE` instinct during load, the Hive Overseer will dynamically synthesize conflicts during active gameplay. The existential directive to flee fire might override the quest directive to defend the key if a fire hazard appears.
+
+### 4.1 Summary of Benefits
+
+1.  **Extreme Decoupling:** Hive Overseers become pure aggregators and executors; they no longer need to know the specific logic of every race and class in the game, nor do they rely on constant network chatter during active gameplay.
+2.  **Context-Aware Initialization & Regional Variants:** NPCs are deeply rooted in their environment because their skills and behaviors are filtered and populated based on the specific level context *before* they spawn. This allows for emergent "Regional Variants" without extra code—a standard Goblin spawning in a Volcano level might be granted a `CAST_SMALL_FIREBALL` snippet directly from the Terrain/Regional Overseer during initialization, naturally differentiating it from a Forest Goblin.
+3.  **Emergent Gameplay:** By allowing multiple independent Overseers (Race, Class, Origin, and Quests) to simultaneously suggest behavior arrays during load, entities will exhibit deep, complex, and sometimes delightfully contradictory actions (e.g., a cowardly goblin trying to fulfill a brave quest objective) without the need for monolithic AI scripts.
