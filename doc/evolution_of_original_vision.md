@@ -124,22 +124,19 @@ Crucially, because the `OverseerProposal` structs live in a foreign kernel, the 
 
 ## 6. Critical Analysis & Refinements
 
-While the theoretical blueprint above is powerful, a critical evaluation against Aethelgard's strict WAForth constraints reveals several architectural risks that must be mitigated before implementation:
+While the theoretical blueprint above is powerful, a critical evaluation against Aethelgard's strict WAForth constraints reveals several architectural risks. The initial concept of Overseers "responding dynamically" to queries creates massive bottlenecks. The true solution lies in **Static Initialization**.
 
-### 6.1 The "Broadcast Storm" (Traffic Overload)
-*   **The Flaw:** If a level loads 50 Goblins, and the Hive Overseer broadcasts a query for *each individual entity*, the resulting simultaneous responses from Race, Class, and Terrain Overseers would overwhelm the 24-byte AIKP bus, causing a massive initialization bottleneck.
-*   **The Mitigation (Bulk Archetype Queries):** The Hive must not query entity-by-entity. It must use **Archetype Queries**. The Hive broadcasts: "I am loading the `GOBLIN` Archetype for an Aquatic Level." The Race and Terrain Overseers respond exactly once. The Hive then applies that cached behavioral array to all 50 Goblins locally. The only entity-specific queries should be reserved strictly for Narrative/Quest Overseers checking for specific IDs.
+### 6.1 The Traffic Problem & Static VSO Initialization
+*   **The Flaw:** If a Hive Overseer broadcasts a query for 50 entities during level load, and 4 Overseers respond dynamically by writing to the VSO over the 24-byte AIKP bus, it causes a "Broadcast Storm," massive network lag, and memory write-contention (race conditions).
+*   **The Mitigation (Static Proposals):** Definitional Overseers (Race, Class, Terrain) **do not write dynamically** in response to Hive queries. Instead, they fill the `ProposalKernel`'s VSO memory space *at game startup*. Their proposals are mostly static (e.g., "A Volcano always grants a small fireball"). When the Hive Kernel loads a level, it simply *reads* from this already-populated VSO database. Because reading via `JS_SYNC_OBJECT` does not consume the AIKP bus, the Hive can rapidly query proposals entity-by-entity with zero traffic overhead.
 
-### 6.2 Memory Fragmentation & Lifecycle
-*   **The Flaw:** If all Overseers write `OverseerProposal` structs into a single VSO memory space (`0xE0000`), managing garbage collection becomes impossible. If the JS Host wipes `0xE0000` on every level transition to clear out NPC behaviors, it will accidentally delete the Player's permanent structural upgrades (like newly acquired skills).
-*   **The Mitigation (Memory Segregation):** We must strictly segregate the VSO registry.
-    *   `TransientProposals`: Wiped on every level load. Used by the Hive Overseer to populate NPC arrays.
-    *   `PermanentProposals`: Never wiped. Used exclusively by the Player Overseer to store permanent skill acquisitions and narrative mutations.
+### 6.2 Entity-Specific Routing vs. Archetypes
+*   **The Flaw:** An earlier idea proposed the Hive querying for generic "Archetypes" (e.g., querying for all "Goblins" at once) to save traffic.
+*   **The Reality:** This breaks Quest/Narrative Overseers. A Quest Overseer does not care about *all* Goblins; it only cares about "Goblin ID 42," who holds the key. Therefore, because we have solved the traffic problem via Static Initialization (6.1), the Hive Overseer is free to safely execute entity-specific proposal checks during level load to ensure precise narrative hooks are applied.
 
-### 6.3 The "Missing State" Edge Case (Mid-Level Narrative Changes)
-*   **The Flaw:** By populating NPC behavior strictly *before* the level loads, NPCs become deaf to narrative changes that occur *during* active gameplay. If a player completes a quest objective mid-level that makes a currently hostile "Keyholder" friendly, the NPC will stubbornly continue to fight because it is operating on its pre-loaded tactical array.
-*   **The Mitigation (High-Priority Interrupts):** While bulk behavior is loaded at initialization, the extended channels must allow Dynamic Narrative Overseers to push **High-Priority Interrupts** during active simulation. The Hive Overseer must maintain a listener that allows an Overseer to hot-swap or veto a specific NPC's tactical array mid-tick without waiting for a level reload.
-
-### 6.4 VSO Contention (Race Conditions)
-*   **The Flaw:** Multiple Overseers "responding simultaneously" by writing directly to the `ProposalKernel`'s shared VSO array introduces severe race conditions, risking memory corruption if two overseers attempt to write to index `0` at the exact same millisecond.
-*   **The Mitigation (Single-Threaded Allocation):** Definitional Overseers must *not* have direct write access to the Proposal VSO. Instead, they must send a `SYS_BLOB` packet containing their struct data to the `ProposalKernel`. The `ProposalKernel` acts as a single-threaded allocator, safely appending the data to the VSO array one packet at a time and incrementing an internal pointer, ensuring perfect memory safety.
+### 6.3 The "Sleeping Kernel" Problem (Persistent Inboxes)
+*   **The Flaw:** The Player Kernel (PC) is constantly active. PC actions (like killing the Goblin King in Level 1) spam the bus, and higher-order Overseers actively react. These Overseers might try to send a targeted packet to an NPC (e.g., a Goblin in Level 2) to change its behavior from "Neutral" to "Hostile".
+*   **The Reality:** Aethelgard uses hibernation. The Hive Kernel for Level 2 is entirely **sleeping/hibernated** while the player is in Level 1. It cannot receive the Overseer's packet dynamically. If the player then travels to Level 2, the Goblin will incorrectly remain Neutral because the packet was dropped.
+*   **The Mitigation (The Persistent Inbox):** Waking up a hibernated kernel just to process a single packet is expensive, and forcing a full re-evaluation of the VSO on every wake-up is inefficient. Instead, we must implement a **Persistent Inbox** at the JS Host layer.
+    *   When an Overseer sends a targeted behavior modification to a sleeping Hive Kernel, the Host Router catches it and stores it in that specific Kernel's Persistent Inbox.
+    *   When the player finally enters Level 2 and the Hive Kernel wakes up, its very first operation is to drain and process its Inbox, updating all relevant NPC states (e.g., "Goblin 402 is now Hostile") *before* running its first tactical simulation cycle.
