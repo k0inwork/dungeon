@@ -92,7 +92,12 @@ Currently, only `while` and a strictly formatted `for(let i=0; i<N; i++)` are su
 
 ### C. Enhanced Control Flow (`switch`)
 *   **Goal:** Support `switch (expr) { case A: ... }`.
-*   **Implementation:** Map `switch` statements to a series of Forth `OVER = IF ... ELSE ... THEN` blocks or use an execution token array (jump table) for large switch cases (O(1) dispatching). This is vital for the `BattleKernel` dispatch table.
+*   **Implementation:** Because standard Forth lacks a native `switch` or `case` structure, the Transpiler must convert the JS `SwitchStatement` AST node into a cascading sequence of `IF / ELSE` blocks.
+    *   The transpiler evaluates the `expr` once and pushes it to the stack.
+    *   For each `case N:`, it duplicates the value (`DUP`), pushes `N`, and compares (`= IF`).
+    *   The structure nests deeply: `DUP N = IF ... ELSE DUP M = IF ... THEN THEN`.
+    *   At the very end of the generated sequence, a single `DROP` is injected to clean up the original evaluated expression from the stack.
+    *   *Alternative:* For very large, dense `switch` statements (like the `BattleKernel` dispatch table), the transpiler could dynamically generate an array of Execution Tokens (XT) and use `CELLS + @ EXECUTE` for O(1) jump table dispatching.
 
 ### D. Closure Support (Architectural Decision: UNSUPPORTED)
 *   **Question:** Could we support Closures by fixing the local variable stack position of the enclosing variable and transpiling it correctly?
