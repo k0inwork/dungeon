@@ -72,6 +72,12 @@ The Definitional (Race/Class) and Narrative (Quest) Overseers listen and respond
 *   *Example:* The Pyromancer Class Overseer receives the load query. Because the level context is aquatic, it intentionally *withholds* the `CAST_FIREBALL` VSO pointer, instead sending the `CAST_STEAM_CLOAK` snippet and an overriding `FLEE_TO_DRY_LAND` instinct array.
 *   *Example:* A Quest Overseer recognizes one of the loading NPCs as its designated "Keyholder." It sends a highly-weighted `DEFEND_KEY` behavioral array to the Hive Overseer specifically for that NPC ID.
 
+**Crucially, the provided logic snippets must be Terrain-Specific.**
+Because Aethelgard supports radically distinct manifolds (e.g., Grid vs. Platform), the exact same spell conceptually must function differently computationally. When the Hive Overseer broadcasts its load query, it specifies the active Terrain Overseer.
+*   If loading into the **Grid Kernel (Orthogonal)**, the returned `CAST_SMALL_FIREBALL` snippet relies on Manhattan distance and discrete tile traversal logic.
+*   If loading into the **Platform Kernel (Gravity)**, the returned snippet is mathematically distinct, relying on fixed-point integer math, edge-to-edge bounding box intersections, and parabolic physics arcs.
+The Definitional/Regional Overseer stores these variations and streams only the appropriate architecture to the Hive Overseer, entirely abstracting the math away from the NPC's core logic.
+
 ---
 
 ## 4. The Hive Aggregator & Weighting
