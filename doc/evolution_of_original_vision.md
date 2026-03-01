@@ -204,3 +204,21 @@ To prove the robustness of this architecture, let us emulate three complex gamep
     3.  On tick 5, the Undead Thief takes 1 damage.
     4.  Taking damage is a global event that inherently breaks the `STEALTH_MODE` state.
 *   **The Result:** The Thief successfully sneaks past the first guard, gets scorched by the holy ground, becomes visible, panics, attempts to re-enter stealth, gets scorched again, and creates a hilarious, systemic loop of failing to sneak through a city that implicitly hates its biology.
+
+---
+
+## 8. Areas for Future Improvement (Known Unknowns)
+
+While the blueprint resolves the major systemic blockers, a few critical "Known Unknowns" remain that will require refinement during actual implementation:
+
+### 8.1 The "Stat vs. Skill" Boundary
+*   **The Critique:** Using the Overseer Proposal pipeline to pass behavioral logic snippets (like `CAST_FIREBALL`) is elegant. However, using the same pipeline to pass flat stat modifiers (e.g., a Race Overseer saying `HP += 5`) is inefficient. If the Hive Kernel has to evaluate complex structs and execute logic snippets just to calculate an NPC's base health during load, initialization will drag.
+*   **Room for Improvement:** The engine needs a distinct, fast-path resolution layer for **Integer Stat Modifiers** that operates separately from the **Behavioral Snippet** pipeline, allowing stats to be cleanly summed via simple math before behavioral logic is even loaded.
+
+### 8.2 The "Schizophrenic NPC" (Thrashing)
+*   **The Critique:** Scenario D (The Polymorphed Keyholder) sounds fun on paper, but mechanically, if the weight of `FLEE` and `DEFEND` are close, the NPC might rapidly alternate between the two behaviors tick-by-tick based on minor distance calculations. The result is an NPC that just vibrates in place and does nothing.
+*   **Room for Improvement:** The Hive Kernel's resolver must implement a concept of **Behavioral Inertia** (or "Commitment"). Once an NPC adopts a high-priority, overriding behavior state, it must lock into that state for a minimum number of ticks (e.g., fleeing for at least 10 ticks) to prevent systemic thrashing.
+
+### 8.3 The Death of the Overseer (Garbage Collection)
+*   **The Critique:** We have defined how static Overseers (Race, Terrain) populate their VSO registries at startup. But Narrative/Quest Overseers are *dynamic*. If a player abandons or fails a quest, that Quest Overseer must be destroyed. If the JS Host simply drops the Overseer object, its static proposals might remain orphaned in the VSO registry memory space.
+*   **Room for Improvement:** The JS Host must enforce a strict **Overseer Teardown Lifecycle**. When a dynamic Overseer dies, it must trigger a deregistration event that cleanly wipes its specific segment of the Distributed VSO Registry, ensuring sleeping Hive Kernels don't wake up and read phantom proposals for quests that no longer exist.
