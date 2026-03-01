@@ -89,14 +89,18 @@ Once the level begins, the Hive Overseer operates completely decoupled. It acts 
 
 ---
 
-## 5. Technical Implementation Blueprint
+## 5. Technical Implementation Blueprint: The Distributed Registry
 
-To realize this vision without breaking Aethelgard's strict AJS/WAForth constraints, we must formalize how these complex behavior proposals are transmitted and evaluated.
+To realize this vision without breaking Aethelgard's strict AJS/WAForth constraints, we must formalize how these complex behavior proposals are transmitted and evaluated. The core philosophical shift is moving away from centralized data storage.
 
-### 5.1 The Proposal VSO Host Kernel
-We will introduce a dedicated `ProposalKernel`. This kernel performs very little active logic; its primary purpose is to act as a **Virtual Shared Object (VSO) Registry** for all active Overseer Proposals.
+### 5.1 The Distributed VSO Architecture (Decentralized Hosts)
+Rather than creating a single, centralized bottleneck (like a master "Database Kernel" or "Proposal Kernel"), we will utilize a **Distributed VSO Registry**.
 
-When a Hive Overseer broadcasts a load query, the responding Definitional and Narrative Overseers write their answers directly into the `ProposalKernel`'s VSO memory space (e.g., base address `0xE0000`).
+In this architecture, **every higher-order Overseer (Race, Quest, Terrain) is a sovereign VSO Host.**
+*   The Orc Race Overseer owns and hosts the memory segment defining Orc behaviors.
+*   The Stolen Chalice Quest Overseer owns and hosts the memory segment defining its quest modifiers.
+
+During game initialization, these Overseers statically populate their own isolated VSO memory spaces. When a Hive Overseer loads a level, it queries the JS Host to sync data from across this decentralized network. This ensures infinite horizontal scalability—adding a new Faction Overseer requires zero changes to core routing logic; it simply registers its own VSO block with the Host.
 
 ### 5.2 The Overseer Proposal Struct
 Because standard JavaScript objects (`{}`) are forbidden in AJS, every proposal must adhere to a strict, flat C-style memory struct. We will define an `OverseerProposal` VSO struct containing:
@@ -128,15 +132,75 @@ While the theoretical blueprint above is powerful, a critical evaluation against
 
 ### 6.1 The Traffic Problem & Static VSO Initialization
 *   **The Flaw:** If a Hive Overseer broadcasts a query for 50 entities during level load, and 4 Overseers respond dynamically by writing to the VSO over the 24-byte AIKP bus, it causes a "Broadcast Storm," massive network lag, and memory write-contention (race conditions).
-*   **The Mitigation (Static Proposals):** Definitional Overseers (Race, Class, Terrain) **do not write dynamically** in response to Hive queries. Instead, they fill the `ProposalKernel`'s VSO memory space *at game startup*. Their proposals are mostly static (e.g., "A Volcano always grants a small fireball"). When the Hive Kernel loads a level, it simply *reads* from this already-populated VSO database. Because reading via `JS_SYNC_OBJECT` does not consume the AIKP bus, the Hive can rapidly query proposals entity-by-entity with zero traffic overhead.
+*   **The Mitigation (Static Proposals):** Definitional Overseers (Race, Class, Terrain) **do not write dynamically** in response to Hive queries. Instead, they fill their own decentralized VSO memory spaces *at game startup*. Their proposals are mostly static (e.g., "A Volcano always grants a small fireball"). When the Hive Kernel loads a level, it simply *reads* from these already-populated VSO databases. Because reading via `JS_SYNC_OBJECT` does not consume the AIKP bus, the Hive can rapidly query proposals entity-by-entity with zero traffic overhead.
 
 ### 6.2 Entity-Specific Routing vs. Archetypes
 *   **The Flaw:** An earlier idea proposed the Hive querying for generic "Archetypes" (e.g., querying for all "Goblins" at once) to save traffic.
 *   **The Reality:** This breaks Quest/Narrative Overseers. A Quest Overseer does not care about *all* Goblins; it only cares about "Goblin ID 42," who holds the key. Therefore, because we have solved the traffic problem via Static Initialization (6.1), the Hive Overseer is free to safely execute entity-specific proposal checks during level load to ensure precise narrative hooks are applied.
 
-### 6.3 Open Challenge: The "Sleeping Kernel" and State Sync
-*   **The Problem:** The Player Kernel (PC) is constantly active. PC actions (like killing the Goblin King in Level 1) trigger higher-order Overseers to change the global narrative state. These Overseers need to update specific NPCs (e.g., "Make Goblin ID 402 in Level 2 Hostile").
-*   **The Constraint:** Aethelgard aggressively hibernates kernels. The Hive Kernel for Level 2 is entirely asleep while the player is in Level 1. It cannot receive packets.
-*   **Failed Mitigation 1 (Persistent Inboxes):** We considered queueing these packets in a "Persistent Inbox" for the sleeping kernel. However, because kernels are asleep, they cannot filter the bus. If the JS Host just shoves every broadcast into every sleeping kernel's inbox "just in case," it will cause infinite memory bloat and crash the engine.
-*   **Failed Mitigation 2 (Global Static Mutation):** We considered having the Quest Overseer simply mutate a "Global NPC VSO Registry". However, Aethelgard currently operates a decentralized model: every Hive Kernel is the isolated host/owner of its own NPC database. There is no Global NPC Directory, meaning the Quest Overseer has no idea *which* sleeping kernel currently holds Goblin ID 402.
-*   **The Road Ahead:** This represents the next major architectural hurdle for the Aethelgard engine. We must explore a middle ground—perhaps implementing a lightweight "Global NPC Location Index" at the JS Host layer that knows exactly which hibernated Kernel ID owns which NPC ID, allowing the Host to route the state-change packet cleanly without waking the kernel or bloating global inboxes.
+### 6.3 Solving the "Sleeping Kernel": The Object-to-Kernel Directory
+*   **The Problem:** The Player Kernel (PC) is constantly active. PC actions (like killing the Goblin King in Level 1) trigger higher-order Overseers to change the global narrative state. These Overseers need to update specific NPCs (e.g., "Make Goblin ID 402 in Level 2 Hostile"). However, the Hive Kernel for Level 2 is hibernated. If the Overseer broadcasts blindly, how do we route the packet without infinitely bloating every sleeping kernel's mailbox?
+*   **The Mitigation (The Global Directory & Targeted Mailboxes):** We must upgrade the Host-level VSO Registry to maintain an **`ObjectID -> KernelID` mapping**.
+    *   Because the JS Host knows which Kernel generated which Entity ID, a Quest Overseer does not need to broadcast. It simply asks the Registry: *"Where is Entity 402?"*
+    *   The Registry returns `KernelID(Level 2)`.
+    *   The Overseer sends a targeted packet directly to the Level 2 Mailbox.
+    *   Because the packet is specifically addressed, the JS Host safely queues it. When the player enters Level 2 and the Hive Kernel wakes up, its very first operation is to drain its targeted Mailbox, perfectly syncing the narrative state before the first tactical tick.
+
+---
+
+## 7. Emulated Scenarios
+
+To prove the robustness of this architecture, let us emulate three complex gameplay scenarios and trace how the Overseer network resolves them.
+
+### Scenario A: The Volcano Goblin (Context-Aware Synergy)
+*   **The Setup:** A standard `Goblin` NPC is spawning into a level governed by the `Volcano` Terrain Overseer.
+*   **The Flow:**
+    1.  At startup, the `Goblin` Race Overseer populates its VSO with standard behaviors (`FLEE_FIRE`, `MELEE_ATTACK`).
+    2.  At startup, the `Volcano` Terrain Overseer populates its VSO with regional modifiers (`GRANT_SKILL: CAST_SMALL_FIREBALL`, `OVERRIDE: IMMUNE_TO_FIRE`).
+    3.  During level load, the Hive Kernel syncs these VSOs.
+    4.  The Hive's internal resolver aggregates the proposals. The Terrain's `IMMUNE_TO_FIRE` override suppresses the Race's innate `FLEE_FIRE` instinct.
+*   **The Result:** Without writing a single line of custom "Volcano Goblin" logic, the system naturally generates a regional variant that wades through lava and casts fireballs, entirely driven by static VSO aggregation.
+
+### Scenario B: The Elven Penalty (Dynamic PC State Mutation)
+*   **The Setup:** The Player (PC) decides to attack a friendly Elf merchant in a Grid Kernel level.
+*   **The Flow:**
+    1.  The Player Kernel broadcasts `CMD_ATTACK (Target: Elf)` on the global bus.
+    2.  The `Elven Faction` Overseer is listening. It detects the transgression.
+    3.  Because the PC is always active, the Faction Overseer immediately pushes a targeted VSO struct (`GRANT_DEBUFF: ELVEN_CURSE`) directly to the Player Kernel.
+    4.  The Player Kernel receives the struct, updating its permanent `PlayerState` VSO.
+*   **The Result:** The PC dynamically receives a structural, permanent penalty derived from narrative actions, entirely decoupled from the Grid Kernel's combat math.
+
+### Scenario C: The Anti-Gravity Knight (Conflict Resolution / Veto)
+*   **The Setup:** A `Knight` NPC (or PC) loads into a highly specialized `Null-Gravity` Platformer level.
+*   **The Flow:**
+    1.  The `Knight` Class Overseer's static VSO proposes granting the `HEAVY_GROUND_SLAM` skill, which relies on rapid downward parabolic physics.
+    2.  The `Null-Gravity` Terrain Overseer's static VSO explicitly broadcasts `BLOCK_SKILL: HEAVY_GROUND_SLAM` (or a blanket block on all heavy physics abilities).
+    3.  During load, the Hive/Player resolver iterates the proposals. It evaluates the `BLOCK_SKILL` action first due to its higher intrinsic priority.
+    4.  The `HEAVY_GROUND_SLAM` proposal is vetoed and discarded from the active behavior array.
+*   **The Result:** The architecture prevents broken physics interactions without the Class Overseer needing to know anything about the Terrain Overseer's mechanics. The Terrain maintains ultimate sovereignty over its physical reality via the Veto mechanism.
+
+### Scenario D: The Polymorphed Keyholder (Identity Crisis)
+*   **The Setup:** NPC 402 is a Goblin, and critically, the "Keyholder" for a major quest. The Player casts a permanent `POLYMORPH: SHEEP` spell on them.
+*   **The Flow:**
+    1.  The Magic Overseer updates the global VSO registry, mutating Entity 402's base Race definition from `GOBLIN` to `SHEEP`.
+    2.  The Hive Kernel recalculates the entity's behavior array on the next tick (or next load).
+    3.  The `Sheep` Race Overseer heavily proposes the `FLEE_EVERYTHING` instinct array.
+    4.  However, the `Quest` Overseer still tracks ID 402 as the Keyholder, proposing the `DEFEND_KEY_TO_DEATH` array with an immensely high narrative weight.
+*   **The Result:** The system generates a wildly emergent, contradictory NPC: a hyper-aggressive, suicidal sheep that attempts to headbutt the player to death in order to protect a key it can no longer even hold.
+
+### Scenario E: The Pacifist in the Blood Moon (Priority Conflict)
+*   **The Setup:** The Player (PC) is a Monk with a strict `VOW_OF_PEACE` subclass. They enter a zone where an Environmental Overseer has triggered a "Blood Moon" event.
+*   **The Flow:**
+    1.  The `Blood Moon` Environmental Overseer proposes a zone-wide behavior override: `FORCE_ACTION: ATTACK_NEAREST_ENTITY`.
+    2.  The `Monk` Class Overseer maintains a static, permanent structural block: `VETO_ACTION: LETHAL_ATTACK`.
+    3.  Because intrinsic definitional rules (Class) generally out-weigh transient environmental rules, the Player's resolver respects the Veto.
+*   **The Result:** The PC is mechanically prevented from attacking, forcing them into a pure survival-evasion loop while every previously neutral NPC in the zone succumbs to the Blood Moon frenzy and swarms them.
+
+### Scenario F: The Undead Thief in the Holy City (Systemic Recursion)
+*   **The Setup:** An `Undead` NPC with the `Thief` class attempts to infiltrate a `Holy City` Grid Level.
+*   **The Flow:**
+    1.  The Hive Kernel calculates the Thief's behavior and successfully activates the `STEALTH_MODE` snippet, altering their glyph to become invisible.
+    2.  However, the `Holy City` Terrain Overseer passively pulses `RADIANT_DAMAGE` every 5 ticks to any entity tagged `UNDEAD`.
+    3.  On tick 5, the Undead Thief takes 1 damage.
+    4.  Taking damage is a global event that inherently breaks the `STEALTH_MODE` state.
+*   **The Result:** The Thief successfully sneaks past the first guard, gets scorched by the holy ground, becomes visible, panics, attempts to re-enter stealth, gets scorched again, and creates a hilarious, systemic loop of failing to sneak through a city that implicitly hates its biology.
