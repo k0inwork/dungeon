@@ -78,6 +78,7 @@ When the LLM acts as the "Architect" to generate or mutate AJS logic, it must di
 *   **Examples:** Race Overseers, Class Overseers, Quest Overseers, Faction Overseers.
 *   **Scope:** Global. These kernels are instantiated **once** for the entire game session.
 *   **LLM Behavior:** By default, the LLM should generate almost all systemic rules, character behaviors, and narrative state changes here. If the LLM invents a new "Vampire" race, it generates a single `Vampire Race Overseer` that hosts the VSO block containing `[OS_RACE, ACT_GRANT_SKILL, BITE_ID, 100]`. Every Vampire entity in the world, regardless of what level they are on, will draw from this single source of truth.
+*   **Cross-Instance Targeting:** Because the JS Host maintains an `ObjectID -> KernelID` VSO mapping, a single Singleton (e.g., a Quest Overseer) can easily manage and target multiple specific NPC IDs that are currently spread across multiple hibernating Hive Instances, directly pushing state changes to their targeted mailboxes.
 
 ### B. Terrain & Entity Overseers (The Instances)
 *   **Examples:** Grid Kernel, Hive Kernel, Platform Kernel.
