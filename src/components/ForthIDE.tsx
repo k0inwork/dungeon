@@ -8,11 +8,8 @@ import { STANDARD_KERNEL_FIRMWARE } from "../kernels/SharedBlocks";
 import { forthService, BusPacket } from "../services/WaForthService";
 import { AetherTranspiler } from "../compiler/AetherTranspiler";
 
-type KernelType = "GRID" | "HIVE" | "PLAYER" | "BATTLE" | "SCRATCH" | "CUSTOM";
-
 export const ForthIDE: React.FC = () => {
   const [mode, setMode] = useState<"ATTACH" | "STARTUP">("ATTACH");
-  const [activeKernelType, setActiveKernelType] = useState<KernelType>("GRID");
   const [attachedInstanceId, setAttachedInstanceId] = useState<string>("");
   const [availableInstances, setAvailableInstances] = useState<string[]>([]);
   
@@ -35,7 +32,7 @@ export const ForthIDE: React.FC = () => {
 
   // Breakpoint Event Listener
   useEffect(() => {
-      let targetId = mode === "ATTACH" ? attachedInstanceId : activeKernelType;
+      let targetId = attachedInstanceId;
       if (!targetId) return;
 
       const proc = forthService.get(targetId);
@@ -44,7 +41,7 @@ export const ForthIDE: React.FC = () => {
       };
       proc.onBreakpoint = handleBP;
       return () => { proc.onBreakpoint = null; };
-  }, [mode, attachedInstanceId, activeKernelType]);
+  }, [mode, attachedInstanceId]);
 
   // Update symbol table when transpiling
   useEffect(() => {
@@ -68,41 +65,45 @@ export const ForthIDE: React.FC = () => {
 
   // Initialize Code
   useEffect(() => {
-    if (mode === "ATTACH" && attachedInstanceId) {
-       // We're attached, we don't load default source unless requested
-       // Realistically, we should try to load the source from the instance if it has it stored.
-       // For now, we'll leave the current code if any, or clear it.
-       return;
+    if (!attachedInstanceId) return;
+
+    // Based on the selected instance ID, infer the type and load the default source code
+    // if the user wants to debug or restart the logic.
+    let baseForth = "";
+    let baseAjs = "";
+
+    if (attachedInstanceId.includes("GRID") || attachedInstanceId.startsWith("10")) {
+        baseForth = GRID_FORTH_SOURCE;
+        baseAjs = GRID_AJS_SOURCE;
+    } else if (attachedInstanceId.includes("HIVE") || attachedInstanceId.startsWith("30")) {
+        baseForth = HIVE_FORTH_SOURCE;
+        baseAjs = HIVE_AJS_SOURCE;
+    } else if (attachedInstanceId.includes("PLAYER") || attachedInstanceId === "2") {
+        baseForth = PLAYER_FORTH_SOURCE;
+        baseAjs = PLAYER_AJS_SOURCE;
+    } else if (attachedInstanceId.includes("BATTLE") || attachedInstanceId.startsWith("40")) {
+        baseForth = BATTLE_FORTH_SOURCE;
+        baseAjs = BATTLE_AJS_SOURCE;
+    } else {
+        baseForth = ": TEST S\" Hello World\" S. ; \nTEST";
+        baseAjs = "// Scratch JS\nLog('Hello from AJS');";
     }
 
-    switch(activeKernelType) {
-        case "GRID": 
-            setForthCode(GRID_FORTH_SOURCE);
-            setAjsCode(GRID_AJS_SOURCE);
-            break;
-        case "HIVE":
-            setForthCode(HIVE_FORTH_SOURCE);
-            setAjsCode(HIVE_AJS_SOURCE);
-            break;
-        case "PLAYER":
-            setForthCode(PLAYER_FORTH_SOURCE);
-            setAjsCode(PLAYER_AJS_SOURCE);
-            break;
-        case "BATTLE":
-            setForthCode(BATTLE_FORTH_SOURCE);
-            setAjsCode(BATTLE_AJS_SOURCE);
-            break;
-        case "SCRATCH": 
-            setForthCode(": TEST S\" Hello World\" S. ; \nTEST");
-            setAjsCode("// Scratch JS\nLog('Hello from AJS');");
-            break;
+    if (mode === "STARTUP") {
+        setForthCode(baseForth);
+        setAjsCode(baseAjs);
+    } else if (mode === "ATTACH") {
+        // Only override code in ATTACH mode if it's currently empty, to avoid wiping unsaved changes
+        if (!forthCode) setForthCode(baseForth);
+        if (!ajsCode) setAjsCode(baseAjs);
     }
+
     setStatus("IDLE");
-  }, [activeKernelType, mode]);
+  }, [attachedInstanceId, mode]);
 
   // Logs
   useEffect(() => {
-      let targetId = mode === "ATTACH" ? attachedInstanceId : activeKernelType;
+      let targetId = attachedInstanceId;
       if (!targetId) return;
 
       const proc = forthService.get(targetId);
@@ -110,7 +111,7 @@ export const ForthIDE: React.FC = () => {
       const handleLog = (msg: string) => setOutput(prev => [...prev, msg].slice(-200));
       proc.addLogListener(handleLog);
       return () => { proc.removeLogListener(handleLog); };
-  }, [activeKernelType, attachedInstanceId, mode]);
+  }, [attachedInstanceId, mode]);
 
   useEffect(() => outputEndRef.current?.scrollIntoView({ behavior: 'smooth' }), [output]);
 
@@ -121,13 +122,20 @@ export const ForthIDE: React.FC = () => {
     // If we are in STARTUP/SWAP mode, we compile to a temporary scratchpad process
     // and then, if applicable, swap it into the running instances of that type.
     const isSwapMode = mode === "STARTUP";
-    const compileId = isSwapMode ? `SCRATCH_${activeKernelType}` : attachedInstanceId;
-    if (!compileId) {
+    if (!attachedInstanceId) {
         setLastError("No target selected");
         setStatus("ERROR");
         return;
     }
 
+    // Determine type for scratch naming
+    let inferredType = "UNKNOWN";
+    if (attachedInstanceId.includes("GRID") || attachedInstanceId.startsWith("10")) inferredType = "GRID";
+    if (attachedInstanceId.includes("PLAYER") || attachedInstanceId === "2") inferredType = "PLAYER";
+    if (attachedInstanceId.includes("HIVE") || attachedInstanceId.startsWith("30")) inferredType = "HIVE";
+    if (attachedInstanceId.includes("BATTLE") || attachedInstanceId.startsWith("40")) inferredType = "BATTLE";
+
+    const compileId = isSwapMode ? `SCRATCH_${inferredType}` : attachedInstanceId;
     const proc = forthService.get(compileId);
     try {
         proc.log("--- REBOOTING KERNEL ---");
@@ -144,7 +152,7 @@ export const ForthIDE: React.FC = () => {
             proc.log("--- TRANSPILING AETHER JS ---");
             // Determine kernel ID for transpiler (rough guess based on type)
             let kid = 0;
-            const checkType = isSwapMode ? activeKernelType : attachedInstanceId;
+            const checkType = attachedInstanceId;
             if (checkType.includes("GRID") || checkType.startsWith("10")) kid = 1;
             if (checkType.includes("PLAYER") || checkType === "2") kid = 2;
             if (checkType.includes("HIVE") || checkType.startsWith("30")) kid = 3;
@@ -165,15 +173,15 @@ export const ForthIDE: React.FC = () => {
         proc.run(sourceToRun);
 
         // 3. Swap Logic (If in STARTUP mode)
-        if (isSwapMode && activeKernelType !== "SCRATCH") {
+        if (isSwapMode && inferredType !== "UNKNOWN") {
              proc.log(`--- SWAPPING LOGIC TO ACTIVE INSTANCES ---`);
              for (const [id, targetProc] of forthService.processes.entries()) {
-                 // Swap if ID matches the type pattern
+                 // Swap if ID matches the inferred type pattern
                  let match = false;
-                 if (activeKernelType === "GRID" && id.startsWith("10")) match = true;
-                 if (activeKernelType === "HIVE" && id.startsWith("30")) match = true;
-                 if (activeKernelType === "BATTLE" && id.startsWith("40")) match = true;
-                 if (activeKernelType === "PLAYER" && (id === "PLAYER" || id === "2")) match = true;
+                 if (inferredType === "GRID" && id.startsWith("10")) match = true;
+                 if (inferredType === "HIVE" && id.startsWith("30")) match = true;
+                 if (inferredType === "BATTLE" && id.startsWith("40")) match = true;
+                 if (inferredType === "PLAYER" && (id === "PLAYER" || id === "2")) match = true;
 
                  if (match) {
                      proc.log(`Swapping ${id}...`);
@@ -195,7 +203,7 @@ export const ForthIDE: React.FC = () => {
   const handleReplSubmit = (e: React.FormEvent) => {
       e.preventDefault();
       if (!replInput.trim()) return;
-      const targetId = mode === "ATTACH" ? attachedInstanceId : activeKernelType;
+      const targetId = attachedInstanceId;
       if (!targetId) return;
 
       const proc = forthService.get(targetId);
@@ -244,37 +252,25 @@ export const ForthIDE: React.FC = () => {
             </div>
         </div>
 
-        {/* Dynamic Context Bar based on mode */}
+        {/* Dynamic Context Bar */}
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center', background: '#222', padding: '5px', borderRadius: '3px' }}>
-            {mode === "ATTACH" ? (
-                <>
-                    <span style={{ fontSize: '0.9em', color: '#aaa' }}>Target Instance:</span>
-                    <select
-                        value={attachedInstanceId}
-                        onChange={(e) => setAttachedInstanceId(e.target.value)}
-                        style={{ background: '#000', color: '#0f0', border: '1px solid #444', padding: '3px' }}
-                    >
-                        <option value="">-- Select Kernel --</option>
-                        {availableInstances.map(inst => (
-                            <option key={inst} value={inst}>{inst}</option>
-                        ))}
-                    </select>
-                </>
-            ) : (
-                <>
-                    <span style={{ fontSize: '0.9em', color: '#aaa' }}>Base Kernel Logic:</span>
-                    <select
-                        value={activeKernelType}
-                        onChange={(e) => setActiveKernelType(e.target.value as KernelType)}
-                        style={{ background: '#000', color: '#0f0', border: '1px solid #444', padding: '3px' }}
-                    >
-                        <option value="GRID">GRID</option>
-                        <option value="HIVE">HIVE</option>
-                        <option value="PLAYER">PLAYER</option>
-                        <option value="BATTLE">BATTLE</option>
-                        <option value="SCRATCH">SCRATCH (Isolated)</option>
-                    </select>
-                </>
+            <span style={{ fontSize: '0.9em', color: '#aaa' }}>
+                {mode === "ATTACH" ? "Target Instance:" : "Base Kernel Logic:"}
+            </span>
+            <select
+                value={attachedInstanceId}
+                onChange={(e) => setAttachedInstanceId(e.target.value)}
+                style={{ background: '#000', color: '#0f0', border: '1px solid #444', padding: '3px' }}
+            >
+                <option value="">-- Select Active Kernel --</option>
+                {availableInstances.map(inst => (
+                    <option key={inst} value={inst}>{inst}</option>
+                ))}
+            </select>
+            {mode === "STARTUP" && attachedInstanceId && (
+                <span style={{ fontSize: '0.8em', color: '#f55' }}>
+                    * Compiling will swap the logic of all {attachedInstanceId.startsWith("10") || attachedInstanceId.includes("GRID") ? "GRID" : attachedInstanceId.startsWith("30") || attachedInstanceId.includes("HIVE") ? "HIVE" : attachedInstanceId.startsWith("40") || attachedInstanceId.includes("BATTLE") ? "BATTLE" : attachedInstanceId === "2" || attachedInstanceId.includes("PLAYER") ? "PLAYER" : "UNKNOWN"} instances.
+                </span>
             )}
         </div>
       </div>
