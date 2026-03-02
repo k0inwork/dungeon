@@ -138,6 +138,23 @@ export class ForthProcess {
         }
     });
 
+    // : JS_TRACE ( line -- ) S" JS_TRACE" SCALL ;
+    this.forth.bind("JS_TRACE", (stack: any) => {
+        const line = stack.pop();
+        this.log(`[TRACE] Executing line ${line}`);
+    });
+
+    // : JS_ASSERT_STACK ( depth -- ) S" JS_ASSERT_STACK" SCALL ;
+    this.forth.bind("JS_ASSERT_STACK", (stack: any) => {
+        const expectedDepth = stack.pop();
+        // Adjust for the depth argument itself having been popped
+        const actualDepth = stack.length;
+        if (actualDepth !== expectedDepth) {
+            this.log(`[ASSERT_STACK] Failed! Expected ${expectedDepth}, got ${actualDepth}`);
+            console.error(`[${this.id}][ASSERT_STACK] Failed! Expected ${expectedDepth}, got ${actualDepth}`);
+        }
+    });
+
     // : JS_REGISTER_VSO ( addr typeId sizeBytes -- ) S" JS_REGISTER_VSO" SCALL ;
     this.forth.bind("JS_REGISTER_VSO", (stack: any) => {
         const sizeBytes = stack.pop();

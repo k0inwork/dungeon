@@ -14,6 +14,10 @@ export const BLOCK_HOST_BINDINGS = `
 : JS_REGISTER_VSO ( addr typeId sizeBytes -- ) S" JS_REGISTER_VSO" SCALL ;
 : JS_SYNC_OBJECT ( id typeId -- ptr ) S" JS_SYNC_OBJECT" SCALL ;
 : JS_ASSERT ( actual expected -- ) S" JS_ASSERT" SCALL ;
+: JS_TRACE ( line -- )     S" JS_TRACE" SCALL ;
+: JS_ASSERT_STACK ( depth -- ) S" JS_ASSERT_STACK" SCALL ;
+
+1004 CONSTANT DEBUG_MODE_PTR
 `;
 
 export const BLOCK_CORE_POLYFILLS = `
@@ -79,6 +83,14 @@ HEX
 7FFFF CONSTANT STR_BUF_END
 D0000 CONSTANT TEMP_VSO_BUFFER
 DECIMAL
+
+( --- DYNAMIC ALLOCATOR MEMORY MAP --- )
+HEX
+100000 CONSTANT HEAP_START
+200000 CONSTANT HEAP_END
+DECIMAL
+64 CONSTANT CHUNK_CAPACITY_BYTES
+16 CONSTANT CHUNK_CAPACITY_CELLS
 
 ${generateForthProtocolBlock()}
 `;
@@ -275,6 +287,97 @@ export const BLOCK_STANDARD_INBOX = `
 ;
 `;
 
+export const BLOCK_MEMORY_ALLOCATOR = `
+( --- GLOBAL FREE-LIST ALLOCATOR --- )
+VARIABLE FREE_CHUNK_HEAD
+VARIABLE HEAP_INITIALIZED
+
+( Initialize the Heap - split into chunks )
+: INIT_HEAP
+  HEAP_INITIALIZED @ IF EXIT THEN
+  1 HEAP_INITIALIZED !
+  HEAP_START FREE_CHUNK_HEAD !
+  HEAP_START
+  BEGIN
+    DUP CHUNK_CAPACITY_BYTES + HEAP_END < WHILE
+    DUP CHUNK_CAPACITY_BYTES + ( next_chunk_addr )
+    OVER ! ( write next_chunk_addr into current chunk's 1st cell )
+    CHUNK_CAPACITY_BYTES +
+  REPEAT
+  0 SWAP ! ( tail chunk points to 0 )
+;
+
+( Allocate 1 Chunk: returns addr )
+: ALLOC_CHUNK
+  FREE_CHUNK_HEAD @ DUP 0= IF
+    ( OUT OF MEMORY )
+    JS_ERR DROP 0 EXIT
+  THEN
+  DUP @ FREE_CHUNK_HEAD ! ( Pop from free list )
+  0 OVER ! ( Clear next_ptr just in case )
+;
+
+( Free 1 Chunk )
+: FREE_CHUNK ( addr -- )
+  FREE_CHUNK_HEAD @ OVER ! ( Set chunk.next = head )
+  FREE_CHUNK_HEAD ! ( head = chunk )
+;
+
+( Free a Linked-List of Chunks )
+: FREE_CHUNKS ( head tail -- )
+  ( tail.next = FREE_CHUNK_HEAD )
+  FREE_CHUNK_HEAD @ OVER !
+  DROP ( DROP old tail )
+  ( FREE_CHUNK_HEAD = head )
+  FREE_CHUNK_HEAD !
+;
+
+( Fat Pointer Structure )
+( struct ArrayFatPtr { head: addr, tail: addr, length: cell } )
+( length is stored inside the Fat Ptr itself or head chunk, let's keep it simple: )
+( Head chunk cell 0: next_chunk )
+( Data starts at cell 1 )
+
+( Calculate address of array element i )
+( Stack: head_ptr index -- addr )
+: ARRAY_GET_ADDR
+  ( Each chunk has 1 cell for next_ptr, 15 cells for data )
+  ( index / 15 = chunk_hops )
+  ( index % 15 = cell_offset )
+  DUP 15 / >R ( save chunk_hops )
+  15 MOD 1+ CELLS ( calculate byte offset in chunk: skip next_ptr )
+  SWAP
+  ( traverse chunks )
+  R>
+  ( Better to use BEGIN WHILE instead of ?DO because WAForth doesn't support ?DO natively or acts weirdly. )
+  ( Stack: offset current_chunk target_hops )
+  0
+  ( Stack: offset current_chunk target_hops current_hops )
+  BEGIN
+    2DUP >
+  WHILE
+    ROT @ -ROT ( current_chunk = current_chunk.next )
+    ROT DUP 0= IF
+      ( OOB )
+      JS_ERR
+    THEN
+    -ROT
+    1 +
+  REPEAT
+  2DROP ( drop target_hops, current_hops )
+  + ( addr + offset )
+;
+
+( String Append - very basic string implementation )
+: STR_CONCAT
+  ( TODO )
+;
+
+: STR_CMP
+  ( TODO )
+;
+`;
+
 // --- UNIFIED FIRMWARE PACKAGE ---
 // Inject this into every kernel to ensure standard library availability.
 export const STANDARD_KERNEL_FIRMWARE = [
@@ -285,5 +388,6 @@ export const STANDARD_KERNEL_FIRMWARE = [
   BLOCK_MSG_REGISTERS,
   BLOCK_STRING_PRIMITIVES,
   BLOCK_STRING_IO,
-  BLOCK_BUS_UTILS
+  BLOCK_BUS_UTILS,
+  BLOCK_MEMORY_ALLOCATOR
 ];

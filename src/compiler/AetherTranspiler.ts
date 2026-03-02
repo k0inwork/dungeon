@@ -6,6 +6,7 @@ import { forthService } from "../services/WaForthService";
 // --- TYPES ---
 interface ASTNode {
   type: string;
+  loc?: any;
   [key: string]: any;
 }
 
@@ -61,6 +62,7 @@ export class AetherTranspiler {
   private static localStructs: Set<string> = new Set();
   private static functionReturnTypes: Map<string, string> = new Map();
   private static channelSubscriptions: Map<number, ASTNode> = new Map();
+  private static debugMode: boolean = false;
 
   // Shared across transpile() calls for different kernels
   private static globalExportRegistry: Map<string, { owner: number, varName: string, typeId: number, sizeBytes: number, fields: Map<string, number> }> = new Map();
@@ -105,7 +107,8 @@ export class AetherTranspiler {
       });
   }
 
-  static transpile(jsCode: string, kernelId: number = 0): string {
+  static transpile(jsCode: string, kernelId: number = 0, debugMode: boolean = false): string {
+    this.debugMode = debugMode;
     // Clear local state but keep VSO definitions
     this.structs = new Map();
     this.globalFieldOffsets = new Map();
@@ -138,7 +141,7 @@ export class AetherTranspiler {
     const processedCode = this.extractStructs(jsCode);
 
     try {
-      const ast = acorn.parse(processedCode, { ecmaVersion: 2020 });
+      const ast = acorn.parse(processedCode, { ecmaVersion: 2020, locations: true });
       this.emitStructs();
       this.analyzeScopes(ast as ASTNode);
       this.emitGlobals();
@@ -421,6 +424,9 @@ export class AetherTranspiler {
                     }
                     scope.varInits.set(name, decl.init);
                 }
+            } else if (decl.init.type === "ArrayExpression") {
+                this.varTypes.set(fullName, `DynamicArray`);
+                scope.varInits.set(name, decl.init);
             }
         }
       });
@@ -444,6 +450,9 @@ export class AetherTranspiler {
     // 0. Channel Initialization Flag
     this.emit("VARIABLE CHANNELS_INITED");
     this.emit("0 CHANNELS_INITED !");
+
+    // 0.1 Initialize Heap
+    this.emit("INIT_HEAP");
 
     // 1. Emit simple constants first
     this.globalConsts.forEach((init, rawName) => {
@@ -549,6 +558,15 @@ export class AetherTranspiler {
   }
 
   // --- PASS 2: COMPILATION ---
+  private static emitTrace(node: ASTNode) {
+      if (!this.debugMode) return;
+      if (node.loc && node.loc.start && node.loc.start.line) {
+          const line = node.loc.start.line;
+          this.emit(`  ( -- Line ${line} -- )`);
+          this.emit(`  DEBUG_MODE_PTR @ IF ${line} JS_TRACE THEN`);
+      }
+  }
+
   private static compileNode(node: ASTNode) {
     switch (node.type) {
       case "Program":
@@ -582,9 +600,15 @@ export class AetherTranspiler {
 
       case "BlockStatement":
         node.body.forEach((n: any) => this.compileNode(n));
+
+        // GC for DynamicArrays at end of block
+        if (this.currentScope && node.body.every((n: any) => n.type !== "ReturnStatement")) {
+            this.emitGCForScope(false);
+        }
         break;
 
       case "VariableDeclaration":
+        this.emitTrace(node);
         node.declarations.forEach((decl: any) => {
            if (decl.init) {
                const varName = this.resolveVar(decl.id.name);
@@ -596,22 +620,80 @@ export class AetherTranspiler {
                if (this.isStructArray(decl.id.name)) {
                    return;
                }
-               this.compileNode(decl.init);
-               this.emit(`  ${varName} !`);
 
-               const rhsType = this.inferType(decl.init);
-               if (rhsType) {
-                   this.varTypes.set(varName, rhsType);
+               if (decl.init.type === "ArrayExpression") {
+                   // Dynamic Array Allocation
+                   // Create fat pointer struct in memory: {head, tail, len}
+                   // Wait, we can just allocate 3 cells using ALLOC_CHUNK
+                   // and use it to hold the fat pointer itself.
+                   this.emit(`  ALLOC_CHUNK DUP ${varName} !`); // Head chunk will hold the pointer info
+                   // First cell (0): Head of list
+                   // Second cell (4): Tail of list
+                   // Third cell (8): Length
+                   this.emit(`  ALLOC_CHUNK OVER !`); // Allocate first chunk, set as head
+                   this.emit(`  DUP @ OVER 4 + !`); // Tail = Head
+                   this.emit(`  0 OVER 8 + !`); // Len = 0
+                   this.emit(`  DROP`);
+
+                   decl.init.elements.forEach((el: any) => {
+                       // arr.push(el) equivalent
+                       this.compileNode(el);
+                       // Stack: [val]
+
+                       this.emit(`  ${varName} @`);
+                       // Stack: [val, fat_ptr]
+
+                       this.emit(`  ( -- DynamicArray PUSH -- )`);
+                       this.emit(`  DUP 8 + @`);
+                       // Stack: [val, fat_ptr, len]
+
+                       this.emit(`  DUP 15 MOD 0= OVER 0> AND IF`);
+                       // Need new chunk
+                       this.emit(`    ALLOC_CHUNK`); // [val, fat_ptr, len, new_chunk]
+                       this.emit(`    DUP 3 PICK 4 + @ !`); // [val, fat_ptr, len, new_chunk] -> old_tail.next = new_chunk
+                       this.emit(`    2 PICK 4 + !`); // [val, fat_ptr, len] -> fat_ptr.tail = new_chunk
+                       this.emit(`  THEN`);
+
+                     // Stack: [val, fat_ptr, len]
+                     this.emit(`  15 MOD 1+ CELLS`); // [val, fat_ptr, offset]
+                     this.emit(`  OVER 4 + @ +`);   // [val, fat_ptr, target_addr]
+
+                     // Stack: [val, fat_ptr, target_addr]
+                     // we want to store `val` at `target_addr`
+                     // ROT -> [fat_ptr, target_addr, val]
+                     // SWAP -> [fat_ptr, val, target_addr]
+                     // ! -> stores val at target_addr, leaves [fat_ptr]
+                     this.emit(`  ROT SWAP !`);     // target_addr ! val, leaves [fat_ptr]
+
+                     // We need to increment len
+                     // Stack: [fat_ptr]
+                     this.emit(`  1 SWAP 8 + +!`);  // fat_ptr.len += 1
+                   });
+
+                   this.varTypes.set(varName, "DynamicArray");
+               } else {
+                   this.compileNode(decl.init);
+                   this.emit(`  ${varName} !`);
+
+                   const rhsType = this.inferType(decl.init);
+                   if (rhsType) {
+                       this.varTypes.set(varName, rhsType);
+                   }
                }
            }
         });
         break;
 
       case "ExpressionStatement":
+        this.emitTrace(node);
         this.compileNode(node.expression);
+        if (this.debugMode) {
+           this.emit(`  DEBUG_MODE_PTR @ IF DEPTH JS_ASSERT_STACK THEN`);
+        }
         break;
       
       case "WhileStatement":
+        this.emitTrace(node);
         this.emit(`  BEGIN`);
         this.compileNode(node.test);
         this.emit(`  WHILE`);
@@ -620,43 +702,81 @@ export class AetherTranspiler {
         break;
 
       case "ForStatement":
-        let loopVarName = "";
-        let isSupported = false;
-
-        if (node.init && node.init.type === 'VariableDeclaration' && node.init.declarations.length === 1) {
-            loopVarName = node.init.declarations[0].id.name;
-            const startVal = node.init.declarations[0].init;
-            
-            if (node.test && node.test.type === 'BinaryExpression' && node.test.operator === '<' && node.test.left.name === loopVarName) {
-                 const endVal = node.test.right;
-
-                 if (node.update && node.update.type === 'UpdateExpression' && node.update.operator === '++' && node.update.argument.name === loopVarName) {
-                     isSupported = true;
-                     this.compileNode(endVal);   // Limit
-                     this.compileNode(startVal); // Start
-                     this.emit(`  DO`);
-                     
-                     this.loopVars.push(loopVarName.toUpperCase());
-                     this.compileNode(node.body);
-                     this.loopVars.pop();
-                     
-                     this.emit(`  LOOP`);
-                 }
-            }
+        this.emitTrace(node);
+        // Generic For Loop mapped to BEGIN .. WHILE .. REPEAT
+        if (node.init) {
+            this.compileNode(node.init);
         }
 
-        if (!isSupported) {
-            this.emit(`  ( ERROR: Only simple 'for(let i=0; i<N; i++)' loops supported )`);
+        this.emit(`  BEGIN`);
+
+        if (node.test) {
+            this.compileNode(node.test);
+            this.emit(`  WHILE`);
+        }
+
+        this.compileNode(node.body);
+
+        if (node.update) {
+            this.compileNode(node.update);
+            // update usually leaves a value or just evaluates.
+            // In AJS, update is usually assignment or update expression which handles drop internally or we handle it if it leaves a value?
+            // Actually, UpdateExpression (++ / -- / +=) generates `+!` which leaves NO value. So we are good.
+        }
+
+        this.emit(`  REPEAT`);
+        break;
+
+      case "ForOfStatement":
+        this.emitTrace(node);
+        // for (let item of arr)
+        if (node.left.type === 'VariableDeclaration' && node.left.declarations.length === 1 && node.right.type === 'Identifier') {
+            const itemName = node.left.declarations[0].id.name;
+            const itemVar = this.resolveVar(itemName);
+            const arrName = this.resolveVar(node.right.name);
+            
+            // Check if Dynamic Array
+            if (this.varTypes.get(arrName) === "DynamicArray") {
+                // Initialize loop vars
+                // We need to track: items_processed, total_length, current_chunk_ptr, internal_index
+                // Using locals for this to keep stack clean and avoid DUP/ROT hell
+                this.emit(`  ( -- ForOf DynamicArray -- )`);
+                this.emit(`  ${arrName} @ 8 + @ ( Limit )`);
+                this.emit(`  0 ( Index )`);
+                this.emit(`  BEGIN 2DUP > WHILE`);
+                // Stack: [Limit, Index]
+                // item = arr[Index]
+                this.emit(`  DUP >R ( Save Index )`);
+                this.emit(`  ${arrName} @ SWAP ARRAY_GET_ADDR @ ( fetch value )`);
+                this.emit(`  ${itemVar} ! ( store in item )`);
+
+                // Execute body
+                this.compileNode(node.body);
+
+                this.emit(`  R> 1 + ( Index++ )`);
+                this.emit(`  REPEAT`);
+                this.emit(`  2DROP`);
+            } else {
+                this.emit(`  ( ERROR: ForOf only supported for DynamicArrays right now )`);
+            }
         }
         break;
 
       // --- LOGIC ---
       
       case "LogicalExpression":
-        this.compileNode(node.left);
-        this.compileNode(node.right);
-        if (node.operator === "&&") this.emit(`  AND`);
-        else if (node.operator === "||") this.emit(`  OR`);
+        // Handle short-circuiting logic: a && b stops if a is false
+        if (node.operator === "&&") {
+            this.compileNode(node.left);
+            this.emit(`  DUP IF DROP`); // If true, drop it and evaluate right
+            this.compileNode(node.right);
+            this.emit(`  THEN`);
+        } else if (node.operator === "||") {
+            this.compileNode(node.left);
+            this.emit(`  DUP 0= IF DROP`); // If false, drop it and evaluate right
+            this.compileNode(node.right);
+            this.emit(`  THEN`);
+        }
         break;
 
       case "UnaryExpression":
@@ -775,14 +895,28 @@ export class AetherTranspiler {
             const isByte = node.left.object.type === "Identifier" && this.isByteType(node.left.object.name);
             const structType = this.getExpressionStructType(node.left.object);
 
-            if (node.operator === "=") {
-                if (isByte) this.emit(`  + C!`);
-                else if (structType) {
-                    this.emit(`  SIZEOF_${structType.toUpperCase()} * + !`);
+            let isDynamicArray = false;
+            if (node.left.object.type === "Identifier") {
+                const varName = this.resolveVar(node.left.object.name);
+                if (this.varTypes.get(varName) === "DynamicArray") {
+                    isDynamicArray = true;
                 }
-                else this.emit(`  CELLS + !`);
+            }
+
+            if (node.operator === "=") {
+                if (isDynamicArray) {
+                    this.emit(`  SWAP @ SWAP ARRAY_GET_ADDR !`); // arr.head index ARRAY_GET_ADDR !
+                } else if (isByte) {
+                    this.emit(`  + C!`);
+                } else if (structType) {
+                    this.emit(`  SIZEOF_${structType.toUpperCase()} * + !`);
+                } else {
+                    this.emit(`  CELLS + !`);
+                }
             } else if (node.operator === "+=") {
-                if (isByte) {
+                if (isDynamicArray) {
+                    this.emit(`  SWAP @ SWAP ARRAY_GET_ADDR +!`); // arr.head index ARRAY_GET_ADDR +!
+                } else if (isByte) {
                     this.emit(`  + DUP C@ ROT + SWAP C!`); // Complex because no C+! in standard forth usually
                 } else if (structType) {
                     this.emit(`  SIZEOF_${structType.toUpperCase()} * + +!`);
@@ -814,9 +948,21 @@ export class AetherTranspiler {
             // HANDLE ARRAY READ: arr[i]
             this.compileNode(node.object); // Base Address
             this.compileNode(node.property); // Index
+
+            let isDynamicArray = false;
+            if (node.object.type === "Identifier") {
+                const varName = this.resolveVar(node.object.name);
+                if (this.varTypes.get(varName) === "DynamicArray") {
+                    isDynamicArray = true;
+                }
+            }
+
             const isByte = node.object.type === "Identifier" && this.isByteType(node.object.name);
             const structType = this.getExpressionStructType(node.object);
-            if (isByte) {
+
+            if (isDynamicArray) {
+                this.emit(`  SWAP @ SWAP ARRAY_GET_ADDR @`);
+            } else if (isByte) {
                 this.emit(`  + C@`);
             } else if (structType) {
                 this.emit(`  SIZEOF_${structType.toUpperCase()} * +`); // Just return pointer for struct arrays
@@ -964,6 +1110,29 @@ export class AetherTranspiler {
             else this.emit(`  ${this.sanitizeName(func)}`);
         } 
         else if (node.callee.type === "MemberExpression") {
+            if (node.callee.property.name === "push" && node.callee.object.type === "Identifier") {
+                const varName = this.resolveVar(node.callee.object.name);
+                if (this.varTypes.get(varName) === "DynamicArray") {
+                     // Node.arguments were already compiled and put on stack
+                     // Stack: [val]
+                     this.emit(`  ${varName} @`);
+                     // Stack: [val, fat_ptr]
+                     this.emit(`  ( -- DynamicArray PUSH -- )`);
+                     this.emit(`  DUP 8 + @`); // [val, fat_ptr, len]
+                     this.emit(`  DUP 15 MOD 0= OVER 0> AND IF`);
+                     this.emit(`    ALLOC_CHUNK`); // [val, fat_ptr, len, new_chunk]
+                     this.emit(`    DUP 3 PICK 4 + @ !`); // [val, fat_ptr, len, new_chunk] -> old_tail.next = new_chunk
+                     this.emit(`    2 PICK 4 + !`); // [val, fat_ptr, len] -> fat_ptr.tail = new_chunk
+                     this.emit(`  THEN`);
+
+                     this.emit(`  15 MOD 1+ CELLS`); // [val, fat_ptr, offset]
+                     this.emit(`  OVER 4 + @ +`);   // [val, fat_ptr, target_addr]
+                     this.emit(`  ROT SWAP !`);     // [fat_ptr]
+                     this.emit(`  1 SWAP 8 + +!`);  // []
+                     return;
+                }
+            }
+
             const prop = node.callee.property.name.toUpperCase();
             // Ensure object has a name (Identifier)
             if (node.callee.object.type === "Identifier") {
@@ -1071,6 +1240,7 @@ export class AetherTranspiler {
         break;
 
       case "IfStatement":
+        this.emitTrace(node);
         this.compileNode(node.test);
         this.emit(`  IF`);
         this.compileNode(node.consequent);
@@ -1082,8 +1252,54 @@ export class AetherTranspiler {
         break;
         
       case "ReturnStatement":
-        if (node.argument) this.compileNode(node.argument);
+        this.emitTrace(node);
+        if (node.argument) {
+            this.compileNode(node.argument);
+        }
+        if (this.currentScope) {
+            this.emitGCForScope(!!node.argument);
+        }
         this.emit(`  EXIT`);
+        break;
+
+      case "SwitchStatement":
+        this.emitTrace(node);
+        // Compile the discriminant (expression to switch on)
+        this.compileNode(node.discriminant);
+
+        let casesEmitted = 0;
+        let hasDefault = false;
+        node.cases.forEach((c: any) => {
+            if (c.test) {
+                // It's a specific case
+                this.emit(`  DUP`);
+                this.compileNode(c.test);
+                this.emit(`  = IF`);
+                c.consequent.forEach((stmt: any) => {
+                    if (stmt.type !== "BreakStatement") {
+                        this.compileNode(stmt);
+                    }
+                });
+                this.emit(`  ELSE`);
+                casesEmitted++;
+            } else {
+                // It's the default case
+                hasDefault = true;
+                c.consequent.forEach((stmt: any) => {
+                    if (stmt.type !== "BreakStatement") {
+                        this.compileNode(stmt);
+                    }
+                });
+            }
+        });
+
+        // Close all ELSE blocks
+        for (let i = 0; i < casesEmitted; i++) {
+            this.emit(`  THEN`);
+        }
+
+        // Drop the discriminant from the stack
+        this.emit(`  DROP`);
         break;
 
       case "NewExpression":
@@ -1209,6 +1425,39 @@ export class AetherTranspiler {
           this.emit(`  SYS_CHAN_SUB MY_ID @ K_HOST 0 ${hash} 0 BUS_SEND`);
       });
       this.emit(";");
+  }
+
+  private static emitGCForScope(hasReturnValue: boolean = false) {
+       if (!this.currentScope) return;
+
+       let hasDynamicArrays = false;
+       this.currentScope.variables.forEach((v) => {
+           const fullName = this.sanitizeName(`LV_${this.currentScope!.functionName}_${v}`);
+           if (this.varTypes.get(fullName) === "DynamicArray") hasDynamicArrays = true;
+       });
+
+       if (!hasDynamicArrays) return;
+
+       if (hasReturnValue) {
+           // We are in compile mode, so we just emit instructions.
+           this.emit(`  TEMP_VSO_BUFFER ! ( Save return value for GC )`);
+       }
+
+       // Loop vars
+       this.currentScope.variables.forEach((v) => {
+           const fullName = this.sanitizeName(`LV_${this.currentScope!.functionName}_${v}`);
+           if (this.varTypes.get(fullName) === "DynamicArray") {
+                // Free the chunks properly without leaving residue on stack
+                // Use IF ... THEN properly within compiled code
+                this.emit(`  ${fullName} @ DUP 0> IF`); // if head_ptr > 0
+                this.emit(`    DUP @ SWAP 4 + @ FREE_CHUNKS`); // head tail FREE_CHUNKS
+                this.emit(`  ELSE DROP THEN`);
+           }
+       });
+
+       if (hasReturnValue) {
+           this.emit(`  TEMP_VSO_BUFFER @ ( Restore return value )`);
+       }
   }
 
   private static sanitizeName(name: string): string {
