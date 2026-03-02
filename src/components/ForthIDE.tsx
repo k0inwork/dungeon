@@ -8,10 +8,13 @@ import { STANDARD_KERNEL_FIRMWARE } from "../kernels/SharedBlocks";
 import { forthService, BusPacket } from "../services/WaForthService";
 import { AetherTranspiler } from "../compiler/AetherTranspiler";
 
-type KernelType = "GRID" | "HIVE" | "PLAYER" | "BATTLE" | "SCRATCH";
+type KernelType = "GRID" | "HIVE" | "PLAYER" | "BATTLE" | "SCRATCH" | "CUSTOM";
 
 export const ForthIDE: React.FC = () => {
-  const [activeKernel, setActiveKernel] = useState<KernelType>("GRID");
+  const [mode, setMode] = useState<"ATTACH" | "STARTUP">("ATTACH");
+  const [activeKernelType, setActiveKernelType] = useState<KernelType>("GRID");
+  const [attachedInstanceId, setAttachedInstanceId] = useState<string>("");
+  const [availableInstances, setAvailableInstances] = useState<string[]>([]);
   
   // Split State
   const [forthCode, setForthCode] = useState<string>("");
@@ -23,13 +26,56 @@ export const ForthIDE: React.FC = () => {
   const [output, setOutput] = useState<string[]>([]);
   const [status, setStatus] = useState<"IDLE" | "COMPILING" | "READY" | "ERROR">("IDLE");
   const [lastError, setLastError] = useState<string | null>(null);
+  const [debugMode, setDebugMode] = useState<boolean>(true);
+  const [pausedLine, setPausedLine] = useState<number | null>(null);
+  const [symbolTable, setSymbolTable] = useState<Map<string, string>>(new Map());
   
   const [replInput, setReplInput] = useState("");
   const outputEndRef = useRef<HTMLDivElement>(null);
 
+  // Breakpoint Event Listener
+  useEffect(() => {
+      let targetId = mode === "ATTACH" ? attachedInstanceId : activeKernelType;
+      if (!targetId) return;
+
+      const proc = forthService.get(targetId);
+      const handleBP = (line: number) => {
+          setPausedLine(line);
+      };
+      proc.onBreakpoint = handleBP;
+      return () => { proc.onBreakpoint = null; };
+  }, [mode, attachedInstanceId, activeKernelType]);
+
+  // Update symbol table when transpiling
+  useEffect(() => {
+      if (mode === "ATTACH" && attachedInstanceId) {
+          // If we attach, we don't have the symbol table automatically unless we recompiled it
+          // Realistically, the IDE would save the symbol table alongside the flashed logic.
+          // For now, we fetch the last generated one.
+          setSymbolTable(AetherTranspiler.lastSymbolTable);
+      }
+  }, [mode, attachedInstanceId, ajsCode]);
+
+  // Subscribe to instance list changes
+  useEffect(() => {
+      const updateInstances = () => {
+          setAvailableInstances(Array.from(forthService.processes.keys()));
+      };
+      updateInstances(); // Initial load
+      const unsub = forthService.subscribe(updateInstances);
+      return () => unsub();
+  }, []);
+
   // Initialize Code
   useEffect(() => {
-    switch(activeKernel) {
+    if (mode === "ATTACH" && attachedInstanceId) {
+       // We're attached, we don't load default source unless requested
+       // Realistically, we should try to load the source from the instance if it has it stored.
+       // For now, we'll leave the current code if any, or clear it.
+       return;
+    }
+
+    switch(activeKernelType) {
         case "GRID": 
             setForthCode(GRID_FORTH_SOURCE);
             setAjsCode(GRID_AJS_SOURCE);
@@ -52,23 +98,37 @@ export const ForthIDE: React.FC = () => {
             break;
     }
     setStatus("IDLE");
-  }, [activeKernel]);
+  }, [activeKernelType, mode]);
 
   // Logs
   useEffect(() => {
-      const proc = forthService.get(activeKernel);
+      let targetId = mode === "ATTACH" ? attachedInstanceId : activeKernelType;
+      if (!targetId) return;
+
+      const proc = forthService.get(targetId);
       setOutput([...proc.outputLog]);
       const handleLog = (msg: string) => setOutput(prev => [...prev, msg].slice(-200));
       proc.addLogListener(handleLog);
       return () => { proc.removeLogListener(handleLog); };
-  }, [activeKernel]);
+  }, [activeKernelType, attachedInstanceId, mode]);
 
   useEffect(() => outputEndRef.current?.scrollIntoView({ behavior: 'smooth' }), [output]);
 
   const handleCompile = async () => {
     setStatus("COMPILING");
     setLastError(null);
-    const proc = forthService.get(activeKernel);
+
+    // If we are in STARTUP/SWAP mode, we compile to a temporary scratchpad process
+    // and then, if applicable, swap it into the running instances of that type.
+    const isSwapMode = mode === "STARTUP";
+    const compileId = isSwapMode ? `SCRATCH_${activeKernelType}` : attachedInstanceId;
+    if (!compileId) {
+        setLastError("No target selected");
+        setStatus("ERROR");
+        return;
+    }
+
+    const proc = forthService.get(compileId);
     try {
         proc.log("--- REBOOTING KERNEL ---");
         await proc.boot(); 
@@ -82,7 +142,15 @@ export const ForthIDE: React.FC = () => {
         // 2. Transpile AJS
         if (ajsCode.trim()) {
             proc.log("--- TRANSPILING AETHER JS ---");
-            const transpiled = AetherTranspiler.transpile(ajsCode);
+            // Determine kernel ID for transpiler (rough guess based on type)
+            let kid = 0;
+            const checkType = isSwapMode ? activeKernelType : attachedInstanceId;
+            if (checkType.includes("GRID") || checkType.startsWith("10")) kid = 1;
+            if (checkType.includes("PLAYER") || checkType === "2") kid = 2;
+            if (checkType.includes("HIVE") || checkType.startsWith("30")) kid = 3;
+            if (checkType.includes("BATTLE") || checkType.startsWith("40")) kid = 4;
+
+            const transpiled = AetherTranspiler.transpile(ajsCode, kid, debugMode);
             
             if (sourceToRun.includes("( %%%_AJS_INJECTION_%%% )")) {
                 sourceToRun = sourceToRun.replace("( %%%_AJS_INJECTION_%%% )", transpiled);
@@ -90,10 +158,31 @@ export const ForthIDE: React.FC = () => {
                 // If marker missing, just append
                 sourceToRun += "\n" + transpiled;
             }
+            setSymbolTable(AetherTranspiler.lastSymbolTable);
         }
         
         proc.log("--- INJECTING CODE ---");
         proc.run(sourceToRun);
+
+        // 3. Swap Logic (If in STARTUP mode)
+        if (isSwapMode && activeKernelType !== "SCRATCH") {
+             proc.log(`--- SWAPPING LOGIC TO ACTIVE INSTANCES ---`);
+             for (const [id, targetProc] of forthService.processes.entries()) {
+                 // Swap if ID matches the type pattern
+                 let match = false;
+                 if (activeKernelType === "GRID" && id.startsWith("10")) match = true;
+                 if (activeKernelType === "HIVE" && id.startsWith("30")) match = true;
+                 if (activeKernelType === "BATTLE" && id.startsWith("40")) match = true;
+                 if (activeKernelType === "PLAYER" && (id === "PLAYER" || id === "2")) match = true;
+
+                 if (match) {
+                     proc.log(`Swapping ${id}...`);
+                     await targetProc.swapWith(proc);
+                     targetProc.log("--- LOGIC HOT-SWAPPED ---");
+                 }
+             }
+        }
+
         setStatus("READY");
         proc.log("--- SUCCESS ---");
     } catch (e: any) {
@@ -106,7 +195,10 @@ export const ForthIDE: React.FC = () => {
   const handleReplSubmit = (e: React.FormEvent) => {
       e.preventDefault();
       if (!replInput.trim()) return;
-      const proc = forthService.get(activeKernel);
+      const targetId = mode === "ATTACH" ? attachedInstanceId : activeKernelType;
+      if (!targetId) return;
+
+      const proc = forthService.get(targetId);
       proc.log(`> ${replInput}`);
       try { proc.run(replInput); } catch (e) { }
       setReplInput("");
@@ -116,7 +208,7 @@ export const ForthIDE: React.FC = () => {
   const getBottomPaneContent = () => {
       if (bottomPaneMode === "SOURCE") return ajsCode;
       try {
-          return AetherTranspiler.transpile(ajsCode);
+          return AetherTranspiler.transpile(ajsCode, 0, debugMode);
       } catch (e: any) {
           return `( ERROR: ${e.message} )`;
       }
@@ -126,27 +218,109 @@ export const ForthIDE: React.FC = () => {
     <div style={{ display: 'flex', height: '100%', flexDirection: 'column', background: '#111', color: '#0f0', fontFamily: 'monospace' }}>
       
       {/* HEADER */}
-      <div style={{ padding: '10px', background: '#000', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-            <span style={{ fontWeight: 'bold' }}>AETHER_IDE // SPLIT_VIEW</span>
+      <div style={{ padding: '10px', background: '#000', borderBottom: '1px solid #333', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                <span style={{ fontWeight: 'bold' }}>AETHER_IDE // SPLIT_VIEW</span>
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                    <label style={{ cursor: 'pointer' }}>
+                        <input type="radio" checked={mode === "ATTACH"} onChange={() => setMode("ATTACH")} /> Attach
+                    </label>
+                    <label style={{ cursor: 'pointer' }}>
+                        <input type="radio" checked={mode === "STARTUP"} onChange={() => setMode("STARTUP")} /> Startup/Swap
+                    </label>
+                </div>
+            </div>
             
-            <div style={{ display: 'flex', gap: '5px' }}>
-                {(['GRID', 'HIVE', 'PLAYER', 'BATTLE', 'SCRATCH'] as KernelType[]).map(k => (
-                    <button key={k} onClick={() => setActiveKernel(k)} style={{ background: activeKernel === k ? '#0f0' : '#222', color: activeKernel === k ? '#000' : '#888', border: 'none', padding: '5px 10px', cursor: 'pointer', fontSize: '0.8em' }}>{k}</button>
-                ))}
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <label style={{ fontSize: '0.8em', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={debugMode} onChange={e => setDebugMode(e.target.checked)} />
+                    Enable Tracing/Breakpoints (DEBUG_MODE)
+                </label>
+                <button onClick={handleCompile} style={{ background: '#00f', color: '#fff', border: 'none', padding: '5px 15px', cursor: 'pointer' }}>
+                    {status === 'COMPILING' ? '...' : 'COMPILE & RUN'}
+                </button>
             </div>
         </div>
-        
-        <button onClick={handleCompile} style={{ background: '#00f', color: '#fff', border: 'none', padding: '5px 15px', cursor: 'pointer' }}>
-            {status === 'COMPILING' ? '...' : 'COMPILE & RUN'}
-        </button>
+
+        {/* Dynamic Context Bar based on mode */}
+        <div style={{ display: 'flex', gap: '15px', alignItems: 'center', background: '#222', padding: '5px', borderRadius: '3px' }}>
+            {mode === "ATTACH" ? (
+                <>
+                    <span style={{ fontSize: '0.9em', color: '#aaa' }}>Target Instance:</span>
+                    <select
+                        value={attachedInstanceId}
+                        onChange={(e) => setAttachedInstanceId(e.target.value)}
+                        style={{ background: '#000', color: '#0f0', border: '1px solid #444', padding: '3px' }}
+                    >
+                        <option value="">-- Select Kernel --</option>
+                        {availableInstances.map(inst => (
+                            <option key={inst} value={inst}>{inst}</option>
+                        ))}
+                    </select>
+                </>
+            ) : (
+                <>
+                    <span style={{ fontSize: '0.9em', color: '#aaa' }}>Base Kernel Logic:</span>
+                    <select
+                        value={activeKernelType}
+                        onChange={(e) => setActiveKernelType(e.target.value as KernelType)}
+                        style={{ background: '#000', color: '#0f0', border: '1px solid #444', padding: '3px' }}
+                    >
+                        <option value="GRID">GRID</option>
+                        <option value="HIVE">HIVE</option>
+                        <option value="PLAYER">PLAYER</option>
+                        <option value="BATTLE">BATTLE</option>
+                        <option value="SCRATCH">SCRATCH (Isolated)</option>
+                    </select>
+                </>
+            )}
+        </div>
       </div>
 
       {/* EDITOR VIEW */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          
+          {/* LEFT: VARIABLES / WATCH (Only if attached and debugging) */}
+          {mode === "ATTACH" && debugMode && (
+              <div style={{ width: '250px', background: '#080808', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ padding: '5px', background: '#111', color: '#ff0', fontSize: '0.8em' }}>VARIABLES / STATE (SYMBOL TABLE)</div>
+                  <div style={{ flex: 1, overflowY: 'auto', padding: '10px', fontSize: '12px', color: '#ccc' }}>
+                      {Array.from(symbolTable.entries()).map(([jsName, forthName]) => {
+                          const proc = forthService.get(attachedInstanceId);
+                          let valStr = "???";
+                          if (proc && proc.isReady) {
+                              try {
+                                  // Simplified reading: try to evaluate the forth variable
+                                  // Real implementation would read from memory map directly.
+                                  valStr = `(addr of ${forthName})`;
+                              } catch(e) {}
+                          }
+                          return (
+                              <div key={jsName} style={{ marginBottom: '5px', borderBottom: '1px solid #222', paddingBottom: '2px' }}>
+                                  <span style={{ color: '#0af' }}>{jsName}</span>: <span style={{ color: '#aaa' }}>{valStr}</span>
+                              </div>
+                          );
+                      })}
+                      {symbolTable.size === 0 && <div style={{ color: '#555' }}>No symbols extracted. Compile AJS code first.</div>}
+                  </div>
+              </div>
+          )}
+
           {/* SPLIT COLUMN: FORTH (TOP) / AJS (BOTTOM) */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid #333' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: '1px solid #333', position: 'relative' }}>
+
+              {pausedLine !== null && (
+                  <div style={{ position: 'absolute', top: 0, left: 0, right: 0, background: '#a00', color: '#fff', padding: '5px', zIndex: 10, display: 'flex', justifyContent: 'space-between' }}>
+                      <span>[DEBUGGER PAUSED] Execution hit breakpoint on line {pausedLine}.</span>
+                      <button onClick={() => {
+                          setPausedLine(null);
+                          // Provide a way to tell the engine to unpause via custom event or service
+                          const evt = new CustomEvent('RESUME_SIMULATION');
+                          window.dispatchEvent(evt);
+                      }} style={{ background: '#fff', color: '#a00', border: 'none', cursor: 'pointer', padding: '2px 10px' }}>RESUME</button>
+                  </div>
+              )}
               
               {/* TOP: FORTH */}
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '30%' }}>
