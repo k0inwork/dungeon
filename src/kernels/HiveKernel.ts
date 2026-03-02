@@ -62,23 +62,23 @@ function set_hive_type(id, type) {
 }
 
 function on_npc_sync(opcode, sender, arg1, arg2, arg3) {
-  if (opcode == EVT_MOVED) {
-     update_hive_entity(arg1, arg2, arg3);
-     if (arg1 == 0) {
-         LAST_PLAYER_X = arg2;
-         LAST_PLAYER_Y = arg3;
-         Log("[HIVE] Player Moved to: "); Log(arg2); Log(","); Log(arg3);
-     }
-  }
-
-  if (opcode == EVT_SPAWN) {
-      set_hive_type(arg1, arg2);
-      if (arg2 == 2) { Log("[HIVE] Aggressive Entity Registered"); }
-  }
-
-  if (opcode == EVT_DEATH) {
-      set_hive_type(arg1, 3); // Mark as loot/dead to stop processing
-  }
+    switch(opcode) {
+        case EVT_MOVED:
+            update_hive_entity(arg1, arg2, arg3);
+            if (arg1 == 0) {
+                LAST_PLAYER_X = arg2;
+                LAST_PLAYER_Y = arg3;
+                Log("[HIVE] Player Moved to: "); Log(arg2); Log(","); Log(arg3);
+            }
+            break;
+        case EVT_SPAWN:
+            set_hive_type(arg1, arg2);
+            if (arg2 == 2) { Log("[HIVE] Aggressive Entity Registered"); }
+            break;
+        case EVT_DEATH:
+            set_hive_type(arg1, 3); // Mark as loot/dead to stop processing
+            break;
+    }
 }
 
 function rand_dir_x() {
@@ -136,16 +136,18 @@ function decide_action(id) {
 }
 
 function on_bus_event(op, sender, p1, p2, p3) {
-  if (op == EVT_COLLIDE) {
-     if (p3 == 1) {
-        if (p1 > 0) {
-            if (p2 == 0) {
-               Log("Enemy Attacks Player!");
-               Chan("BUS") <- [CMD_ATTACK, p1, p2, 0];
+    switch(op) {
+        case EVT_COLLIDE:
+            if (p3 == 1) {
+                if (p1 > 0) {
+                    if (p2 == 0) {
+                        Log("Enemy Attacks Player!");
+                        Chan("BUS") <- [CMD_ATTACK, p1, p2, 0];
+                    }
+                }
             }
-        }
-     }
-  }
+            break;
+    }
 }
 
 function handle_events() {
@@ -155,12 +157,10 @@ function handle_events() {
 ${STANDARD_AJS_POSTAMBLE}
 
 function run_cycle() {
-   let i = 1;
-   let count = HIVE_ENT_COUNT;
-   while (i < count) {
-      decide_action(i);
-      i++;
-   }
+    let count = HIVE_ENT_COUNT;
+    for (let i = 1; i < count; i++) {
+        decide_action(i);
+    }
 }
 
 function run_hive_step() {
@@ -169,13 +169,11 @@ function run_hive_step() {
 }
 
 function init_hive_logic() {
-    let i = 0;
-    while (i < MAX_ENTITIES) {
+    for (let i = 0; i < MAX_ENTITIES; i++) {
         let ent = get_hive_ptr(i);
         ent.x = 0;
         ent.y = 0;
         ent.type = 0;
-        i++;
     }
     HIVE_ENT_COUNT = 0;
 

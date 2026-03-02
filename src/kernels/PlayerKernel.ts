@@ -48,43 +48,48 @@ function add_item(itemId) {
 }
 
 function on_player_event(op, sender, p1, p2, p3) {
-  if (op == EVT_ITEM_GET) {
-      if (p1 == 0) {
-          Log("Picked up Loot!");
-          add_item(p2);
-      }
-  }
-
-  if (op == CMD_INTERACT) {
-      Log("Using Heavy Smash!");
-      Chan("BUS") <- [CMD_ATTACK, 0, 1, 1];
-  }
+    switch (op) {
+        case EVT_ITEM_GET:
+            if (p1 == 0) {
+                Log("Picked up Loot!");
+                add_item(p2);
+            }
+            break;
+        case CMD_INTERACT:
+            Log("Using Heavy Smash!");
+            Chan("BUS") <- [CMD_ATTACK, 0, 1, 1];
+            break;
+    }
 }
 
 function on_bus_event(op, sender, p1, p2, p3) {
-  if (op == EVT_COLLIDE) {
-      if (p1 == 0) {
-          if (p3 == 0) {
-             Log("Blocked by Wall.");
-          } else {
-             Log("Player Hits Enemy! Attacking...");
-             Chan("BUS") <- [CMD_ATTACK, 0, p2, 0];
-          }
-      }
-  }
+    switch (op) {
+        case EVT_COLLIDE:
+            if (p1 == 0) {
+                if (p3 == 0) {
+                    Log("Blocked by Wall.");
+                } else {
+                    Log("Player Hits Enemy! Attacking...");
+                    Chan("BUS") <- [CMD_ATTACK, 0, p2, 0];
+                }
+            }
+            break;
+    }
 }
 
 function on_combat_event(op, sender, p1, p2, p3) {
-    if (op == EVT_DAMAGE) {
-        if (p1 == 0) {
-             Log("You dealt damage!");
-        }
-        if (p2 == 0) {
-             Log("Ouch! You took damage!");
-             let p = get_player_ptr();
-             p.hp -= p3; // p3 is dmg amount in combat_events broadcast
-             if (p.hp < 0) p.hp = 0;
-        }
+    switch (op) {
+        case EVT_DAMAGE:
+            if (p1 == 0) {
+                Log("You dealt damage!");
+            }
+            if (p2 == 0) {
+                Log("Ouch! You took damage!");
+                let p = get_player_ptr();
+                p.hp -= p3; // p3 is dmg amount in combat_events broadcast
+                if (p.hp < 0) p.hp = 0;
+            }
+            break;
     }
 }
 
@@ -97,10 +102,8 @@ function init_player() {
     p.invCount = 0;
 
     // Starting items (10-20 items as requested)
-    let k = 0;
-    while (k < 12) {
+    for (let k = 0; k < 12; k++) {
         add_item(36); // Gold Coin ($)
-        k++;
     }
     add_item(105); // Iron Sword (i)
     add_item(105); // Iron Sword (i)
