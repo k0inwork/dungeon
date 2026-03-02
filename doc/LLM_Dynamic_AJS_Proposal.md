@@ -66,7 +66,31 @@ Allow the LLM to generate entirely new `structs` and logic. For example, if the 
 1. A new VSO Struct for `WeatherState`.
 2. A small AJS script to be injected into the `GridKernel`'s `run_env_cycle()` to apply random lightning damage.
 
-## 5. Summary & Next Steps
+---
+
+## 5. The LLM Generation View: Instances vs. Singletons
+
+As Aethelgard transitions to the **Overseer Proposal Architecture** (detailed in `evolution_of_original_vision.md`), the LLM Generator must understand the structural hierarchy of the kernels it is modifying. It can no longer assume a flat topology.
+
+When the LLM acts as the "Architect" to generate or mutate AJS logic, it must distinguish between **Instances** and **Singletons**:
+
+### A. Definitional & Narrative Overseers (The Singletons)
+*   **Examples:** Race Overseers, Class Overseers, Quest Overseers, Faction Overseers.
+*   **Scope:** Global. These kernels are instantiated **once** for the entire game session.
+*   **LLM Behavior:** By default, the LLM should generate almost all systemic rules, character behaviors, and narrative state changes here. If the LLM invents a new "Vampire" race, it generates a single `Vampire Race Overseer` that hosts the VSO block containing `[OS_RACE, ACT_GRANT_SKILL, BITE_ID, 100]`. Every Vampire entity in the world, regardless of what level they are on, will draw from this single source of truth.
+*   **Cross-Instance Targeting:** Because the JS Host maintains an `ObjectID -> KernelID` VSO mapping, a single Singleton (e.g., a Quest Overseer) can easily manage and target multiple specific NPC IDs that are currently spread across multiple hibernating Hive Instances, directly pushing state changes to their targeted mailboxes.
+
+### B. Terrain & Entity Overseers (The Instances)
+*   **Examples:** Grid Kernel, Hive Kernel, Platform Kernel.
+*   **Scope:** Local/Regional. These kernels are instantiated **per level or manifold** (e.g., `GridKernel_Level1`, `GridKernel_Level2`, `HiveKernel_Level1`).
+*   **LLM Behavior:** The LLM should view these instances primarily as generic execution environments. It should **not** hardcode a global "Vampire Behavior" into a specific Hive Kernel instance.
+*   **Rare Exceptions (Regional Variants):** The LLM should only target a specific Instance Kernel when creating a highly specific, localized exception. For example, if Level 4 is a "Holy City," the LLM might inject an AJS logic snippet directly into `GridKernel_Level4` that casts a `RADIANT_DAMAGE` array specifically during that instance's `run_env_cycle()`. Or, it might write an `ACT_BLOCK_SKILL` proposal directly into that level's localized Terrain Overseer to suppress Vampire abilities specifically on Level 4.
+
+**The Golden Rule for Generation:** Design universally in the Singletons; execute locally in the Instances. Only modify an Instance directly when the rule is physically bound to that specific room or level.
+
+---
+
+## 6. Summary & Next Steps
 To make this vision a reality, we must:
 1. **Enhance AetherTranspiler:** Improve the transpiler's error reporting so the LLM can auto-correct its code if compilation fails (using the existing `repairForthCode` flow in `GeneratorService`).
 2. **Dynamic Linking:** Add a mechanism in the Kernels to safely register new function pointers dynamically so we don't have to reboot the kernel to add a skill.

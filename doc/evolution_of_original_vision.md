@@ -25,6 +25,16 @@ Instead of a flat topology of kernels, we conceptualize a strict hierarchy and c
     *   *Examples:* The "Stolen Chalice" Quest Overseer, The "Defend the Gate" Scenario Overseer.
     *   *Role:* Unlike Definitional Overseers, these are dynamically spawned when a quest begins and destroyed when it ends. They track narrative state (e.g., "Has the player found the key?") and inject highly prioritized, stateful behavior modifications specifically to the NPCs bound to their narrative.
 
+### 1.2 The LLM Generation View: Singletons vs. Instances
+
+For external tools, generative models (LLMs), or logic generators interacting with Aethelgard, this hierarchy enforces a strict rule of **Singletons vs. Instances**.
+
+*   **Singletons (The Rules):** Definitional (Race/Class/Faction) and Narrative (Quest) Overseers are **Singletons**. They exist exactly once per game session. They are the global source of truth. If a generator defines a new "Vampire" behavior, it modifies the Singleton `Vampire Race Overseer`.
+    *   **Cross-Instance Targeting:** Crucially, because the Host-level VSO registry maps `ObjectID -> KernelID`, a single Narrative Singleton (e.g., a "Stolen Chalice" Quest Overseer) can seamlessly manage and target multiple specific NPC IDs spread across multiple hibernated Hive Instances without ever losing track of them.
+*   **Instances (The Execution):** Terrain and Entity Overseers (Grid, Hex, Platform, Hive) are **Instances**. They are spun up and hibernated dynamically per level, region, or room (e.g., `Grid_Level_1`, `Hive_Level_12`).
+
+Generators must operate under the **Golden Rule of Generation:** *Design universally in the Singletons; execute locally in the Instances.* An LLM should only ever modify an Instance directly when attempting to create a highly specific, localized anomaly (e.g., modifying the `Grid_Level_4` instance to specifically invert gravity just for that room). All systemic behaviors must be routed through the Singletons via the Proposal Architecture described below.
+
 ---
 
 ## 2. Extending Transport Capabilities on Global Named Channels
