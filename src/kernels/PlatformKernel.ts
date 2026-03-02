@@ -192,8 +192,7 @@ function frog_ai(id) {
 function check_player_stomps() {
     if (physics[0].vy <= 0) return;
 
-    let i = 1;
-    while (i < ENTITY_COUNT) {
+    for (let i = 1; i < ENTITY_COUNT; i++) {
         if (physics[i].active) {
             if (entities[i].ptype == 1 || entities[i].ptype == 2) {
                 let dx = abs(physics[0].fx - physics[i].fx);
@@ -205,7 +204,6 @@ function check_player_stomps() {
                 }
             }
         }
-        i++;
     }
 }
 
@@ -213,8 +211,7 @@ function update_physics() {
     update_entity_physics(0);
     check_player_stomps();
 
-    let i = 1;
-    while (i < ENTITY_COUNT) {
+    for (let i = 1; i < ENTITY_COUNT; i++) {
         if (physics[i].active) {
             update_entity_physics(i);
 
@@ -244,7 +241,6 @@ function update_physics() {
                 frog_ai(i);
             }
         }
-        i++;
     }
 
     if (physics[0].cooldown > 0) physics[0].cooldown--;
@@ -277,8 +273,7 @@ function trigger_skill() {
     let px = Math.floor(physics[0].fx / 65536);
     let py = Math.floor(physics[0].fy / 65536);
 
-    let i = 1;
-    while (i < ENTITY_COUNT) {
+    for (let i = 1; i < ENTITY_COUNT; i++) {
         if (physics[i].active) {
             if (entities[i].ptype == 1 || entities[i].ptype == 2) {
                 let ex = Math.floor(physics[i].fx / 65536);
@@ -290,45 +285,37 @@ function trigger_skill() {
                 }
             }
         }
-        i++;
     }
 }
 
 function render_logic() {
-    let ri = 0;
     let total = MAP_WIDTH * MAP_HEIGHT;
-    while (ri < total) {
+    for (let ri = 0; ri < total; ri++) {
         VRAM[ri] = TERRAIN_MAP[ri];
-        ri++;
     }
 
     if (skill_timer > 0) {
         let px = Math.floor(physics[0].fx / 65536);
         let py = Math.floor(physics[0].fy / 65536);
-        let gx = px - 1;
-        while (gx <= px + 1) {
-            let gy = py - 1;
-            while (gy <= py + 1) {
+
+        for (let gx = px - 1; gx <= px + 1; gx++) {
+            for (let gy = py - 1; gy <= py + 1; gy++) {
                 if (gx >= 0 && gx < MAP_WIDTH && gy >= 0 && gy < MAP_HEIGHT) {
                     let gidx = calc_idx(gx, gy);
                     let orig = VRAM[gidx];
                     VRAM[gidx] = (0x800080 << 8) | (orig & 255);
                 }
-                gy++;
             }
-            gx++;
         }
     }
 
-    let i = 0;
-    while (i < ENTITY_COUNT) {
+    for (let i = 0; i < ENTITY_COUNT; i++) {
         if (physics[i].active) {
             let ren_pidx = calc_idx(entities[i].px, entities[i].py);
             if (ren_pidx >= 0 && ren_pidx < total) {
                 VRAM[ren_pidx] = (entities[i].color << 8) | entities[i].char;
             }
         }
-        i++;
     }
 }
 
@@ -358,30 +345,35 @@ function player_vx_val() { return physics[0].vx; }
 function player_vy_val() { return physics[0].vy; }
 
 function on_platform_request(op, sender, p1, p2, p3) {
-    if (op == REQ_MOVE) { move_player(p1); }
-    if (op == REQ_TELEPORT) { teleport_player(p1, p2); }
-    if (op == CMD_INTERACT) { trigger_skill(); }
-    if (op == EVT_DEATH) {
-        if (p1 > 0) {
-            physics[p1].active = 0;
-            entities[p1].char = 32;
-        }
+    switch(op) {
+        case REQ_MOVE:
+            move_player(p1);
+            break;
+        case REQ_TELEPORT:
+            teleport_player(p1, p2);
+            break;
+        case CMD_INTERACT:
+            trigger_skill();
+            break;
+        case EVT_DEATH:
+            if (p1 > 0) {
+                physics[p1].active = 0;
+                entities[p1].char = 32;
+            }
+            break;
     }
 }
 
 function init_platformer_logic() {
-    let i = 0;
     let total = MAP_WIDTH * MAP_HEIGHT;
-    while (i < total) {
+    for (let i = 0; i < total; i++) {
         TERRAIN_MAP[i] = 0;
         COLLISION_MAP[i] = 0;
         TRANSITION_MAP[i] = -1;
         VRAM[i] = 0;
-        i++;
     }
 
-    i = 0;
-    while (i < MAX_ENTITIES) {
+    for (let i = 0; i < MAX_ENTITIES; i++) {
         let p = physics[i];
         p.active = 0;
         p.vx = 0;
@@ -395,7 +387,6 @@ function init_platformer_logic() {
         ent.px = 0;
         ent.py = 0;
         ent.ptype = 0;
-        i++;
     }
 
     ENTITY_COUNT = 0;

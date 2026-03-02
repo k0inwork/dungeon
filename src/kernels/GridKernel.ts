@@ -66,9 +66,8 @@ function get_ent_ptr(id) {
 }
 
 function system_reset_map() {
-    let i = 0;
     let total = MAP_WIDTH * MAP_HEIGHT;
-    while (i < total) {
+    for (let i = 0; i < total; i++) {
         COLLISION_MAP[i] = 0;
         ENTITY_MAP[i] = 0;
         LOOT_MAP[i] = 0;
@@ -77,19 +76,16 @@ function system_reset_map() {
         TRANSITION_MAP[i] = -1;
         VRAM[i] = 0;
         draw_cell(i % 40, Math.floor(i / 40), 0, 32);
-        i++;
     }
 
     // Clear Entity Array Memory
-    let ei = 0;
-    while (ei < MAX_ENTITIES) {
+    for (let ei = 0; ei < MAX_ENTITIES; ei++) {
         let ent = get_ent_ptr(ei);
         ent.char = 0;
         ent.color = 0;
         ent.x = 0;
         ent.y = 0;
         ent.type = 0;
-        ei++;
     }
 
     ENTITY_COUNT = 0;
@@ -298,17 +294,17 @@ function kill_entity(id, itemId) {
         // Try to spawn Gold Coin ($ = 36, Color Gold = 16766720)
         // at an adjacent passable tile
         let found = 0;
-        let tx = ex + 1; let ty = ey;
-        if (check_bounds(tx, ty) && COLLISION_MAP[calc_idx(tx, ty)] == 0) { found = 1; }
-        else {
-            tx = ex - 1; ty = ey;
-            if (check_bounds(tx, ty) && COLLISION_MAP[calc_idx(tx, ty)] == 0) { found = 1; }
-            else {
-                tx = ex; ty = ey + 1;
-                if (check_bounds(tx, ty) && COLLISION_MAP[calc_idx(tx, ty)] == 0) { found = 1; }
-                else {
-                    tx = ex; ty = ey - 1;
-                    if (check_bounds(tx, ty) && COLLISION_MAP[calc_idx(tx, ty)] == 0) { found = 1; }
+        let offsets_x = [1, -1, 0, 0];
+        let offsets_y = [0, 0, 1, -1];
+        let tx = 0;
+        let ty = 0;
+
+        for (let j = 0; j < 4; j++) {
+            if (found == 0) {
+                tx = ex + offsets_x[j];
+                ty = ey + offsets_y[j];
+                if (check_bounds(tx, ty) && COLLISION_MAP[calc_idx(tx, ty)] == 0) {
+                    found = 1;
                 }
             }
         }
@@ -409,11 +405,23 @@ function teleport_player(tx, ty) {
 }
 
 function on_grid_request(op, sender, p1, p2, p3) {
-    if (op == REQ_MOVE) { move_entity(p1, p2, p3); }
-    if (op == REQ_TELEPORT) { teleport_entity(p1, p2, p3); }
-    if (op == REQ_PATH_STEP) { move_towards(p1, p2, p3); }
-    if (op == EVT_DEATH) { kill_entity(p1, p2); }
-    if (op == CMD_PICKUP) { try_pickup(p1, p2, p3); }
+    switch(op) {
+        case REQ_MOVE:
+            move_entity(p1, p2, p3);
+            break;
+        case REQ_TELEPORT:
+            teleport_entity(p1, p2, p3);
+            break;
+        case REQ_PATH_STEP:
+            move_towards(p1, p2, p3);
+            break;
+        case EVT_DEATH:
+            kill_entity(p1, p2);
+            break;
+        case CMD_PICKUP:
+            try_pickup(p1, p2, p3);
+            break;
+    }
 }
 
 function handle_events() {
@@ -428,9 +436,8 @@ function run_env_cycle() {
 }
 
 function redraw_all() {
-    let i = 0;
     let total = MAP_WIDTH * MAP_HEIGHT;
-    while (i < total) {
+    for (let i = 0; i < total; i++) {
         let x = i % MAP_WIDTH;
         let y = Math.floor(i / MAP_WIDTH);
         let packed = TERRAIN_MAP[i];
@@ -451,7 +458,6 @@ function redraw_all() {
             }
         }
         VRAM[i] = (color << 8) | char;
-        i++;
     }
 }
 `;
