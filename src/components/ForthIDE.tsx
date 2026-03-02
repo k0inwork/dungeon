@@ -173,21 +173,14 @@ export const ForthIDE: React.FC = () => {
         proc.run(sourceToRun);
 
         // 3. Swap Logic (If in STARTUP mode)
-        if (isSwapMode && inferredType !== "UNKNOWN") {
-             proc.log(`--- SWAPPING LOGIC TO ACTIVE INSTANCES ---`);
-             for (const [id, targetProc] of forthService.processes.entries()) {
-                 // Swap if ID matches the inferred type pattern
-                 let match = false;
-                 if (inferredType === "GRID" && id.startsWith("10")) match = true;
-                 if (inferredType === "HIVE" && id.startsWith("30")) match = true;
-                 if (inferredType === "BATTLE" && id.startsWith("40")) match = true;
-                 if (inferredType === "PLAYER" && (id === "PLAYER" || id === "2")) match = true;
-
-                 if (match) {
-                     proc.log(`Swapping ${id}...`);
-                     await targetProc.swapWith(proc);
-                     targetProc.log("--- LOGIC HOT-SWAPPED ---");
-                 }
+        if (isSwapMode && attachedInstanceId) {
+             proc.log(`--- SWAPPING LOGIC TO TARGET INSTANCE: ${attachedInstanceId} ---`);
+             const targetProc = forthService.processes.get(attachedInstanceId);
+             if (targetProc) {
+                 await targetProc.swapWith(proc);
+                 targetProc.log("--- LOGIC HOT-SWAPPED ---");
+             } else {
+                 proc.log(`[ERR] Target instance ${attachedInstanceId} not found.`);
              }
         }
 
@@ -269,7 +262,7 @@ export const ForthIDE: React.FC = () => {
             </select>
             {mode === "STARTUP" && attachedInstanceId && (
                 <span style={{ fontSize: '0.8em', color: '#f55' }}>
-                    * Compiling will swap the logic of all {attachedInstanceId.startsWith("10") || attachedInstanceId.includes("GRID") ? "GRID" : attachedInstanceId.startsWith("30") || attachedInstanceId.includes("HIVE") ? "HIVE" : attachedInstanceId.startsWith("40") || attachedInstanceId.includes("BATTLE") ? "BATTLE" : attachedInstanceId === "2" || attachedInstanceId.includes("PLAYER") ? "PLAYER" : "UNKNOWN"} instances.
+                    * Compiling will replace the logic of instance {attachedInstanceId} specifically.
                 </span>
             )}
         </div>
