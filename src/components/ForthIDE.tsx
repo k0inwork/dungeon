@@ -83,7 +83,7 @@ export const ForthIDE: React.FC = () => {
           // If we attach, we don't have the symbol table automatically unless we recompiled it
           // Realistically, the IDE would save the symbol table alongside the flashed logic.
           // For now, we fetch the last generated one.
-          setSymbolTable(AetherTranspiler.lastSymbolTable);
+          setSymbolTable(AetherTranspiler.lastSymbolTable || new Map());
       }
   }, [mode, attachedInstanceId, ajsCode]);
 
@@ -332,7 +332,7 @@ export const ForthIDE: React.FC = () => {
                       <button onClick={() => setSymbolTable(new Map(symbolTable))} style={{ background: '#444', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '0.8em' }}>↻ Refresh Values</button>
                   </div>
                   <div style={{ flex: 1, overflowY: 'auto', padding: '10px', fontSize: '12px', color: '#ccc' }}>
-                      {attachedInstanceId ? Array.from(symbolTable.entries()).map(([jsName, forthName]) => {
+                      {attachedInstanceId && symbolTable ? Array.from(symbolTable.entries()).map(([jsName, forthName]) => {
                           const proc = forthService.processes.get(attachedInstanceId);
                           let valStr = "???";
                           if (proc && proc.isReady && proc.forth) {
