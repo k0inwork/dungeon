@@ -366,7 +366,7 @@ export class ForthProcess {
     }
 
     // Deduplication Logic - disabled for test runner to work properly since it counts lines and expects strict output
-    if (msg === this.lastLogMsg && !(typeof process !== 'undefined' && process.env.VITEST)) {
+    if (msg === this.lastLogMsg && !((typeof process !== 'undefined' && process.env && process.env.VITEST))) {
         this.lastLogCount++;
         if (this.outputLog.length > 0) {
             const timestamp = new Date().toLocaleTimeString().split(" ")[0];
@@ -421,16 +421,23 @@ export class ForthProcess {
     }
   }
 
-  isWordDefined(wordName: string): boolean {
+isWordDefined(wordName: string): boolean {
     if (!this.forth || this.status === "FLASHED") return false;
     const oldEmit = this.forth.onEmit;
     this.forth.onEmit = () => {}; // Mute output during check
+
+    // Mute console.error because WAForth uses it for "undefined word"
+    const oldConsoleError = console.error;
+    console.error = () => {};
+
     try {
         this.forth.interpret(`' ${wordName} DROP`);
         this.forth.onEmit = oldEmit;
+        console.error = oldConsoleError;
         return true;
     } catch (e) {
         this.forth.onEmit = oldEmit;
+        console.error = oldConsoleError;
         return false;
     }
   }

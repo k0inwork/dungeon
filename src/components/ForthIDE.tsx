@@ -180,6 +180,7 @@ export const ForthIDE: React.FC = () => {
         
         // 1. Load Firmware
         proc.log("--- LOADING FIRMWARE ---");
+        proc.logicBlocks = STANDARD_KERNEL_FIRMWARE.slice(); // Reset and copy firmware
         proc.run(STANDARD_KERNEL_FIRMWARE.join("\n"));
 
         let sourceToRun = forthCode;
@@ -208,6 +209,7 @@ export const ForthIDE: React.FC = () => {
         
         proc.log("--- INJECTING CODE ---");
         proc.run(sourceToRun);
+        proc.logicBlocks.push(sourceToRun);
 
         // 3. Swap Logic (If in STARTUP mode)
         if (isSwapMode && attachedInstanceId) {
