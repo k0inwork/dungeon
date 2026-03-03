@@ -29,6 +29,7 @@ export const ForthIDE: React.FC = () => {
   
   const [replInput, setReplInput] = useState("");
   const outputEndRef = useRef<HTMLDivElement>(null);
+  const ajsTextAreaRef = useRef<HTMLTextAreaElement>(null);
 
   // Simulation Control State
   const [isSimPaused, setIsSimPaused] = useState(false);
@@ -53,10 +54,28 @@ export const ForthIDE: React.FC = () => {
       const proc = forthService.get(targetId);
       const handleBP = (line: number) => {
           setPausedLine(line);
+          // Highlight line in textarea
+          if (ajsTextAreaRef.current && bottomPaneMode === "SOURCE") {
+             const lines = ajsCode.split('\n');
+             // line is 1-indexed from AST
+             const targetLine = Math.max(0, line - 1);
+             if (targetLine < lines.length) {
+                 let startIdx = 0;
+                 for (let i = 0; i < targetLine; i++) startIdx += lines[i].length + 1; // +1 for \n
+                 const endIdx = startIdx + lines[targetLine].length;
+
+                 ajsTextAreaRef.current.focus();
+                 ajsTextAreaRef.current.setSelectionRange(startIdx, endIdx);
+
+                 // Rough scroll into view
+                 const lineHeight = 16; // approximate px per line
+                 ajsTextAreaRef.current.scrollTop = targetLine * lineHeight;
+             }
+          }
       };
       proc.onBreakpoint = handleBP;
       return () => { proc.onBreakpoint = null; };
-  }, [mode, attachedInstanceId]);
+  }, [mode, attachedInstanceId, ajsCode, bottomPaneMode]);
 
   // Update symbol table when transpiling
   useEffect(() => {
@@ -389,6 +408,7 @@ export const ForthIDE: React.FC = () => {
                       {bottomPaneMode === "SOURCE" ? "AETHER JS (LOGIC & BEHAVIOR) [CLICK TO SEE COMPILED]" : "FORTH (TRANSPILED RESULT) [CLICK TO SEE SOURCE]"}
                    </div>
                    <textarea
+                      ref={ajsTextAreaRef}
                       value={getBottomPaneContent()}
                       onChange={(e) => bottomPaneMode === "SOURCE" ? setAjsCode(e.target.value) : null}
                       readOnly={bottomPaneMode === "COMPILED"}
