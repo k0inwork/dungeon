@@ -459,10 +459,16 @@ export class AetherTranspiler {
 
     // 1. Emit simple constants first
     this.globalConsts.forEach((init, rawName) => {
-      const symName = this.sanitizeName(rawName);
-      if (this.debugMode >= 1) this.lastSymbolTable.set(rawName, symName);
       const name = this.sanitizeName(rawName);
-      if (this.isStructArray(rawName)) return;
+      if (this.isStructArray(rawName)) {
+          if (this.debugMode >= 1) this.lastSymbolTable.set(rawName, name);
+          return;
+      }
+
+      // Omit simple literals from symbol table
+      if (init && init.type !== "Literal") {
+          if (this.debugMode >= 1) this.lastSymbolTable.set(rawName, name);
+      }
 
       let val = 0;
       if (init) {
@@ -518,8 +524,6 @@ export class AetherTranspiler {
 
     // 3. Emit struct arrays that were declared as 'const'
     this.globalConsts.forEach((init, rawName) => {
-      const symName = this.sanitizeName(rawName);
-      if (this.debugMode >= 1) this.lastSymbolTable.set(rawName, symName);
         if (!this.isStructArray(rawName)) return;
         if (this.globalVars.has(rawName)) return; // Already emitted
 
