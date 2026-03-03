@@ -27,7 +27,7 @@ export const ForthIDE: React.FC = () => {
   const [output, setOutput] = useState<string[]>([]);
   const [status, setStatus] = useState<"IDLE" | "COMPILING" | "READY" | "ERROR">("IDLE");
   const [lastError, setLastError] = useState<string | null>(null);
-  const [debugMode, setDebugMode] = useState<boolean>(true);
+  const [debugMode, setDebugMode] = useState<number>(1);
   const [pausedLine, setPausedLine] = useState<number | null>(null);
   const [symbolTable, setSymbolTable] = useState<Map<string, string>>(new Map());
   
@@ -222,7 +222,7 @@ export const ForthIDE: React.FC = () => {
 
               let compiledOutput: any;
               try {
-                  compiledOutput = AetherTranspiler.transpile(ajsSrc, kernelId, debugMode ? 2 : 0);
+                  compiledOutput = AetherTranspiler.transpile(ajsSrc, kernelId, debugMode);
               } catch(e: any) {
                   throw new Error(`Compile failed for ${id}: ${e.message}`);
               }
@@ -413,8 +413,12 @@ export const ForthIDE: React.FC = () => {
                 </div>
 
                 <label style={{ fontSize: '0.8em', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={debugMode} onChange={e => setDebugMode(e.target.checked)} />
-                    Enable Tracing (DEBUG_MODE)
+                    Mode:
+                    <select value={debugMode} onChange={e => setDebugMode(parseInt(e.target.value))} style={{ background: '#222', color: '#fff', border: '1px solid #555' }}>
+                        <option value={0}>0 (Fast)</option>
+                        <option value={1}>1 (Symbols)</option>
+                        <option value={2}>2 (Trace)</option>
+                    </select>
                 </label>
                 <button onClick={handleCompile} style={{ background: '#00f', color: '#fff', border: 'none', padding: '5px 15px', cursor: 'pointer' }}>
                     {status === 'COMPILING' ? '...' : 'COMPILE & RUN'}
@@ -451,7 +455,7 @@ export const ForthIDE: React.FC = () => {
       {/* EDITOR VIEW */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           {/* LEFT: VARIABLES / WATCH (Only if attached and debugging) */}
-          {mode === "ATTACH" && debugMode && (
+          {mode === "ATTACH" && debugMode >= 1 && (
               <div style={{ width: '250px', background: '#080808', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column' }}>
                   <div style={{ padding: '5px', background: '#111', color: '#ff0', fontSize: '0.8em' }}>VARIABLES / STATE (SYMBOL TABLE)</div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 5px', background: '#222' }}>
