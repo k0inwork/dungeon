@@ -30,6 +30,21 @@ export const ForthIDE: React.FC = () => {
   const [replInput, setReplInput] = useState("");
   const outputEndRef = useRef<HTMLDivElement>(null);
 
+  // Simulation Control State
+  const [isSimPaused, setIsSimPaused] = useState(false);
+
+  // Sync simulation pause state
+  useEffect(() => {
+      const handlePause = () => setIsSimPaused(true);
+      const handleResume = () => setIsSimPaused(false);
+      window.addEventListener('PAUSE_SIMULATION', handlePause);
+      window.addEventListener('RESUME_SIMULATION', handleResume);
+      return () => {
+          window.removeEventListener('PAUSE_SIMULATION', handlePause);
+          window.removeEventListener('RESUME_SIMULATION', handleResume);
+      };
+  }, []);
+
   // Breakpoint Event Listener
   useEffect(() => {
       let targetId = attachedInstanceId;
@@ -235,9 +250,26 @@ export const ForthIDE: React.FC = () => {
             </div>
             
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                {/* Manual Simulation Controls */}
+                <div style={{ display: 'flex', gap: '5px', borderRight: '1px solid #444', paddingRight: '10px', marginRight: '5px' }}>
+                    <button
+                        onClick={() => window.dispatchEvent(new CustomEvent(isSimPaused ? 'RESUME_SIMULATION' : 'PAUSE_SIMULATION'))}
+                        style={{ background: isSimPaused ? '#0a0' : '#a00', color: '#fff', border: 'none', padding: '3px 8px', cursor: 'pointer', fontSize: '0.8em' }}
+                    >
+                        {isSimPaused ? '▶ RESUME TICK' : '⏸ PAUSE TICK'}
+                    </button>
+                    <button
+                        onClick={() => window.dispatchEvent(new CustomEvent('STEP_SIMULATION'))}
+                        disabled={!isSimPaused}
+                        style={{ background: '#555', color: isSimPaused ? '#fff' : '#888', border: 'none', padding: '3px 8px', cursor: isSimPaused ? 'pointer' : 'default', fontSize: '0.8em' }}
+                    >
+                        ⏭ STEP
+                    </button>
+                </div>
+
                 <label style={{ fontSize: '0.8em', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
                     <input type="checkbox" checked={debugMode} onChange={e => setDebugMode(e.target.checked)} />
-                    Enable Tracing/Breakpoints (DEBUG_MODE)
+                    Enable Tracing (DEBUG_MODE)
                 </label>
                 <button onClick={handleCompile} style={{ background: '#00f', color: '#fff', border: 'none', padding: '5px 15px', cursor: 'pointer' }}>
                     {status === 'COMPILING' ? '...' : 'COMPILE & RUN'}
@@ -274,20 +306,41 @@ export const ForthIDE: React.FC = () => {
           {mode === "ATTACH" && debugMode && (
               <div style={{ width: '250px', background: '#080808', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column' }}>
                   <div style={{ padding: '5px', background: '#111', color: '#ff0', fontSize: '0.8em' }}>VARIABLES / STATE (SYMBOL TABLE)</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 5px', background: '#222' }}>
+                      <button onClick={() => setSymbolTable(new Map(symbolTable))} style={{ background: '#444', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '0.8em' }}>↻ Refresh Values</button>
+                  </div>
                   <div style={{ flex: 1, overflowY: 'auto', padding: '10px', fontSize: '12px', color: '#ccc' }}>
                       {Array.from(symbolTable.entries()).map(([jsName, forthName]) => {
                           const proc = forthService.get(attachedInstanceId);
                           let valStr = "???";
-                          if (proc && proc.isReady) {
+                          if (proc && proc.isReady && proc.forth) {
                               try {
-                                  // Simplified reading: try to evaluate the forth variable
-                                  // Real implementation would read from memory map directly.
-                                  valStr = `(addr of ${forthName})`;
-                              } catch(e) {}
+                                  // Live Evaluation: We temporarily run `<name> @` to fetch its value from memory
+                                  // by catching the output, or by checking memory directly.
+                                  // Since we don't want to flood logs, we can use a direct dictionary lookup if we knew the address.
+                                  // For now, we use a silent execution context trick if possible, or just evaluate it.
+                                  // A safer way is to ask the transpiler for the fixed memory address, but variables might be locals.
+                                  // Let's do a safe interpretation: we inject a temp word that pushes the value to a known address (0xD0004)
+                                  if (!forthName.startsWith("LV_")) { // Only global variables are safe to read directly via @ without frame context
+                                      const oldEmit = proc.forth.onEmit;
+                                      proc.forth.onEmit = () => {}; // silence
+                                      proc.forth.interpret(`${forthName} @ 0xD0004 ! \n`);
+                                      proc.forth.onEmit = oldEmit;
+
+                                      const view = new DataView(proc.forth.memory().buffer);
+                                      const val = view.getInt32(0xD0004, true);
+                                      valStr = String(val);
+                                  } else {
+                                      valStr = "(Local Var - Out of Scope)";
+                                  }
+                              } catch(e) {
+                                  valStr = "(Uninitialized)";
+                              }
                           }
                           return (
-                              <div key={jsName} style={{ marginBottom: '5px', borderBottom: '1px solid #222', paddingBottom: '2px' }}>
-                                  <span style={{ color: '#0af' }}>{jsName}</span>: <span style={{ color: '#aaa' }}>{valStr}</span>
+                              <div key={jsName} style={{ marginBottom: '5px', borderBottom: '1px solid #222', paddingBottom: '2px', display: 'flex', justifyContent: 'space-between' }}>
+                                  <span style={{ color: '#0af' }}>{jsName}</span>
+                                  <span style={{ color: valStr.includes('(') ? '#666' : '#fff' }}>{valStr}</span>
                               </div>
                           );
                       })}
