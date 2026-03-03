@@ -185,7 +185,15 @@ function init_hive_logic() {
 }
 `;
 
-const IS_DEBUG = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).has('debug') : false;
+const getDebugLevel = () => {
+    if (typeof window === 'undefined') return 0;
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('debug')) return 0;
+    const val = params.get('debug');
+    if (val === 'true' || val === '') return 2; // Default to full trace if ?debug or ?debug=true
+    return parseInt(val || '0', 10);
+};
+const IS_DEBUG = getDebugLevel();
 
 export const HIVE_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
@@ -197,3 +205,5 @@ export const HIVE_KERNEL_BLOCKS = [
 
 export const HIVE_AJS_SOURCE = AJS_LOGIC;
 export const HIVE_FORTH_SOURCE = HIVE_KERNEL_BLOCKS.join("\n");
+
+export const HIVE_SYMBOL_TABLE = AetherTranspiler.lastSymbolTable;

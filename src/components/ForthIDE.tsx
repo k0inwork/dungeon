@@ -7,6 +7,10 @@ import { BATTLE_FORTH_SOURCE, BATTLE_AJS_SOURCE } from "../kernels/BattleKernel"
 import { STANDARD_KERNEL_FIRMWARE } from "../kernels/SharedBlocks";
 import { forthService, BusPacket } from "../services/WaForthService";
 import { AetherTranspiler } from "../compiler/AetherTranspiler";
+import { GRID_SYMBOL_TABLE } from "../kernels/GridKernel";
+import { HIVE_SYMBOL_TABLE } from "../kernels/HiveKernel";
+import { PLAYER_SYMBOL_TABLE } from "../kernels/PlayerKernel";
+import { BATTLE_SYMBOL_TABLE } from "../kernels/BattleKernel";
 
 export const ForthIDE: React.FC = () => {
   const [mode, setMode] = useState<"ATTACH" | "STARTUP">("ATTACH");
@@ -80,12 +84,13 @@ export const ForthIDE: React.FC = () => {
   // Update symbol table when transpiling
   useEffect(() => {
       if (mode === "ATTACH" && attachedInstanceId) {
-          // If we attach, we don't have the symbol table automatically unless we recompiled it
-          // Realistically, the IDE would save the symbol table alongside the flashed logic.
-          // For now, we fetch the last generated one.
-          setSymbolTable(AetherTranspiler.lastSymbolTable || new Map());
+          if (attachedInstanceId.includes("GRID") || attachedInstanceId.startsWith("10")) setSymbolTable(GRID_SYMBOL_TABLE);
+          else if (attachedInstanceId.includes("PLAYER") || attachedInstanceId === "2") setSymbolTable(PLAYER_SYMBOL_TABLE);
+          else if (attachedInstanceId.includes("HIVE") || attachedInstanceId.startsWith("30")) setSymbolTable(HIVE_SYMBOL_TABLE);
+          else if (attachedInstanceId.includes("BATTLE") || attachedInstanceId.startsWith("40")) setSymbolTable(BATTLE_SYMBOL_TABLE);
+          else setSymbolTable(new Map());
       }
-  }, [mode, attachedInstanceId, ajsCode]);
+  }, [mode, attachedInstanceId]);
 
   // Subscribe to instance list changes
   useEffect(() => {

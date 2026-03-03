@@ -62,7 +62,8 @@ export class AetherTranspiler {
   private static localStructs: Set<string> = new Set();
   private static functionReturnTypes: Map<string, string> = new Map();
   private static channelSubscriptions: Map<number, ASTNode> = new Map();
-  private static debugMode: boolean = false;
+  private static debugMode: number = 0; // 0=off, 1=symbols, 2=trace
+  static lastSymbolTable: Map<string, string> = new Map();
 
   // Shared across transpile() calls for different kernels
   private static globalExportRegistry: Map<string, { owner: number, varName: string, typeId: number, sizeBytes: number, fields: Map<string, number> }> = new Map();
@@ -74,6 +75,7 @@ export class AetherTranspiler {
       this.globalExportRegistry = new Map();
       this.nextVsoTypeId = 1000;
       this.loadVsoRegistry();
+    this.lastSymbolTable = new Map();
   }
 
   static loadVsoRegistry() {
@@ -107,12 +109,13 @@ export class AetherTranspiler {
       });
   }
 
-  static transpile(jsCode: string, kernelId: number = 0, debugMode: boolean = false): string {
-    this.debugMode = debugMode;
+  static transpile(jsCode: string, kernelId: number = 0, debugMode: number | boolean = false): string {
+    this.debugMode = typeof debugMode === 'boolean' ? (debugMode ? 2 : 0) : debugMode;
     // Clear local state but keep VSO definitions
     this.structs = new Map();
     this.globalFieldOffsets = new Map();
     this.loadVsoRegistry();
+    this.lastSymbolTable = new Map();
 
     this.scopes = [];
     this.output = [];
@@ -456,6 +459,8 @@ export class AetherTranspiler {
 
     // 1. Emit simple constants first
     this.globalConsts.forEach((init, rawName) => {
+      const symName = this.sanitizeName(rawName);
+      if (this.debugMode >= 1) this.lastSymbolTable.set(rawName, symName);
       const name = this.sanitizeName(rawName);
       if (this.isStructArray(rawName)) return;
 
@@ -488,8 +493,9 @@ export class AetherTranspiler {
 
     // 2. Emit Top-Level Variables (including struct arrays)
     this.globalVars.forEach(rawV => {
-      if (KNOWN_GLOBALS.has(rawV)) return; // Skip firmware globals
       const v = this.sanitizeName(rawV);
+      if (this.debugMode >= 1) this.lastSymbolTable.set(rawV, v);
+      if (KNOWN_GLOBALS.has(rawV)) return; // Skip firmware globals
       if (this.isStructArray(rawV)) {
           const structName = this.getStructType(rawV);
           const count = this.structArrayCounts.get(rawV) || 0;
@@ -512,10 +518,13 @@ export class AetherTranspiler {
 
     // 3. Emit struct arrays that were declared as 'const'
     this.globalConsts.forEach((init, rawName) => {
+      const symName = this.sanitizeName(rawName);
+      if (this.debugMode >= 1) this.lastSymbolTable.set(rawName, symName);
         if (!this.isStructArray(rawName)) return;
         if (this.globalVars.has(rawName)) return; // Already emitted
 
         const name = this.sanitizeName(rawName);
+        if (this.debugMode >= 1) this.lastSymbolTable.set(rawName, name);
         const structName = this.getStructType(rawName);
         const count = this.structArrayCounts.get(rawName) || 0;
 
@@ -535,11 +544,13 @@ export class AetherTranspiler {
     this.scopes.forEach(scope => {
       scope.args.forEach(arg => {
         const fullName = this.sanitizeName(`LV_${scope.functionName}_${arg}`);
+        if (this.debugMode >= 1) this.lastSymbolTable.set(`${scope.functionName}::${arg}`, fullName);
         this.emit(`VARIABLE ${fullName}`);
       });
       scope.variables.forEach(v => {
         const rawFullName = `LV_${scope.functionName}_${v}`;
         const fullName = this.sanitizeName(rawFullName);
+        if (this.debugMode >= 1) this.lastSymbolTable.set(`${scope.functionName}::${v}`, fullName);
         if (this.isStructArray(rawFullName)) {
             const structName = this.getStructType(rawFullName);
             const count = this.structArrayCounts.get(rawFullName) || 0;
@@ -687,7 +698,7 @@ export class AetherTranspiler {
       case "ExpressionStatement":
         this.emitTrace(node);
         this.compileNode(node.expression);
-        if (this.debugMode) {
+        if (this.debugMode >= 2) {
            this.emit(`  DEBUG_MODE_PTR @ IF DEPTH JS_ASSERT_STACK THEN`);
         }
         break;
