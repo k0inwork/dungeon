@@ -133,14 +133,36 @@ function player_boot() {
 player_boot();
 `;
 
-const IS_DEBUG = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).has('debug') : false;
+const getDebugLevel = () => {
+    if (typeof window === 'undefined') return 0;
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('debug')) return 0;
+    const val = params.get('debug');
+    if (val === 'true' || val === '') return 2; // Default to full trace if ?debug or ?debug=true
+    return parseInt(val || '0', 10);
+};
+const IS_DEBUG = getDebugLevel();
 
 export const PLAYER_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   BLOCK_STANDARD_INBOX,
-  AetherTranspiler.transpile(AJS_LOGIC, KernelID.PLAYER, IS_DEBUG),
+  AetherTranspiler.transpile(AJS_LOGIC, KernelID.PLAYER, 0),
   ": INIT_PLAYER_AUTO INIT_PLAYER AJS_INIT_CHANNELS ' HANDLE_EVENTS HANDLE_EVENTS_XT ! ;"
 ];
 
 export const PLAYER_AJS_SOURCE = AJS_LOGIC;
 export const PLAYER_FORTH_SOURCE = PLAYER_KERNEL_BLOCKS.join("\n");
+
+export const PLAYER_SYMBOL_TABLE = AetherTranspiler.lastSymbolTable;
+
+export const PLAYER_DATA_BLOCKS = [
+  ...STANDARD_KERNEL_FIRMWARE,
+  BLOCK_STANDARD_INBOX,
+  (AetherTranspiler.transpile(PLAYER_AJS_SOURCE, KernelID.PLAYER, 0) as any).data
+];
+
+// Logic blocks are the logic part of AJS source, followed by all Forth function bindings at the end of the file.
+export const PLAYER_LOGIC_BLOCKS = [
+  (AetherTranspiler.transpile(PLAYER_AJS_SOURCE, KernelID.PLAYER, 0) as any).logic,
+  ...PLAYER_KERNEL_BLOCKS.slice(3) // 0: Firmware, 1: Inbox, 2: Transpiled Source (old string object)
+];

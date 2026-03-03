@@ -15,8 +15,15 @@ export class KernelTestRunner {
 
   async boot(blocks: string[]) {
     await this.proc.boot();
+    // Handle the new object structure if `blocks` contains { data, logic }
+    // but tests might just pass flat arrays. Let's iterate.
     for (const block of blocks) {
-        this.proc.run(block);
+        if (typeof block === 'object' && block !== null) {
+            if ((block as any).data) this.proc.run((block as any).data);
+            if ((block as any).logic) this.proc.run((block as any).logic);
+        } else {
+            this.proc.run(block);
+        }
     }
   }
 

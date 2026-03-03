@@ -462,12 +462,20 @@ function redraw_all() {
 }
 `;
 
-const IS_DEBUG = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).has('debug') : false;
+const getDebugLevel = () => {
+    if (typeof window === 'undefined') return 0;
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has('debug')) return 0;
+    const val = params.get('debug');
+    if (val === 'true' || val === '') return 2; // Default to full trace if ?debug or ?debug=true
+    return parseInt(val || '0', 10);
+};
+const IS_DEBUG = getDebugLevel();
 
 export const GRID_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   BLOCK_STANDARD_INBOX,
-  AetherTranspiler.transpile(AJS_LOGIC, KernelID.GRID, IS_DEBUG),
+  AetherTranspiler.transpile(AJS_LOGIC, KernelID.GRID, 0),
   ": RUN_GRID_CYCLE PROCESS_INBOX RUN_ENV_CYCLE ;",
   ": SET_LEVEL_ID SET_LEVEL_ID ;",
   ": INIT_MAP SYSTEM_RESET_MAP AJS_INIT_CHANNELS ' HANDLE_EVENTS HANDLE_EVENTS_XT ! ;",
@@ -479,3 +487,17 @@ export const GRID_KERNEL_BLOCKS = [
 
 export const GRID_AJS_SOURCE = AJS_LOGIC;
 export const GRID_FORTH_SOURCE = GRID_KERNEL_BLOCKS.join("\n");
+
+export const GRID_SYMBOL_TABLE = AetherTranspiler.lastSymbolTable;
+
+export const GRID_DATA_BLOCKS = [
+  ...STANDARD_KERNEL_FIRMWARE,
+  BLOCK_STANDARD_INBOX,
+  (AetherTranspiler.transpile(GRID_AJS_SOURCE, KernelID.GRID, 0) as any).data
+];
+
+// Logic blocks are the logic part of AJS source, followed by all Forth function bindings at the end of the file.
+export const GRID_LOGIC_BLOCKS = [
+  (AetherTranspiler.transpile(GRID_AJS_SOURCE, KernelID.GRID, 0) as any).logic,
+  ...GRID_KERNEL_BLOCKS.slice(3) // 0: Firmware, 1: Inbox, 2: Transpiled Source (old string object)
+];

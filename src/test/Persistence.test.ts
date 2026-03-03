@@ -8,10 +8,11 @@ describe('Persistence: Kernel Hibernate & Restore', () => {
     // 1. Boot and Setup Grid Kernel
     const id = "GRID_TEST";
     const proc = await forthService.bootProcess(id);
-    proc.logicBlocks = GRID_KERNEL_BLOCKS;
-    for (const block of GRID_KERNEL_BLOCKS) {
-        proc.run(block);
-    }
+    proc.dataBlocks = GRID_KERNEL_BLOCKS.slice(0, 3);
+    proc.logicBlocks = GRID_KERNEL_BLOCKS.slice(3);
+    for (const block of proc.dataBlocks) proc.run(block);
+    proc.captureDataEndPointer();
+    for (const block of proc.logicBlocks) proc.run(block);
     proc.run("INIT_MAP");
 
     // 2. Spawn an entity and set its position
@@ -47,10 +48,11 @@ describe('Persistence: Kernel Hibernate & Restore', () => {
   test('Hive Kernel preserves state and logic across hibernation', async () => {
     const id = "HIVE_TEST";
     const proc = await forthService.bootProcess(id);
-    proc.logicBlocks = HIVE_KERNEL_BLOCKS;
-    for (const block of HIVE_KERNEL_BLOCKS) {
-        proc.run(block);
-    }
+    proc.dataBlocks = HIVE_KERNEL_BLOCKS.slice(0, 3);
+    proc.logicBlocks = HIVE_KERNEL_BLOCKS.slice(3);
+    for (const block of proc.dataBlocks) proc.run(block);
+    proc.captureDataEndPointer();
+    for (const block of proc.logicBlocks) proc.run(block);
     proc.run("INIT_HIVE");
 
     // Verify it works
@@ -69,12 +71,18 @@ describe('Persistence: Kernel Hibernate & Restore', () => {
     forthService.processes.clear();
 
     const p1 = await forthService.bootProcess("P1");
-    p1.logicBlocks = [": INC 1 + ;", "VARIABLE V"];
+    p1.dataBlocks = ["VARIABLE V"];
+    p1.logicBlocks = [": INC 1 + ;"];
+    for (const b of p1.dataBlocks) p1.run(b);
+    p1.captureDataEndPointer();
     for (const b of p1.logicBlocks) p1.run(b);
     p1.run("10 V !");
 
     const p2 = await forthService.bootProcess("P2");
-    p2.logicBlocks = [": DBL 2 * ;", "VARIABLE V"];
+    p2.dataBlocks = ["VARIABLE V"];
+    p2.logicBlocks = [": DBL 2 * ;"];
+    for (const b of p2.dataBlocks) p2.run(b);
+    p2.captureDataEndPointer();
     for (const b of p2.logicBlocks) p2.run(b);
     p2.run("20 V !");
 

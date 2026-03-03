@@ -7,6 +7,10 @@ import { BATTLE_FORTH_SOURCE, BATTLE_AJS_SOURCE } from "../kernels/BattleKernel"
 import { STANDARD_KERNEL_FIRMWARE } from "../kernels/SharedBlocks";
 import { forthService, BusPacket } from "../services/WaForthService";
 import { AetherTranspiler } from "../compiler/AetherTranspiler";
+import { GRID_SYMBOL_TABLE } from "../kernels/GridKernel";
+import { HIVE_SYMBOL_TABLE } from "../kernels/HiveKernel";
+import { PLAYER_SYMBOL_TABLE } from "../kernels/PlayerKernel";
+import { BATTLE_SYMBOL_TABLE } from "../kernels/BattleKernel";
 
 export const ForthIDE: React.FC = () => {
   const [mode, setMode] = useState<"ATTACH" | "STARTUP">("ATTACH");
@@ -23,7 +27,7 @@ export const ForthIDE: React.FC = () => {
   const [output, setOutput] = useState<string[]>([]);
   const [status, setStatus] = useState<"IDLE" | "COMPILING" | "READY" | "ERROR">("IDLE");
   const [lastError, setLastError] = useState<string | null>(null);
-  const [debugMode, setDebugMode] = useState<boolean>(true);
+  const [debugMode, setDebugMode] = useState<number>(1);
   const [pausedLine, setPausedLine] = useState<number | null>(null);
   const [symbolTable, setSymbolTable] = useState<Map<string, string>>(new Map());
   
@@ -80,12 +84,13 @@ export const ForthIDE: React.FC = () => {
   // Update symbol table when transpiling
   useEffect(() => {
       if (mode === "ATTACH" && attachedInstanceId) {
-          // If we attach, we don't have the symbol table automatically unless we recompiled it
-          // Realistically, the IDE would save the symbol table alongside the flashed logic.
-          // For now, we fetch the last generated one.
-          setSymbolTable(AetherTranspiler.lastSymbolTable || new Map());
+          if (attachedInstanceId.includes("GRID") || attachedInstanceId.startsWith("10")) setSymbolTable(GRID_SYMBOL_TABLE);
+          else if (attachedInstanceId.includes("PLAYER") || attachedInstanceId === "2") setSymbolTable(PLAYER_SYMBOL_TABLE);
+          else if (attachedInstanceId.includes("HIVE") || attachedInstanceId.startsWith("30")) setSymbolTable(HIVE_SYMBOL_TABLE);
+          else if (attachedInstanceId.includes("BATTLE") || attachedInstanceId.startsWith("40")) setSymbolTable(BATTLE_SYMBOL_TABLE);
+          else setSymbolTable(new Map());
       }
-  }, [mode, attachedInstanceId, ajsCode]);
+  }, [mode, attachedInstanceId]);
 
   // Subscribe to instance list changes
   useEffect(() => {
@@ -152,6 +157,122 @@ export const ForthIDE: React.FC = () => {
 
   useEffect(() => outputEndRef.current?.scrollIntoView({ behavior: 'smooth' }), [output]);
 
+  const handleLiveRecompile = async () => {
+      setStatus("COMPILING");
+      setLastError(null);
+
+      try {
+          // Get all running active instances
+          const activeIds = availableInstances.filter(id => {
+              const proc = forthService.processes.get(id);
+              return proc && proc.status === "ACTIVE";
+          });
+
+          if (activeIds.length === 0) {
+              setLastError("No active instances to recompile.");
+              setStatus("ERROR");
+              return;
+          }
+
+          console.log(`[IDE] Live Recompiling ${activeIds.length} instances...`);
+
+          for (const id of activeIds) {
+              const proc = forthService.get(id);
+              if (!proc) continue;
+
+              // 1. Capture Data (Strictly up to Data Region End to avoid overwriting new functions)
+              const memDump = proc.serialize(true);
+
+              // We match standard IDs to Kernel IDs. HIVE_X is HIVE.
+              const cleanId = id.startsWith("HIVE") ? "HIVE" : id;
+              const kernelId = KernelID[cleanId as keyof typeof KernelID] ?? KernelID.HIVE;
+
+              // 2. Transpile fresh source from config
+              let ajsSrc = "";
+              let dataBlocks: string[] = [];
+              let logicBlocks: string[] = [];
+
+              // Dynamically import or reference the global modules if bundled
+              if (id === "GRID") {
+                  const M = require("../kernels/GridKernel");
+                  ajsSrc = M.GRID_AJS_SOURCE;
+                  dataBlocks = [...M.GRID_DATA_BLOCKS];
+                  logicBlocks = [...M.GRID_LOGIC_BLOCKS];
+              } else if (id === "PLAYER") {
+                  const M = require("../kernels/PlayerKernel");
+                  ajsSrc = M.PLAYER_AJS_SOURCE;
+                  dataBlocks = [...M.PLAYER_DATA_BLOCKS];
+                  logicBlocks = [...M.PLAYER_LOGIC_BLOCKS];
+              } else if (id === "BATTLE") {
+                  const M = require("../kernels/BattleKernel");
+                  ajsSrc = M.BATTLE_AJS_SOURCE;
+                  dataBlocks = [...M.BATTLE_DATA_BLOCKS];
+                  logicBlocks = [...M.BATTLE_LOGIC_BLOCKS];
+              } else if (id.startsWith("HIVE")) {
+                  const M = require("../kernels/HiveKernel");
+                  ajsSrc = M.HIVE_AJS_SOURCE;
+                  dataBlocks = [...M.HIVE_DATA_BLOCKS];
+                  logicBlocks = [...M.HIVE_LOGIC_BLOCKS];
+              }
+
+              if (!ajsSrc) {
+                  console.warn(`[IDE] Could not find AJS source for ${id}`);
+                  continue;
+              }
+
+              let compiledOutput: any;
+              try {
+                  compiledOutput = AetherTranspiler.transpile(ajsSrc, kernelId, debugMode);
+              } catch(e: any) {
+                  throw new Error(`Compile failed for ${id}: ${e.message}`);
+              }
+
+              // 3. Re-boot Kernel
+              await proc.boot();
+
+              // 4. Inject Blocks and Migrate
+              // Update the transpiled output parts
+              dataBlocks[dataBlocks.length - 1] = compiledOutput.data;
+              logicBlocks[0] = compiledOutput.logic;
+
+              proc.dataBlocks = dataBlocks;
+              proc.logicBlocks = logicBlocks;
+
+              // Step 4a: Evaluate Data Blocks exactly as before to align dictionary pointers
+              for (const block of dataBlocks) {
+                  proc.run(block);
+              }
+
+              proc.captureDataEndPointer();
+
+              // Step 4b: Restore the exact Memory Dump OVER the new data allocations
+              proc.deserialize(memDump);
+
+              // Step 4c: Evaluate Logic Blocks (they are now written after the restored data)
+              for (const block of logicBlocks) {
+                  proc.run(block);
+              }
+
+              // Restore instance ID to ensure routing doesn't break
+              const instId = id === "PLAYER" ? 2 : parseInt(id);
+              if (proc.isWordDefined("MY_ID")) {
+                  proc.run(`${instId} MY_ID !`);
+              }
+
+              proc.isReady = true;
+              proc.isLogicLoaded = true;
+              proc.status = "ACTIVE";
+
+              proc.log("--- LIVE RECOMPILE COMPLETE ---");
+          }
+          setStatus("READY");
+      } catch (e: any) {
+          setStatus("ERROR");
+          setLastError(e.message);
+          console.error("[IDE] Live Recompile Error:", e);
+      }
+  };
+
   const handleCompile = async () => {
     setStatus("COMPILING");
     setLastError(null);
@@ -180,6 +301,7 @@ export const ForthIDE: React.FC = () => {
         
         // 1. Load Firmware
         proc.log("--- LOADING FIRMWARE ---");
+        proc.logicBlocks = STANDARD_KERNEL_FIRMWARE.slice(); // Reset and copy firmware
         proc.run(STANDARD_KERNEL_FIRMWARE.join("\n"));
 
         let sourceToRun = forthCode;
@@ -208,6 +330,7 @@ export const ForthIDE: React.FC = () => {
         
         proc.log("--- INJECTING CODE ---");
         proc.run(sourceToRun);
+        proc.logicBlocks.push(sourceToRun);
 
         // 3. Swap Logic (If in STARTUP mode)
         if (isSwapMode && attachedInstanceId) {
@@ -290,11 +413,18 @@ export const ForthIDE: React.FC = () => {
                 </div>
 
                 <label style={{ fontSize: '0.8em', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                    <input type="checkbox" checked={debugMode} onChange={e => setDebugMode(e.target.checked)} />
-                    Enable Tracing (DEBUG_MODE)
+                    Mode:
+                    <select value={debugMode} onChange={e => setDebugMode(parseInt(e.target.value))} style={{ background: '#222', color: '#fff', border: '1px solid #555' }}>
+                        <option value={0}>0 (Fast)</option>
+                        <option value={1}>1 (Symbols)</option>
+                        <option value={2}>2 (Trace)</option>
+                    </select>
                 </label>
                 <button onClick={handleCompile} style={{ background: '#00f', color: '#fff', border: 'none', padding: '5px 15px', cursor: 'pointer' }}>
                     {status === 'COMPILING' ? '...' : 'COMPILE & RUN'}
+                </button>
+                <button onClick={handleLiveRecompile} style={{ background: '#d90', color: '#000', border: 'none', padding: '5px 15px', cursor: 'pointer', fontWeight: 'bold' }} title="Recompiles ALL kernels from source and migrates their memory intact.">
+                    {status === 'COMPILING' ? '...' : 'LIVE RECOMPILE & MIGRATE'}
                 </button>
             </div>
         </div>
@@ -325,7 +455,7 @@ export const ForthIDE: React.FC = () => {
       {/* EDITOR VIEW */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           {/* LEFT: VARIABLES / WATCH (Only if attached and debugging) */}
-          {mode === "ATTACH" && debugMode && (
+          {mode === "ATTACH" && debugMode >= 1 && (
               <div style={{ width: '250px', background: '#080808', borderRight: '1px solid #333', display: 'flex', flexDirection: 'column' }}>
                   <div style={{ padding: '5px', background: '#111', color: '#ff0', fontSize: '0.8em' }}>VARIABLES / STATE (SYMBOL TABLE)</div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 5px', background: '#222' }}>

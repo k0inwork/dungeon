@@ -27,7 +27,9 @@ export class ForthProcess {
   isLogicLoaded: boolean = false;
   outputLog: string[] = [];
   emitBuffer: string = ""; // Buffer for standard output
-  logicBlocks: string[] = []; // Store blocks for restoration
+  dataBlocks: string[] = []; // Store data defs to freeze pointer
+  dataEndPointer: number = 0; // The fixed data dictionary end
+  logicBlocks: string[] = []; // Store logic blocks for restoration
   lastUsed: number = Date.now();
   flashData: Uint8Array | null = null;
   private bootPromise: Promise<void> | null = null;
@@ -284,7 +286,13 @@ export class ForthProcess {
     // 1. Re-boot WASM
     await this.boot();
 
-    // 2. Re-load Logic Blocks (Re-compiles words)
+    // 2. Re-load Data Blocks
+    for (const block of this.dataBlocks) {
+        this.run(block);
+    }
+    this.captureDataEndPointer();
+
+    // 3. Re-load Logic Blocks (Re-compiles words)
     for (const block of this.logicBlocks) {
         this.run(block);
     }
@@ -324,7 +332,7 @@ export class ForthProcess {
       this.manager.notifyListeners();
   }
 
-  serialize(): Uint8Array {
+  serialize(limitToDataRegion: boolean = false): Uint8Array {
     if (!this.forth) return this.flashData || new Uint8Array(0);
 
     // Try to find HERE if word is defined
@@ -337,10 +345,15 @@ export class ForthProcess {
         }
     } catch(e) {}
 
+    // For Live Recompilation, we ONLY capture up to the data end.
+    if (limitToDataRegion && this.dataEndPointer > 0) {
+        here = this.dataEndPointer;
+    }
+
     // Determine highest used address based on VSO Registry and common maps
     // Maps: 0x30000 to 0x34000
     // Entities: 0x90000, RPG: 0xA0000, Player: 0xC0000
-    let maxAddr = Math.max(here, 0xD0000); // 0xD0000 covers all current regions
+    let maxAddr = limitToDataRegion ? here : Math.max(here, 0xD0000); // 0xD0000 covers all current regions
 
     const fullMem = new Uint8Array(this.forth.memory().buffer);
     const sliceSize = Math.min(fullMem.length, maxAddr);
@@ -366,7 +379,7 @@ export class ForthProcess {
     }
 
     // Deduplication Logic - disabled for test runner to work properly since it counts lines and expects strict output
-    if (msg === this.lastLogMsg && !(typeof process !== 'undefined' && process.env.VITEST)) {
+    if (msg === this.lastLogMsg && !((typeof process !== 'undefined' && process.env && process.env.VITEST))) {
         this.lastLogCount++;
         if (this.outputLog.length > 0) {
             const timestamp = new Date().toLocaleTimeString().split(" ")[0];
@@ -421,16 +434,34 @@ export class ForthProcess {
     }
   }
 
+  captureDataEndPointer() {
+    if (!this.forth || this.status === "FLASHED") return;
+    try {
+        if (this.isWordDefined("SYNC_HERE")) {
+            this.forth.interpret("SYNC_HERE\n");
+            const view = new DataView(this.forth.memory().buffer);
+            this.dataEndPointer = view.getInt32(1008, true); // 0x3F0
+        }
+    } catch(e) {}
+  }
+
   isWordDefined(wordName: string): boolean {
     if (!this.forth || this.status === "FLASHED") return false;
     const oldEmit = this.forth.onEmit;
     this.forth.onEmit = () => {}; // Mute output during check
+
+    // Mute console.error because WAForth uses it for "undefined word"
+    const oldConsoleError = console.error;
+    console.error = () => {};
+
     try {
         this.forth.interpret(`' ${wordName} DROP`);
         this.forth.onEmit = oldEmit;
+        console.error = oldConsoleError;
         return true;
     } catch (e) {
         this.forth.onEmit = oldEmit;
+        console.error = oldConsoleError;
         return false;
     }
   }
@@ -544,7 +575,9 @@ class ForthProcessManager {
           data[id] = {
               levelIdx: proc.levelIdx,
               status: proc.status,
+              dataBlocks: proc.dataBlocks,
               logicBlocks: proc.logicBlocks,
+              dataEndPointer: proc.dataEndPointer,
               flashData: proc.serialize(),
               outputLog: proc.outputLog
           };
@@ -564,7 +597,9 @@ class ForthProcessManager {
       for (const [id, procData] of Object.entries(data.processes)) {
           const proc = this.get(id);
           proc.levelIdx = (procData as any).levelIdx;
+          proc.dataBlocks = (procData as any).dataBlocks || [];
           proc.logicBlocks = (procData as any).logicBlocks;
+          proc.dataEndPointer = (procData as any).dataEndPointer || 0;
           proc.outputLog = (procData as any).outputLog || [];
 
           const rawData = (procData as any).flashData as Uint8Array;
@@ -575,9 +610,10 @@ class ForthProcessManager {
           } else {
               // If it was active, we should still boot and restore it
               await proc.boot();
-              for (const block of proc.logicBlocks) {
-                  proc.run(block);
-              }
+              for (const block of proc.dataBlocks) proc.run(block);
+              proc.captureDataEndPointer();
+              for (const block of proc.logicBlocks) proc.run(block);
+
               proc.deserialize(rawData);
               proc.status = "ACTIVE";
               proc.isReady = true;
