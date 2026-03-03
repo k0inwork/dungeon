@@ -133,10 +133,12 @@ function player_boot() {
 player_boot();
 `;
 
+const IS_DEBUG = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).has('debug') : false;
+
 export const PLAYER_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   BLOCK_STANDARD_INBOX,
-  AetherTranspiler.transpile(AJS_LOGIC, KernelID.PLAYER),
+  AetherTranspiler.transpile(AJS_LOGIC, KernelID.PLAYER, IS_DEBUG),
   ": INIT_PLAYER_AUTO INIT_PLAYER AJS_INIT_CHANNELS ' HANDLE_EVENTS HANDLE_EVENTS_XT ! ;"
 ];
 

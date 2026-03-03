@@ -462,10 +462,12 @@ function redraw_all() {
 }
 `;
 
+const IS_DEBUG = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).has('debug') : false;
+
 export const GRID_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   BLOCK_STANDARD_INBOX,
-  AetherTranspiler.transpile(AJS_LOGIC, KernelID.GRID),
+  AetherTranspiler.transpile(AJS_LOGIC, KernelID.GRID, IS_DEBUG),
   ": RUN_GRID_CYCLE PROCESS_INBOX RUN_ENV_CYCLE ;",
   ": SET_LEVEL_ID SET_LEVEL_ID ;",
   ": INIT_MAP SYSTEM_RESET_MAP AJS_INIT_CHANNELS ' HANDLE_EVENTS HANDLE_EVENTS_XT ! ;",
