@@ -198,7 +198,7 @@ const IS_DEBUG = getDebugLevel();
 export const HIVE_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   BLOCK_STANDARD_INBOX,
-  AetherTranspiler.transpile(AJS_LOGIC, KernelID.HIVE, IS_DEBUG),
+  AetherTranspiler.transpile(AJS_LOGIC, KernelID.HIVE, 0),
   ": INIT_HIVE INIT_HIVE_LOGIC AJS_INIT_CHANNELS ' HANDLE_EVENTS HANDLE_EVENTS_XT ! ;",
   ": RUN_HIVE_CYCLE RUN_HIVE_STEP ;"
 ];
@@ -207,3 +207,15 @@ export const HIVE_AJS_SOURCE = AJS_LOGIC;
 export const HIVE_FORTH_SOURCE = HIVE_KERNEL_BLOCKS.join("\n");
 
 export const HIVE_SYMBOL_TABLE = AetherTranspiler.lastSymbolTable;
+
+export const HIVE_DATA_BLOCKS = [
+  ...STANDARD_KERNEL_FIRMWARE,
+  BLOCK_STANDARD_INBOX,
+  (AetherTranspiler.transpile(HIVE_AJS_SOURCE, KernelID.HIVE, 0) as any).data
+];
+
+// Logic blocks are the logic part of AJS source, followed by all Forth function bindings at the end of the file.
+export const HIVE_LOGIC_BLOCKS = [
+  (AetherTranspiler.transpile(HIVE_AJS_SOURCE, KernelID.HIVE, 0) as any).logic,
+  ...HIVE_KERNEL_BLOCKS.slice(3) // 0: Firmware, 1: Inbox, 2: Transpiled Source (old string object)
+];

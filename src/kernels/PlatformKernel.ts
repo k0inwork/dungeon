@@ -432,3 +432,15 @@ export const PLATFORM_KERNEL_BLOCKS = [
   ": PLAYER_VX PLAYER_VX_VAL ;",
   ": PLAYER_VY PLAYER_VY_VAL ;"
 ];
+
+export const PLATFORM_DATA_BLOCKS = [
+  ...STANDARD_KERNEL_FIRMWARE,
+  BLOCK_STANDARD_INBOX,
+  (AetherTranspiler.transpile(PLATFORM_AJS_SOURCE, KernelID.PLATFORM, 0) as any).data
+];
+
+// Logic blocks are the logic part of AJS source, followed by all Forth function bindings at the end of the file.
+export const PLATFORM_LOGIC_BLOCKS = [
+  (AetherTranspiler.transpile(PLATFORM_AJS_SOURCE, KernelID.PLATFORM, 0) as any).logic,
+  ...PLATFORM_KERNEL_BLOCKS.slice(3) // 0: Firmware, 1: Inbox, 2: Transpiled Source (old string object)
+];

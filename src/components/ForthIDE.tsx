@@ -157,6 +157,122 @@ export const ForthIDE: React.FC = () => {
 
   useEffect(() => outputEndRef.current?.scrollIntoView({ behavior: 'smooth' }), [output]);
 
+  const handleLiveRecompile = async () => {
+      setStatus("COMPILING");
+      setLastError(null);
+
+      try {
+          // Get all running active instances
+          const activeIds = availableInstances.filter(id => {
+              const proc = forthService.processes.get(id);
+              return proc && proc.status === "ACTIVE";
+          });
+
+          if (activeIds.length === 0) {
+              setLastError("No active instances to recompile.");
+              setStatus("ERROR");
+              return;
+          }
+
+          console.log(`[IDE] Live Recompiling ${activeIds.length} instances...`);
+
+          for (const id of activeIds) {
+              const proc = forthService.get(id);
+              if (!proc) continue;
+
+              // 1. Capture Data (Strictly up to Data Region End to avoid overwriting new functions)
+              const memDump = proc.serialize(true);
+
+              // We match standard IDs to Kernel IDs. HIVE_X is HIVE.
+              const cleanId = id.startsWith("HIVE") ? "HIVE" : id;
+              const kernelId = KernelID[cleanId as keyof typeof KernelID] ?? KernelID.HIVE;
+
+              // 2. Transpile fresh source from config
+              let ajsSrc = "";
+              let dataBlocks: string[] = [];
+              let logicBlocks: string[] = [];
+
+              // Dynamically import or reference the global modules if bundled
+              if (id === "GRID") {
+                  const M = require("../kernels/GridKernel");
+                  ajsSrc = M.GRID_AJS_SOURCE;
+                  dataBlocks = [...M.GRID_DATA_BLOCKS];
+                  logicBlocks = [...M.GRID_LOGIC_BLOCKS];
+              } else if (id === "PLAYER") {
+                  const M = require("../kernels/PlayerKernel");
+                  ajsSrc = M.PLAYER_AJS_SOURCE;
+                  dataBlocks = [...M.PLAYER_DATA_BLOCKS];
+                  logicBlocks = [...M.PLAYER_LOGIC_BLOCKS];
+              } else if (id === "BATTLE") {
+                  const M = require("../kernels/BattleKernel");
+                  ajsSrc = M.BATTLE_AJS_SOURCE;
+                  dataBlocks = [...M.BATTLE_DATA_BLOCKS];
+                  logicBlocks = [...M.BATTLE_LOGIC_BLOCKS];
+              } else if (id.startsWith("HIVE")) {
+                  const M = require("../kernels/HiveKernel");
+                  ajsSrc = M.HIVE_AJS_SOURCE;
+                  dataBlocks = [...M.HIVE_DATA_BLOCKS];
+                  logicBlocks = [...M.HIVE_LOGIC_BLOCKS];
+              }
+
+              if (!ajsSrc) {
+                  console.warn(`[IDE] Could not find AJS source for ${id}`);
+                  continue;
+              }
+
+              let compiledOutput: any;
+              try {
+                  compiledOutput = AetherTranspiler.transpile(ajsSrc, kernelId, debugMode ? 2 : 0);
+              } catch(e: any) {
+                  throw new Error(`Compile failed for ${id}: ${e.message}`);
+              }
+
+              // 3. Re-boot Kernel
+              await proc.boot();
+
+              // 4. Inject Blocks and Migrate
+              // Update the transpiled output parts
+              dataBlocks[dataBlocks.length - 1] = compiledOutput.data;
+              logicBlocks[0] = compiledOutput.logic;
+
+              proc.dataBlocks = dataBlocks;
+              proc.logicBlocks = logicBlocks;
+
+              // Step 4a: Evaluate Data Blocks exactly as before to align dictionary pointers
+              for (const block of dataBlocks) {
+                  proc.run(block);
+              }
+
+              proc.captureDataEndPointer();
+
+              // Step 4b: Restore the exact Memory Dump OVER the new data allocations
+              proc.deserialize(memDump);
+
+              // Step 4c: Evaluate Logic Blocks (they are now written after the restored data)
+              for (const block of logicBlocks) {
+                  proc.run(block);
+              }
+
+              // Restore instance ID to ensure routing doesn't break
+              const instId = id === "PLAYER" ? 2 : parseInt(id);
+              if (proc.isWordDefined("MY_ID")) {
+                  proc.run(`${instId} MY_ID !`);
+              }
+
+              proc.isReady = true;
+              proc.isLogicLoaded = true;
+              proc.status = "ACTIVE";
+
+              proc.log("--- LIVE RECOMPILE COMPLETE ---");
+          }
+          setStatus("READY");
+      } catch (e: any) {
+          setStatus("ERROR");
+          setLastError(e.message);
+          console.error("[IDE] Live Recompile Error:", e);
+      }
+  };
+
   const handleCompile = async () => {
     setStatus("COMPILING");
     setLastError(null);
@@ -302,6 +418,9 @@ export const ForthIDE: React.FC = () => {
                 </label>
                 <button onClick={handleCompile} style={{ background: '#00f', color: '#fff', border: 'none', padding: '5px 15px', cursor: 'pointer' }}>
                     {status === 'COMPILING' ? '...' : 'COMPILE & RUN'}
+                </button>
+                <button onClick={handleLiveRecompile} style={{ background: '#d90', color: '#000', border: 'none', padding: '5px 15px', cursor: 'pointer', fontWeight: 'bold' }} title="Recompiles ALL kernels from source and migrates their memory intact.">
+                    {status === 'COMPILING' ? '...' : 'LIVE RECOMPILE & MIGRATE'}
                 </button>
             </div>
         </div>

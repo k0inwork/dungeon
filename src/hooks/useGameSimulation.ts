@@ -67,7 +67,7 @@ export const useGameSimulation = (addLog: (msg: string) => void) => {
 
             const kernels = await Promise.all(config.requiredKernels.map(k => {
                 const instId = k.role === KernelID.PLAYER ? "PLAYER" : String(getInstanceID(k.role, lIdx));
-                return ensureKernel(instId, k.blocks, lIdx);
+                return ensureKernel(instId, k.dataBlocks || k.blocks, k.logicBlocks || k.blocks, lIdx);
             }));
 
             if (kernels.some(k => !k)) return;

@@ -228,7 +228,7 @@ const IS_DEBUG = getDebugLevel();
 export const BATTLE_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   BLOCK_STANDARD_INBOX,
-  AetherTranspiler.transpile(AJS_LOGIC, KernelID.BATTLE, IS_DEBUG),
+  AetherTranspiler.transpile(AJS_LOGIC, KernelID.BATTLE, 0),
   ": INIT_BATTLE INIT_BATTLE_LOGIC AJS_INIT_CHANNELS ' HANDLE_EVENTS HANDLE_EVENTS_XT ! ;",
   ": RUN_BATTLE_CYCLE RUN_BATTLE_STEP ;"
 ];
@@ -237,3 +237,15 @@ export const BATTLE_AJS_SOURCE = AJS_LOGIC;
 export const BATTLE_FORTH_SOURCE = BATTLE_KERNEL_BLOCKS.join("\n");
 
 export const BATTLE_SYMBOL_TABLE = AetherTranspiler.lastSymbolTable;
+
+export const BATTLE_DATA_BLOCKS = [
+  ...STANDARD_KERNEL_FIRMWARE,
+  BLOCK_STANDARD_INBOX,
+  (AetherTranspiler.transpile(BATTLE_AJS_SOURCE, KernelID.BATTLE, 0) as any).data
+];
+
+// Logic blocks are the logic part of AJS source, followed by all Forth function bindings at the end of the file.
+export const BATTLE_LOGIC_BLOCKS = [
+  (AetherTranspiler.transpile(BATTLE_AJS_SOURCE, KernelID.BATTLE, 0) as any).logic,
+  ...BATTLE_KERNEL_BLOCKS.slice(3) // 0: Firmware, 1: Inbox, 2: Transpiled Source (old string object)
+];

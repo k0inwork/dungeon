@@ -6,7 +6,7 @@ import { PLAYER_KERNEL_BLOCKS } from '../kernels/PlayerKernel';
 export const useKernelManager = (addLog: (msg: string) => void) => {
     const loadingKernels = React.useRef<Map<string, Promise<any>>>(new Map());
 
-    const loadKernel = React.useCallback(async (id: string, blocks: string[], lIdx: number = 0) => {
+    const loadKernel = React.useCallback(async (id: string, dataBlocks: string[], logicBlocks: string[], lIdx: number = 0) => {
         if (loadingKernels.current.has(id)) {
             return await loadingKernels.current.get(id);
         }
@@ -17,16 +17,32 @@ export const useKernelManager = (addLog: (msg: string) => void) => {
             await forthService.bootProcess(id);
             const proc = forthService.get(id);
             proc.levelIdx = lIdx;
-            proc.logicBlocks = blocks;
+            proc.dataBlocks = dataBlocks;
+            proc.logicBlocks = logicBlocks;
             proc.status = "ACTIVE";
             addLog(`${id} Kernel Initialized.`);
 
-            for (let i = 0; i < blocks.length; i++) {
+            // 1. Evaluate Data Blocks
+            for (let i = 0; i < dataBlocks.length; i++) {
                 try {
-                    proc.run(blocks[i]);
+                    proc.run(dataBlocks[i]);
                 } catch (e) {
-                    console.error(`Error in ${id} Block ${i}:`, e);
-                    addLog(`ERR: ${id} Block ${i} Failed`);
+                    console.error(`Error in ${id} DataBlock ${i}:`, e);
+                    addLog(`ERR: ${id} DataBlock ${i} Failed`);
+                    throw e;
+                }
+            }
+
+            // 2. Capture dataEndPointer
+            proc.captureDataEndPointer();
+
+            // 3. Evaluate Logic Blocks
+            for (let i = 0; i < logicBlocks.length; i++) {
+                try {
+                    proc.run(logicBlocks[i]);
+                } catch (e) {
+                    console.error(`Error in ${id} LogicBlock ${i}:`, e);
+                    addLog(`ERR: ${id} LogicBlock ${i} Failed`);
                     throw e;
                 }
             }
@@ -52,13 +68,14 @@ export const useKernelManager = (addLog: (msg: string) => void) => {
         return await promise;
     }, [addLog]);
 
-    const ensureKernel = React.useCallback(async (id: string, blocks: string[], lIdx: number) => {
+    const ensureKernel = React.useCallback(async (id: string, dataBlocks: string[], logicBlocks: string[], lIdx: number) => {
         const proc = forthService.get(id);
-        const blocksChanged = proc.logicBlocks.length > 0 && proc.logicBlocks !== blocks && JSON.stringify(proc.logicBlocks) !== JSON.stringify(blocks);
+        const blocksChanged = proc.logicBlocks.length > 0 && proc.logicBlocks !== logicBlocks && JSON.stringify(proc.logicBlocks) !== JSON.stringify(logicBlocks);
 
         if (proc.status === "FLASHED") {
             if (blocksChanged) {
-                proc.logicBlocks = blocks;
+                proc.dataBlocks = dataBlocks;
+                proc.logicBlocks = logicBlocks;
                 await proc.awaken();
                 return proc;
             }
@@ -69,9 +86,14 @@ export const useKernelManager = (addLog: (msg: string) => void) => {
         if (proc.isLogicLoaded) {
             if (blocksChanged) {
                 await forthService.bootProcess(id);
-                proc.logicBlocks = blocks;
-                for (let i = 0; i < blocks.length; i++) {
-                    proc.run(blocks[i]);
+                proc.dataBlocks = dataBlocks;
+                proc.logicBlocks = logicBlocks;
+                for (let i = 0; i < dataBlocks.length; i++) {
+                    proc.run(dataBlocks[i]);
+                }
+                proc.captureDataEndPointer();
+                for (let i = 0; i < logicBlocks.length; i++) {
+                    proc.run(logicBlocks[i]);
                 }
                 proc.isLogicLoaded = true;
             }
@@ -85,7 +107,7 @@ export const useKernelManager = (addLog: (msg: string) => void) => {
             return proc;
         }
 
-        return await loadKernel(id, blocks, lIdx);
+        return await loadKernel(id, dataBlocks, logicBlocks, lIdx);
     }, [loadKernel]);
 
     return React.useMemo(() => ({ ensureKernel, loadKernel }), [ensureKernel, loadKernel]);

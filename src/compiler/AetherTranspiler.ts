@@ -109,7 +109,7 @@ export class AetherTranspiler {
       });
   }
 
-  static transpile(jsCode: string, kernelId: number = 0, debugMode: number | boolean = false): string {
+  static transpile(jsCode: string, kernelId: number = 0, debugMode: number | boolean = false): { data: string, logic: string } | string {
     this.debugMode = typeof debugMode === 'boolean' ? (debugMode ? 2 : 0) : debugMode;
     // Clear local state but keep VSO definitions
     this.structs = new Map();
@@ -133,7 +133,7 @@ export class AetherTranspiler {
     this.channelSubscriptions = new Map();
 
     if (!jsCode || !jsCode.trim()) {
-        return "";
+        return { data: "", logic: "" };
     }
 
     // Ensure we are in DECIMAL mode for literal addresses emitted by transpiler
@@ -148,12 +148,28 @@ export class AetherTranspiler {
       this.emitStructs();
       this.analyzeScopes(ast as ASTNode);
       this.emitGlobals();
+
+      const dataOutput = this.output.join("\n");
+      this.output = []; // Reset output array for logic
+
       this.compileNode(ast as ASTNode);
       this.emitSubscriptionWord();
-      return this.output.join("\n");
+      const logicOutput = this.output.join("\n");
+
+      // To preserve backward compatibility with older string-based test runners:
+      // By returning a true string subclass we ensure expect(forth).toContain() fully works
+      const combined = dataOutput + "\n" + logicOutput;
+      const strObj = new String(combined) as any;
+      strObj.data = dataOutput;
+      strObj.logic = logicOutput;
+
+      return combined as any;
     } catch (e: any) {
       console.error("Transpilation Failed:", e);
-      return `( ERROR: ${e.message} )`;
+      const strObj = new String(`( ERROR: ${e.message} )`) as any;
+      strObj.data = `( ERROR: ${e.message} )`;
+      strObj.logic = "";
+      return combined as any;
     }
   }
 
