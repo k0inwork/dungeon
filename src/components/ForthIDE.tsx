@@ -138,10 +138,13 @@ export const ForthIDE: React.FC = () => {
   // Logs
   useEffect(() => {
       let targetId = attachedInstanceId;
-      if (!targetId) return;
+      if (!targetId) {
+          setOutput([]);
+          return;
+      }
 
       const proc = forthService.get(targetId);
-      setOutput([...proc.outputLog]);
+      setOutput([...(proc?.outputLog || [])]);
       const handleLog = (msg: string) => setOutput(prev => [...prev, msg].slice(-200));
       proc.addLogListener(handleLog);
       return () => { proc.removeLogListener(handleLog); };
@@ -329,8 +332,8 @@ export const ForthIDE: React.FC = () => {
                       <button onClick={() => setSymbolTable(new Map(symbolTable))} style={{ background: '#444', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '0.8em' }}>↻ Refresh Values</button>
                   </div>
                   <div style={{ flex: 1, overflowY: 'auto', padding: '10px', fontSize: '12px', color: '#ccc' }}>
-                      {Array.from(symbolTable.entries()).map(([jsName, forthName]) => {
-                          const proc = forthService.get(attachedInstanceId);
+                      {attachedInstanceId ? Array.from(symbolTable.entries()).map(([jsName, forthName]) => {
+                          const proc = forthService.processes.get(attachedInstanceId);
                           let valStr = "???";
                           if (proc && proc.isReady && proc.forth) {
                               try {
@@ -362,7 +365,7 @@ export const ForthIDE: React.FC = () => {
                                   <span style={{ color: valStr.includes('(') ? '#666' : '#fff' }}>{valStr}</span>
                               </div>
                           );
-                      })}
+                      }) : null}
                       {symbolTable.size === 0 && <div style={{ color: '#555' }}>No symbols extracted. Compile AJS code first.</div>}
                   </div>
               </div>
