@@ -12,9 +12,31 @@ export interface BrokerState {
 
 export class SimulationEngine {
     private state: BrokerState;
+    public isPaused: boolean = false;
 
     constructor(state: BrokerState) {
         this.state = state;
+
+        // Global listener for debugger resume/pause
+        if (typeof window !== 'undefined') {
+            window.addEventListener('RESUME_SIMULATION', () => {
+                this.isPaused = false;
+            });
+            window.addEventListener('PAUSE_SIMULATION', () => {
+                this.isPaused = true;
+            });
+            window.addEventListener('STEP_SIMULATION', () => {
+                // Step logic: Unpause for exactly one tick, then pause again
+                this.isPaused = false;
+
+                // We use a small timeout to let the React render cycle catch up
+                // and actually execute the tick before re-pausing
+                setTimeout(() => {
+                    this.isPaused = true;
+                    window.dispatchEvent(new CustomEvent('PAUSE_SIMULATION'));
+                }, 50);
+            });
+        }
     }
 
     public runBroker(kernels: any[], levelIdx: number) {
@@ -106,6 +128,8 @@ export class SimulationEngine {
     }
 
     public tickSimulation(currentLevelIdx: number, simulationMode: string, currentLevelId: string) {
+        if (this.isPaused) return;
+
         const lIdx = currentLevelIdx;
         const physicsRole = simulationMode === 'PLATFORM' ? KernelID.PLATFORM : KernelID.GRID;
         const gridId = String(getInstanceID(physicsRole, lIdx));

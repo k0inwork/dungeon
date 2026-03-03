@@ -215,10 +215,12 @@ function run_battle_step() {
 }
 `;
 
+const IS_DEBUG = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).has('debug') : false;
+
 export const BATTLE_KERNEL_BLOCKS = [
   ...STANDARD_KERNEL_FIRMWARE,
   BLOCK_STANDARD_INBOX,
-  AetherTranspiler.transpile(AJS_LOGIC, KernelID.BATTLE),
+  AetherTranspiler.transpile(AJS_LOGIC, KernelID.BATTLE, IS_DEBUG),
   ": INIT_BATTLE INIT_BATTLE_LOGIC AJS_INIT_CHANNELS ' HANDLE_EVENTS HANDLE_EVENTS_XT ! ;",
   ": RUN_BATTLE_CYCLE RUN_BATTLE_STEP ;"
 ];
