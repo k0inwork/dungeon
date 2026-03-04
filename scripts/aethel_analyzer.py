@@ -114,6 +114,10 @@ class AethelAnalyzer:
         print("\n==============================================")
         print("Analysis Complete.")
 
+        if self.crashes or self.js_errors or leaks_found > 0 or loops_found > 0:
+            return False
+        return True
+
 def run():
     print("Starting Headless Aethelgard with ?debug=2 ...")
     analyzer = AethelAnalyzer()
@@ -161,7 +165,10 @@ def run():
             print(f"Playwright automation failed: {e}")
         finally:
             browser.close()
-            analyzer.analyze()
+            success = analyzer.analyze()
+            if not success:
+                import sys
+                sys.exit(1)
 
 if __name__ == "__main__":
     run()

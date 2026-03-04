@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test:kernels": "vitest run --reporter=verbose src/test/GridKernel.test.ts src/test/BattleKernel.test.ts src/test/Transpiler.test.ts",
     "test:integration": "vitest run --reporter=verbose src/test/Integration.test.ts",
-    "test": "vitest run --reporter=verbose"
+    "test:analyzer": "python scripts/aethel_analyzer.py",
+    "test": "vitest run --reporter=verbose && npm run test:analyzer"
   },
   "dependencies": {
     "@google/genai": "^1.39.0",
