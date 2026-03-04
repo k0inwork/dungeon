@@ -595,6 +595,13 @@ export class AetherTranspiler {
           const line = node.loc.start.line;
           this.emit(`  ( -- Line ${line} -- )`);
           this.emit(`  DEBUG_MODE_PTR @ IF ${line} JS_TRACE THEN`);
+
+          // Enhanced tracing for Level 2 (ADA Automation Analysis)
+          if (this.debugMode >= 2) {
+              // We log the DEPTH explicitly in a parsable format
+              // The analyzer script will look for `[DEPTH: X]`
+              this.emit(`  S" [DEPTH: " S+ DEPTH N>S S+ S" ]" S+ JS_LOG`);
+          }
       }
   }
 

@@ -11,6 +11,11 @@ import { Header } from "./src/components/ui/Header";
 import { PresentationLayer } from "./src/views/PresentationLayer";
 import { useGameSimulation } from "./src/hooks/useGameSimulation";
 
+// Expose forthService for testing analyzer
+if (typeof window !== 'undefined') {
+    (window as any).forthService = forthService;
+}
+
 const App = () => {
     const [viewMode, setViewMode] = useState<"GAME" | "ARCHITECT">("GAME");
     const [seed, setSeed] = useState("Cyberpunk Sewers");
