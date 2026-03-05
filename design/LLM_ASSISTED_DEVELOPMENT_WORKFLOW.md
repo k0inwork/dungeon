@@ -82,6 +82,13 @@ As the player explores the world and encounters the unknown, the LLM actively wr
 ### 5.3 The GM Loop
 This requires a high-performance variant of the debugging loop described in Phase 4. When the GM invents a rule, the engine attempts to compile and boot the new kernel variant seamlessly in the background while the player reads the narrative description. If transpilation fails, the GM must gracefully fallback or quickly correct the AJS error before the player takes their next mechanical action.
 
+### 5.4 The Bound Master: Complying with the Forged World
+A critical challenge in infinite generative storytelling is hallucination and mechanical inconsistency. To function as a true D&D Game Master, the LLM must eventually become bound by the world it has created.
+
+*   **The Immutable Ledger:** Once the LLM generates a new `CrystallineVoidGridKernel.ts` and transpiles it into WAForth, it is permanently added to the session's **Trait Manifest**. That kernel becomes an immutable law of physics for that specific region.
+*   **Contextual Guardrails:** The LLM cannot simply "forget" or randomly rewrite how the Void works when the player returns to it hours later. The engine must maintain a strictly formatted ledger of all previously generated AJS kernels, VSO structs, and Trait mappings. This ledger is passed as context to the LLM during every prompt.
+*   **Forced Adherence:** If the GM attempts to generate a new monster in the Crystalline Void, it must write the monster's `HiveKernel` logic to comply with the existing spatial rules (e.g., area-of-effect light reflections) it established previously in the `GridKernel`. It must build *upon* the VSO structs it already allocated, not infinitely redefine them.
+
 ## 6. Implications & Architectural Impact
 
 ### 6.1 Safety Through Confinement
