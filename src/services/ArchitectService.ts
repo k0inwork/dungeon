@@ -214,6 +214,9 @@ GAME FUNCTIONS GLOBALLY AVAILABLE:
             gridProc.run("INIT_MAP");
             battleProc.run("INIT_BATTLE");
 
+            if (!gridProc || !battleProc) {
+                throw new Error("Failed to load mock kernels for validation.");
+            }
             // Check for stack leaks
             // WAForth exposes the forth state directly, or we can check the depth via a run command.
             gridProc.run("DEPTH .N");
