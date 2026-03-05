@@ -168,6 +168,7 @@ class GeminiProvider implements AIProvider {
             }
         }
 
+        console.warn(`[GeminiProvider] All Gemini models failed. Rejecting request to trigger Golden Path fallback in Architect.`);
         throw new Error(`All Gemini models failed. Last error: ${lastError?.message || String(lastError)}`);
     }
 }
@@ -450,6 +451,19 @@ ${code}
       theme: themeData,
       taxonomy: fullTaxonomy,
       atlas: levelData.atlas,
+      levels: {
+         "hub": {
+            id: "hub",
+            name: levelData.active_level.name || "Generated Hub",
+            description: levelData.active_level.description || "",
+            simulation_mode: "GRID",
+            map_layout: generatedMap.layout,
+            terrain_legend: legend,
+            entities: generatedMap.entities,
+            entity_roster: roster,
+            platformer_config: levelData.active_level.platformer_config || { gravity: 5000, jump_force: -75000, wall_color: 0x444444 }
+         }
+      },
       active_level: {
         ...levelData.active_level,
         map_layout: generatedMap.layout,

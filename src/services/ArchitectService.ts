@@ -87,7 +87,13 @@ class ArchitectService {
         if (isMock) {
             this.worldData = generatorService.generateMockWorld();
         } else {
-            this.worldData = await generatorService.generateWorld(seed);
+            try {
+                this.worldData = await generatorService.generateWorld(seed);
+            } catch (e: any) {
+                console.warn("[Architect] Generating world via API failed. Falling back to Golden Path Mock.", e);
+                onProgress({ phase: "PHASE 1: ARCHITECTING", detail: `API Exhausted. Using Golden Path Mock Data.`, progress: 20, errors: [] });
+                this.worldData = generatorService.generateMockWorld();
+            }
         }
 
         onProgress({ phase: "PHASE 1: ARCHITECTING", detail: `World structure generated. Found ${this.worldData.taxonomy.races.length} races.`, progress: 30, errors: [] });
@@ -149,31 +155,51 @@ GAME FUNCTIONS GLOBALLY AVAILABLE:
         `;
 
         try {
-            // Note: For actual implementation, generatorService needs a raw generic string prompt method,
-            // or we use a specialized prompt method. Here we assume we can call an LLM.
-            // MOCKING LLM INJECTION FOR NOW:
-            onProgress({ phase: "PHASE 2: CODING", detail: "Mocking LLM injection into BattleKernel.ajs...", progress: 60, errors: [] });
+            // First, attempt actual generation if not explicitly mocked
+            // Since we don't have a structured JSON response method for pure code diffs yet,
+            // we will simulate the LLM call here, but immediately fall back to the "Golden Path" if it fails.
+            onProgress({ phase: "PHASE 2: CODING", detail: "Prompting LLM for AJS diffs...", progress: 50, errors: [] });
 
-            // In a real run, we'd parse the LLM's JSON and overwrite `this.vfs.get(file).content`.
-            // Let's pretend the LLM added a comment.
+            // Attempt to call the underlying AI provider directly if available
+            // @ts-ignore
+            if (generatorService.provider) {
+                 // @ts-ignore
+                 await generatorService.provider.generate(prompt);
+            } else {
+                 throw new Error("No AI Provider active.");
+            }
+
+            // ... in a full implementation we would parse the result here.
+
+        } catch (e: any) {
+            console.warn("[Architect] LLM Code Injection failed or timed out. Falling back to Golden Path Static Mock.", e);
+            onProgress({ phase: "PHASE 2: CODING", detail: `LLM API failed (${e.message}). Falling back to Golden Path AJS injection.`, progress: 60, errors: [] });
+        }
+
+        // --- GOLDEN PATH STATIC FALLBACK ---
+        // If the LLM fails (due to quota, 404, or parsing errors), we ensure the workflow can still proceed
+        // by applying a known-good set of static AJS modifications.
+        try {
             const battleFile = this.vfs.get("BattleKernel.ajs");
             if (battleFile) {
-                battleFile.content = `// [LLM INJECTED SKILL LOGIC] \n` + battleFile.content;
+                // Mocking the LLM injecting a new skill
+                battleFile.content = `// [LLM INJECTED SKILL LOGIC - GOLDEN PATH FALLBACK] \n` +
+                `function custom_poison_strike(target) { \n` +
+                `    Log("Custom Poison Strike applied!"); \n` +
+                `} \n` + battleFile.content;
+
                 const compiled = this.compileAJS(battleFile.content, KernelID.BATTLE);
 
-                // Keep the old firmware blocks but replace the generated data/logic bodies.
-                // In a full architecture, the ArchitectService must track exactly which Forth
-                // preambles/postambles belong to which file. For Phase 1 we just stub the logic update.
                 battleFile.dataBlocks[battleFile.dataBlocks.length - 1] = compiled.dataBlocks[0];
                 battleFile.logicBlocks[0] = compiled.logicBlocks[0];
                 battleFile.isModified = true;
             }
 
-            onProgress({ phase: "PHASE 2: CODING", detail: "VFS successfully patched with LLM diffs.", progress: 70, errors: [] });
+            onProgress({ phase: "PHASE 2: CODING", detail: "VFS successfully patched with Golden Path AJS diffs.", progress: 70, errors: [] });
 
         } catch (e: any) {
-            console.error("LLM Injection Failed", e);
-            onProgress({ phase: "PHASE 2: CODING", detail: "LLM Injection Failed.", progress: 70, errors: [e.message] });
+            console.error("Golden Path Injection Failed", e);
+            onProgress({ phase: "PHASE 2: CODING", detail: "Golden Path Injection Failed.", progress: 70, errors: [e.message] });
             throw e;
         }
     }
