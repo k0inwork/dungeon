@@ -75,7 +75,22 @@ If a kernel is crashing or behaving erratically, it is likely due to a Forth Dat
 3. If an AJS statement leaves an unhandled value on the stack, the kernel will immediately print an error: `[ASSERT_STACK] Failed! Expected X, got Y`.
 4. The line number printed right before this error (`[TRACE] Executing line Z`) will tell you exactly which AJS statement caused the leak.
 
-## 4. Kernel Swapping
-If you need to patch a bug in a running simulation, you can compile a new kernel and swap it dynamically using `targetProc.swapWith(newProc)`. This preserves the old kernel's `Uint8Array` memory buffer, meaning the entities and state remain intact while the logic updates.
+## 4. Automated Heuristic Analysis (ADA)
+The repository contains a Playwright-based Python script, **Aethelgard Debug Analyzer (ADA)**, located at `scripts/aethel_analyzer.py`.
+
+When diagnosing complex, systemic issues that span across multiple kernels or levels, you should run this tool. It will launch the game in full `?debug=2` tracing mode, automatically traverse the mock generation loop, hook into the console logs, and produce a heuristic report identifying:
+- Exact `EXEC ERROR` crashes and the 10 AST tracing instructions preceding them.
+- Stack Leaks (by analyzing the `[DEPTH: X]` trace telemetry).
+- Potential Infinite Loops inside transpiled WebAssembly environments.
+
+**To run it:**
+```bash
+# Ensure the dev server is running first
+npm run dev &
+python scripts/aethel_analyzer.py
+```
+
+## 5. Kernel Swapping and Live Recompilation
+If you need to patch a bug in a running simulation, you can compile a new kernel and swap it dynamically. The `AetherTranspiler` uses a two-pass mechanism (`dataBlocks` then `logicBlocks`) so that memory (`VARIABLE`, `CREATE`) is allocated first. By capturing the dictionary pointer after the data loads, we can inject a previously serialized `Uint8Array` memory buffer directly over the new kernel before loading its logic, meaning entities and states remain perfectly intact.
 
 Always remember: When in doubt, **write a quick debug script** to isolate the AJS logic, transpile it, and inspect the stack/memory dynamically!
