@@ -54,6 +54,14 @@ If the tests fail, the LLM enters an automated feedback loop.
 2.  **Execution Crashes (`EXEC ERROR`):** If a memory bounds check fails or an invalid struct offset is accessed, the `Aethelgard Debug Analyzer` (`scripts/aethel_analyzer.py`) captures the error and feeds the exact trace telemetry back to the LLM.
 3.  **Refactoring:** The LLM analyzes the specific AJS line, identifies the flaw (e.g., forgot to `DROP` a evaluated expression in a `switch` statement), modifies the AJS file, and re-triggers Phase 3 until all tests pass.
 
+### Phase 5: Human-in-the-Loop (HITL) Fallback
+While the workflow is heavily automated, the strictness of AJS means the LLM can occasionally become stuck in a failure loop (e.g., repeatedly failing to resolve a complex memory map or infinite loop).
+1.  **Failure Threshold:** If the LLM fails to produce passing tests after $N$ attempts (e.g., 5 consecutive transpiler or runtime crashes), the automated loop pauses.
+2.  **Human Escalation:** The test runner escalates the issue, presenting the human developer with the LLM's last generated AJS snippet and the persistent error trace.
+3.  **Intervention:** The human developer can either:
+    *   Provide a specific hint to the LLM via prompt ("You are forgetting to multiply the fixed-point value by 65536").
+    *   Manually correct the AJS logic, commit the fix, and instruct the LLM to resume from the next objective.
+
 ## 5. Implications & Architectural Impact
 
 ### 5.1 Safety Through Confinement
