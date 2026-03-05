@@ -131,16 +131,44 @@ interface AIProvider {
 
 class GeminiProvider implements AIProvider {
     private ai: GoogleGenAI;
+    // Prefer newer models first, fall back if quota is exhausted or model is unavailable
+    private models = [
+        'gemini-3.1-flash',
+        'gemini-3.0-flash',
+        'gemini-2.5-flash',
+        'gemini-2.0-flash'
+    ];
+
     constructor(apiKey: string) {
         this.ai = new GoogleGenAI({ apiKey: apiKey });
     }
+
     async generate(prompt: string, options?: { json?: boolean }): Promise<string> {
-        const result = await this.ai.models.generateContent({
-            model: 'gemini-2.0-flash',
-            contents: prompt,
-            config: options?.json ? { responseMimeType: "application/json" } : undefined
-        });
-        return result.text || "";
+        let lastError: any = null;
+
+        for (const model of this.models) {
+            try {
+                const result = await this.ai.models.generateContent({
+                    model: model,
+                    contents: prompt,
+                    config: options?.json ? { responseMimeType: "application/json" } : undefined
+                });
+                return result.text || "";
+            } catch (e: any) {
+                lastError = e;
+                // If it's a quota error (429) or model not found (404), try the next model.
+                // GoogleGenAI might wrap these differently, so we check the stringified error as well.
+                const errorStr = String(e);
+                if (errorStr.includes("429") || errorStr.includes("404") || errorStr.includes("RESOURCE_EXHAUSTED") || errorStr.includes("NOT_FOUND")) {
+                    console.warn(`[GeminiProvider] Model ${model} failed (${errorStr}). Falling back to next...`);
+                    continue;
+                }
+                // If it's a different kind of error (e.g. bad prompt, 400), throw immediately
+                throw e;
+            }
+        }
+
+        throw new Error(`All Gemini models failed. Last error: ${lastError?.message || String(lastError)}`);
     }
 }
 
