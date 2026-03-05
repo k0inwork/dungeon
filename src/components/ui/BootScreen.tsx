@@ -1,5 +1,6 @@
 import React from "react";
 import { AIConfig } from "../AIConfig";
+import { GenerationProgress } from "../../services/ArchitectService";
 
 interface BootScreenProps {
     seed: string;
@@ -7,9 +8,32 @@ interface BootScreenProps {
     saveExists: boolean;
     onGenerate: (e: React.MouseEvent) => void;
     onLoad: () => void;
+    progress?: GenerationProgress | null;
 }
 
-export const BootScreen: React.FC<BootScreenProps> = ({ seed, setSeed, saveExists, onGenerate, onLoad }) => {
+export const BootScreen: React.FC<BootScreenProps> = ({ seed, setSeed, saveExists, onGenerate, onLoad, progress }) => {
+    if (progress) {
+        return (
+            <div style={{ textAlign: "center", color: "#0f0", width: "600px", margin: "0 auto" }}>
+                <h1 style={{ animation: "pulse 2s infinite" }}>{progress.phase}</h1>
+                <p style={{ fontSize: "1.2em", margin: "20px 0" }}>{progress.detail}</p>
+
+                <div style={{ width: "100%", height: "20px", background: "#333", border: "1px solid #0f0" }}>
+                    <div style={{ width: `${progress.progress}%`, height: "100%", background: "#0f0", transition: "width 0.5s ease" }} />
+                </div>
+
+                {progress.errors && progress.errors.length > 0 && (
+                    <div style={{ marginTop: "20px", color: "red", textAlign: "left", border: "1px solid red", padding: "10px" }}>
+                        <h3>ERRORS DETECTED:</h3>
+                        <ul>
+                            {progress.errors.map((err, i) => <li key={i}>{err}</li>)}
+                        </ul>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
     return (
         <div style={{ textAlign: "center" }}>
             <h1>WORLD SEED INPUT</h1>

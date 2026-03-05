@@ -34,7 +34,7 @@ const App = () => {
 
     const {
         mode, worldInfo, currentLevelId, currentLevelIdx, gameOver, saveExists,
-        handleGenerate, saveGame, loadGame, engine, handleInspect, setPlayerMoveHandler
+        handleGenerate, saveGame, loadGame, engine, handleInspect, setPlayerMoveHandler, generationProgress
     } = useGameSimulation(addLog);
 
     useEffect(() => {
@@ -67,7 +67,16 @@ const App = () => {
                     />
                 )}
 
-                {mode === "GENERATING" && <div style={{ textAlign: "center" }}><h1>SYNCING KERNELS...</h1></div>}
+                {mode === "GENERATING" && (
+                    <BootScreen
+                        seed={seed}
+                        setSeed={setSeed}
+                        saveExists={saveExists}
+                        onGenerate={(e) => {}}
+                        onLoad={() => {}}
+                        progress={generationProgress}
+                    />
+                )}
 
                 {viewMode === "GAME" && (mode === "GRID" || mode === "PLATFORM") && (
                     <PresentationLayer
