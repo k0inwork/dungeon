@@ -8,6 +8,12 @@ The core philosophy of this workflow is the **AJS-Only Viewport**. The LLM opera
 
 This constraints-driven environment forces the LLM to write highly optimized, predictable, and memory-safe logic (e.g., no closures, strict fixed-size memory layouts, O(1) array traversals), effectively turning the LLM into a hyper-efficient systems programmer for the game world.
 
+### 1.1 World-Building as SDLC
+Crucially, this workflow frames generative world-building precisely as a **Software Development Life Cycle (SDLC)**. When the LLM creates a new realm, it is actively performing:
+1.  **Requirements Gathering:** Formulating the narrative theme, lore, enemy behavior patterns, and environmental hazards (e.g., "The Swamp is toxic and slows movement").
+2.  **Architecting:** A critical intermediary step. The LLM must define the rigid data structures required to support the requirements. It defines flat C-style VSO struct layouts in `Protocol.ts` (e.g., adding an `Amphibious` boolean flag) and maps the kernel routing in the Trait Manifest.
+3.  **Coding (Scripting):** The final step of writing the highly-optimized AJS logic loops (the `GridKernel` or `HiveKernel`) that operate on the Architected data structures to fulfill the Gathered Requirements.
+
 ## 2. The AJS-Only Viewport (LLM Environment Abstraction)
 
 To prevent the LLM from becoming overwhelmed or hallucinating invalid React/Host code, we must provide an abstracted interface or tooling wrapper.
@@ -83,11 +89,16 @@ The third step introduces real-time generation during active gameplay, but with 
 *   **Entering the Unknown:** The player steps through a dimensional rift. The LLM GM proposes a "Crystalline Void," instantly writing a new `CrystallineVoidGridKernel.ts` where movement reflects light and causes area-of-effect damage.
 *   **The "Approve & Compile" Gate:** Before this new AJS logic is pushed to the engine, a human (either a dedicated human GM or the player themselves) must review the proposed mechanics and click "Approve and Compile." This prevents hallucinated or game-breaking physics from permanently corrupting the active session.
 
-### Step 4: The Autonomous D&D Game Master (Full Real-Time Bi-Storytelling)
-The final goal. The LLM handles narrative and real-time AJS engine-forging completely autonomously, bound only by its immutable ledger of past creations, resulting in a seamless, infinite D&D-style session. The human player and the AI GM engage in true "Bi-Storytelling," co-creating the world in real-time.
+### Step 4: The Quest Weaver (Directed Generation via Hooks)
+A crucial stepping stone before full autonomy is directing generation through explicitly accepted objectives. The AI GM populates the starting world with Quest Givers (via a Narrative Overseer).
+*   **Triggered Forging:** The physical world beyond the starting zone does not exist until the player actively accepts a quest hook. Accepting a quest acts as the formal prompt for the LLM to begin the SDLC process (Requirements -> Architecture -> Coding) for the specific dungeons, enemy types, and terrain kernels required to fulfill that narrative thread.
+*   **Ambient Wilderness:** Simultaneously, the LLM runs a low-priority background process to generate quest-independent, connective "wilderness" regions (e.g., standard forests or roads with minor variations) to seamlessly bridge the gap between the player's current location and the newly forged quest destination.
+
+### Step 5: The Autonomous D&D Game Master (Full Real-Time Bi-Storytelling)
+The final goal. The LLM handles narrative and real-time AJS engine-forging completely autonomously, unbound by explicit quest triggers but strictly bound by its immutable ledger of past creations. It results in a seamless, infinite D&D-style session where the human player and the AI GM engage in true "Bi-Storytelling," co-creating the world in real-time.
 
 ### 5.1 The Bound Master: Complying with the Forged World
-A critical challenge in infinite generative storytelling (Steps 2-4) is hallucination and mechanical inconsistency. To function as a true D&D Game Master, the LLM must eventually become bound by the world it has created.
+A critical challenge in infinite generative storytelling (Steps 2-5) is hallucination and mechanical inconsistency. To function as a true D&D Game Master, the LLM must eventually become bound by the world it has created.
 
 *   **The Immutable Ledger:** Once the LLM generates a new kernel and transpiles it into WAForth, it is permanently added to the session's **Trait Manifest**. That kernel becomes an immutable law of physics for that specific region.
 *   **Contextual Guardrails:** The LLM cannot simply "forget" or randomly rewrite how the Crystalline Void works when the player returns to it hours later. The engine must maintain a strictly formatted ledger of all previously generated AJS kernels, VSO structs, and Trait mappings. This ledger is passed as context to the LLM during every prompt.
@@ -122,9 +133,9 @@ Implementing this LLM-Assisted Development Workflow involves significant archite
 *   **Risk:** High. Memory fragmentation and synchronization race conditions between the host and multiple dynamic guests are likely.
 
 ### The Narrative Evolution (Extreme Complexity)
-*   **Tasks:** Implementing the phased narrative steps. While Step 1 (Offline Architect) and Step 2 (Horizon Forger) rely mostly on asynchronous scheduling and prompt chaining, Step 3 (Curated GM) and Step 4 (Autonomous GM) require near-instantaneous AJS generation mid-gameplay.
+*   **Tasks:** Implementing the phased narrative steps. While Step 1 (Offline Architect) and Step 2 (Horizon Forger) rely mostly on asynchronous scheduling and prompt chaining, Steps 3, 4, and 5 require increasingly complex, near-instantaneous implementations of the full SDLC (Requirements -> Architecture -> Code) mid-gameplay.
 *   **Effort:** A long-term research endeavor. Achieving AJS generation and validation that strictly complies with historical VSO definitions in seconds pushes the boundaries of current LLM capabilities and context window limitations.
 *   **Risk:** Extreme. Hallucinations or transpiler failures during real-time kernel generation in an active D&D session will immediately crash or corrupt the simulation for the player.
 
 ### Conclusion
-The "AJS-Only Offline Developer" tooling and the **Offline World Architect (Step 1)** are highly practical and achievable goals that leverage Aethelgard's unique architecture for massive productivity gains. The evolution toward the **Autonomous D&D Game Master (Step 4)** should be treated as a multi-year, experimental feature requiring significant breakthroughs in LLM reliability, context management, and zero-latency transpilation.
+The "AJS-Only Offline Developer" tooling and the **Offline World Architect (Step 1)** are highly practical and achievable goals that leverage Aethelgard's unique architecture for massive productivity gains. The evolution toward the fully autonomous **D&D Game Master (Step 5)** should be treated as a multi-year, experimental feature requiring significant breakthroughs in LLM reliability, context management, and zero-latency transpilation.
