@@ -102,3 +102,30 @@ When adding complex new mechanics (e.g., a Quest Overseer that overrides standar
 
 ### 6.4 The Need for a "Translator" Tool
 The primary challenge of this workflow is bridging the gap between Forth errors and AJS logic. A critical piece of tooling required for this workflow to succeed is a robust source-map translator. When the WAForth engine crashes or leaks a stack frame, the error must be perfectly mapped back to the LLM's AJS code. If the LLM only receives raw Forth hex dumps, the debugging cycle will stall. The `AetherTranspiler`'s `DEBUG_MODE` and symbol table generation are essential prerequisites for this.
+
+## 7. Project Effort & Complexity Estimation
+
+Implementing this LLM-Assisted Development Workflow involves significant architectural shifts, transforming the engine from a static framework into a dynamically generative meta-engine. The effort can be broken down into four major phases:
+
+### Phase 1: Tooling & The AJS Viewport (Medium Complexity)
+*   **Tasks:** Building the Virtual File System (VFS) to restrict LLM access, creating the headless test-runner loop, and implementing the Forth-to-AJS source-map translator for stack leaks and execution errors.
+*   **Effort:** Achievable in the near term. The `AetherTranspiler` already possesses `DEBUG_MODE` and symbol table generation, which form the necessary foundation.
+*   **Risk:** Low. This phase primarily involves wrapping existing tools.
+
+### Phase 2: Dynamic Kernel Manifests (High Complexity)
+*   **Tasks:** Refactoring `LevelConfig.ts` and the JS Host Star Topology router to support booting entirely new kernel variants (`SwampGridKernel`) on a room-by-room basis without dropping frames or corrupting global VSO memory.
+*   **Effort:** Significant. It requires deep modifications to the kernel lifecycle and how the VSO Registry maps memory across dynamically loaded Wasm instances.
+*   **Risk:** High. Memory fragmentation and synchronization race conditions between the host and multiple dynamic guests are likely.
+
+### Phase 3: The Automated HITL Loop (Medium Complexity)
+*   **Tasks:** Implementing the automated retry logic, programmatically parsing `[ASSERT_STACK]` and `EXEC ERROR` trace telemetry, and building the fallback UI for human developer escalation.
+*   **Effort:** Moderate. Relies heavily on the success of Phase 1's source-mapping.
+*   **Risk:** Medium. The primary risk is the LLM becoming consistently stuck on complex AJS constraints, leading to constant human intervention.
+
+### Phase 4: Real-Time Bi-Storytelling (Extreme Complexity)
+*   **Tasks:** Building the "Immutable Ledger" context window manager, ensuring the LLM can generate valid, performant AJS in a few seconds mid-gameplay, and handling seamless background transpilation, fallback, and world compliance during active play.
+*   **Effort:** A long-term research endeavor. Achieving near-instantaneous AJS generation and validation that strictly complies with historical VSO definitions pushes the boundaries of current LLM capabilities and context window limitations.
+*   **Risk:** Extreme. Hallucinations in real-time kernel generation will immediately crash the simulation for the player.
+
+### Conclusion
+The "AJS-Only Offline Developer" loop (Phases 1-3) is a highly practical and achievable goal that leverages Aethelgard's unique architecture for massive productivity gains. Conversely, the "Real-Time Bi-Storytelling GM" (Phase 4) should be treated as an experimental, advanced feature requiring significant breakthroughs in LLM reliability and context management.
