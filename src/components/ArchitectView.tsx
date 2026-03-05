@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { WorldData, TaxonomyDef, generatorService, TerrainDef, EntityDef } from '../services/GeneratorService';
-import { MapGenerator } from '../services/MapGenerator';
+import { architectService, VFSFile } from '../services/ArchitectService';
 
 interface ArchitectViewProps {
   data: WorldData;
@@ -9,7 +9,7 @@ interface ArchitectViewProps {
 const hex = (num: number) => '#' + num.toString(16).padStart(6, '0').toUpperCase();
 
 export const ArchitectView: React.FC<ArchitectViewProps> = ({ data }) => {
-  const [tab, setTab] = useState<'WORLD' | 'TAXONOMY' | 'ATLAS' | 'LEVEL' | 'DEBUG'>('LEVEL');
+  const [tab, setTab] = useState<'WORLD' | 'TAXONOMY' | 'ATLAS' | 'LEVEL' | 'DEBUG' | 'VFS'>('LEVEL');
   const [logs, setLogs] = useState(generatorService.history);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
@@ -122,7 +122,7 @@ export const ArchitectView: React.FC<ArchitectViewProps> = ({ data }) => {
       
       {/* TABS */}
       <div style={{ display: 'flex', borderBottom: '1px solid #333', background: '#000' }}>
-        {['LEVEL', 'ATLAS', 'TAXONOMY', 'WORLD', 'DEBUG'].map(t => (
+        {['LEVEL', 'ATLAS', 'TAXONOMY', 'WORLD', 'VFS', 'DEBUG'].map(t => (
           <button
             key={t}
             onClick={() => setTab(t as any)}
@@ -278,6 +278,53 @@ export const ArchitectView: React.FC<ArchitectViewProps> = ({ data }) => {
                   ))}
                 </div>
              </div>
+          </div>
+        )}
+
+        {/* VFS TAB */}
+        {tab === 'VFS' && (
+          <div>
+            <h3 style={{ color: 'magenta', borderBottom: '1px solid #333', paddingBottom: '10px' }}>VIRTUAL FILE SYSTEM (AJS SOURCES)</h3>
+            <p style={{ color: '#888', marginBottom: '20px' }}>
+              These are the raw AJS logic files currently driving the engine. Files modified by the LLM during Phase 2 are marked as [MODIFIED].
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+               {Array.from(architectService.getActiveVFS().entries()).map(([filename, vfsFile]) => {
+                   let inInjectedBlock = false;
+                   return (
+                   <div key={filename} style={{ border: '1px solid #333', background: '#0a0a0a' }}>
+                       <div style={{ padding: '10px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', background: '#111' }}>
+                           <span style={{ color: '#0ff', fontWeight: 'bold' }}>{filename}</span>
+                           {vfsFile.isModified && <span style={{ color: '#0f0', fontWeight: 'bold', background: '#030', padding: '2px 5px' }}>[MODIFIED]</span>}
+                       </div>
+                       <div style={{ padding: '10px', background: '#000', overflowX: 'auto' }}>
+                           <pre style={{ color: '#aaa', fontSize: '0.8em', margin: 0 }}>
+                               {vfsFile.content.split('\n').map((line, idx) => {
+                                   if (line.includes('// === START LLM INJECTED ===')) {
+                                       inInjectedBlock = true;
+                                   }
+
+                                   const isHighlighted = inInjectedBlock;
+
+                                   if (line.includes('// === END LLM INJECTED ===')) {
+                                       inInjectedBlock = false;
+                                   }
+
+                                   return (
+                                       <div key={idx} style={{
+                                           background: isHighlighted ? '#131' : 'transparent',
+                                           color: isHighlighted ? '#0f0' : '#aaa',
+                                           padding: isHighlighted ? '0 5px' : '0'
+                                       }}>
+                                           {line || " "}
+                                       </div>
+                                   );
+                               })}
+                           </pre>
+                       </div>
+                   </div>
+               )})}
+            </div>
           </div>
         )}
 

@@ -187,10 +187,14 @@ GAME FUNCTIONS GLOBALLY AVAILABLE:
             const battleFile = this.vfs.get("BattleKernel.ajs");
             if (battleFile) {
                 // Mocking the LLM injecting a new skill
-                battleFile.content = `// [LLM INJECTED SKILL LOGIC - GOLDEN PATH FALLBACK] \n` +
+                const injection = `\n// === START LLM INJECTED ===\n` +
                 `function custom_poison_strike(target) { \n` +
                 `    Log("Custom Poison Strike applied!"); \n` +
-                `} \n` + battleFile.content;
+                `    // Additional logic for taxonomy traits would go here \n` +
+                `}\n` +
+                `// === END LLM INJECTED ===\n\n`;
+
+                battleFile.content = injection + battleFile.content;
 
                 const compiled = this.compileAJS(battleFile.content, KernelID.BATTLE);
 
