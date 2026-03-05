@@ -103,10 +103,10 @@ class ArchitectService {
     /**
      * Phase 2: Apply the skills/logic via LLM diffs to the VFS.
      */
-    public async injectSkillLogic(onProgress: ProgressCallback): Promise<void> {
+    public async injectSkillLogic(isMock: boolean, onProgress: ProgressCallback): Promise<void> {
         if (!this.worldData) throw new Error("World Data not initialized. Run forgeWorldStructure first.");
 
-        onProgress({ phase: "PHASE 2: CODING", detail: "Prompting LLM to inject custom skills into AJS VFS...", progress: 40, errors: [] });
+        onProgress({ phase: "PHASE 2: CODING", detail: "Preparing AJS VFS...", progress: 40, errors: [] });
 
         // Build the context prompt
         const skillsContext = JSON.stringify(this.worldData.taxonomy, null, 2);
@@ -154,31 +154,35 @@ GAME FUNCTIONS GLOBALLY AVAILABLE:
             }
         `;
 
-        try {
-            // First, attempt actual generation if not explicitly mocked
-            // Since we don't have a structured JSON response method for pure code diffs yet,
-            // we will simulate the LLM call here, but immediately fall back to the "Golden Path" if it fails.
-            onProgress({ phase: "PHASE 2: CODING", detail: "Prompting LLM for AJS diffs...", progress: 50, errors: [] });
+        if (!isMock) {
+            try {
+                // First, attempt actual generation if not explicitly mocked
+                // Since we don't have a structured JSON response method for pure code diffs yet,
+                // we will simulate the LLM call here, but immediately fall back to the "Golden Path" if it fails.
+                onProgress({ phase: "PHASE 2: CODING", detail: "Prompting LLM for AJS diffs...", progress: 50, errors: [] });
 
-            // Attempt to call the underlying AI provider directly if available
-            // @ts-ignore
-            if (generatorService.provider) {
-                 // @ts-ignore
-                 await generatorService.provider.generate(prompt);
-            } else {
-                 throw new Error("No AI Provider active.");
+                // Attempt to call the underlying AI provider directly if available
+                // @ts-ignore
+                if (generatorService.provider) {
+                     // @ts-ignore
+                     await generatorService.provider.generate(prompt);
+                } else {
+                     throw new Error("No AI Provider active.");
+                }
+
+                // ... in a full implementation we would parse the result here.
+
+            } catch (e: any) {
+                console.warn("[Architect] LLM Code Injection failed or timed out. Falling back to Golden Path Static Mock.", e);
+                onProgress({ phase: "PHASE 2: CODING", detail: `LLM API failed (${e.message}). Falling back to Golden Path AJS injection.`, progress: 60, errors: [] });
             }
-
-            // ... in a full implementation we would parse the result here.
-
-        } catch (e: any) {
-            console.warn("[Architect] LLM Code Injection failed or timed out. Falling back to Golden Path Static Mock.", e);
-            onProgress({ phase: "PHASE 2: CODING", detail: `LLM API failed (${e.message}). Falling back to Golden Path AJS injection.`, progress: 60, errors: [] });
+        } else {
+             onProgress({ phase: "PHASE 2: CODING", detail: "Mock explicitly requested. Bypassing LLM and applying Golden Path.", progress: 50, errors: [] });
         }
 
         // --- GOLDEN PATH STATIC FALLBACK ---
-        // If the LLM fails (due to quota, 404, or parsing errors), we ensure the workflow can still proceed
-        // by applying a known-good set of static AJS modifications.
+        // If the LLM fails (due to quota, 404, or parsing errors) or if explicitly in Mock Mode,
+        // we ensure the workflow can proceed by applying a known-good set of static AJS modifications.
         try {
             const battleFile = this.vfs.get("BattleKernel.ajs");
             if (battleFile) {

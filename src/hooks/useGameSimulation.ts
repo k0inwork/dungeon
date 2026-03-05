@@ -192,7 +192,7 @@ export const useGameSimulation = (addLog: (msg: string) => void) => {
             const world = await architectService.forgeWorldStructure(seed, isMock, setGenerationProgress);
 
             // Stage 2: Code Injection (if not mock, or if we want to mock the mock)
-            await architectService.injectSkillLogic(setGenerationProgress);
+            await architectService.injectSkillLogic(isMock, setGenerationProgress);
 
             // Stage 3: Validation
             const isValid = await architectService.validateKernelLogic(setGenerationProgress);
