@@ -132,7 +132,7 @@ interface AIProvider {
 class GeminiProvider implements AIProvider {
     private ai: GoogleGenAI;
     constructor(apiKey: string) {
-        this.ai = new GoogleGenAI(apiKey);
+        this.ai = new GoogleGenAI({ apiKey: apiKey });
     }
     async generate(prompt: string, options?: { json?: boolean }): Promise<string> {
         const result = await this.ai.models.generateContent({
