@@ -126,7 +126,7 @@ function run_player_cycle() {
     process_inbox();
 }
 
-function player_boot() {
+function init_player_state() {
     init_player();
 }
 `;
@@ -143,7 +143,7 @@ export const PLAYER_DATA_BLOCKS = [
 
 export const PLAYER_LOGIC_BLOCKS = [
     _PLAYER_COMPILED.logic,
-    ": INIT_PLAYER_AUTO PLAYER_BOOT AJS_INIT_CHANNELS ' HANDLE_EVENTS HANDLE_EVENTS_XT ! ;"
+    ": INIT_PLAYER_AUTO INIT_PLAYER_STATE AJS_INIT_CHANNELS ' HANDLE_EVENTS HANDLE_EVENTS_XT ! ;"
 ];
 
 export const PLAYER_KERNEL_BLOCKS = [...PLAYER_DATA_BLOCKS, ...PLAYER_LOGIC_BLOCKS];

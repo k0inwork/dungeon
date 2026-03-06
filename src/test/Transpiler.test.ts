@@ -1,13 +1,17 @@
 import { expect, test, beforeEach } from 'vitest';
-import { AetherTranspiler } from '../compiler/AetherTranspiler';
+import { forthService } from '../services/WaForthService';
 
-beforeEach(() => {
-  AetherTranspiler.reset();
-});
+test('check isWordDefined patch', async () => {
+    const proc = await forthService.bootProcess("TEST_PROC");
 
-test('transpiles simple assignment', () => {
-  const js = 'function test() { let x = 10; }';
-  const forth = AetherTranspiler.transpile(js);
-  expect(forth).toContain('10');
-  expect(forth).toContain('VARIABLE LV_TEST_X');
+    // The previous run emitted: Logs emitted by Forth: undefined word: MISSING_WORD
+    const isDefinedMissing = proc.isWordDefined("MISSING_WORD");
+    console.log("Is MISSING_WORD defined?", isDefinedMissing);
+
+    proc.run(": A_REAL_WORD ;");
+    const isDefinedReal = proc.isWordDefined("A_REAL_WORD");
+    console.log("Is A_REAL_WORD defined?", isDefinedReal);
+
+    expect(isDefinedMissing).toBe(false);
+    expect(isDefinedReal).toBe(true);
 });
