@@ -131,16 +131,45 @@ interface AIProvider {
 
 class GeminiProvider implements AIProvider {
     private ai: GoogleGenAI;
+    // Prefer newer models first, fall back if quota is exhausted or model is unavailable
+    private models = [
+        'gemini-3.1-flash',
+        'gemini-3.0-flash',
+        'gemini-2.5-flash',
+        'gemini-2.0-flash'
+    ];
+
     constructor(apiKey: string) {
-        this.ai = new GoogleGenAI(apiKey);
+        this.ai = new GoogleGenAI({ apiKey: apiKey });
     }
+
     async generate(prompt: string, options?: { json?: boolean }): Promise<string> {
-        const result = await this.ai.models.generateContent({
-            model: 'gemini-2.0-flash',
-            contents: prompt,
-            config: options?.json ? { responseMimeType: "application/json" } : undefined
-        });
-        return result.text || "";
+        let lastError: any = null;
+
+        for (const model of this.models) {
+            try {
+                const result = await this.ai.models.generateContent({
+                    model: model,
+                    contents: prompt,
+                    config: options?.json ? { responseMimeType: "application/json" } : undefined
+                });
+                return result.text || "";
+            } catch (e: any) {
+                lastError = e;
+                // If it's a quota error (429) or model not found (404), try the next model.
+                // GoogleGenAI might wrap these differently, so we check the stringified error as well.
+                const errorStr = String(e);
+                if (errorStr.includes("429") || errorStr.includes("404") || errorStr.includes("RESOURCE_EXHAUSTED") || errorStr.includes("NOT_FOUND")) {
+                    console.warn(`[GeminiProvider] Model ${model} failed (${errorStr}). Falling back to next...`);
+                    continue;
+                }
+                // If it's a different kind of error (e.g. bad prompt, 400), throw immediately
+                throw e;
+            }
+        }
+
+        console.warn(`[GeminiProvider] All Gemini models failed. Rejecting request to trigger Golden Path fallback in Architect.`);
+        throw new Error(`All Gemini models failed. Last error: ${lastError?.message || String(lastError)}`);
     }
 }
 
@@ -422,6 +451,19 @@ ${code}
       theme: themeData,
       taxonomy: fullTaxonomy,
       atlas: levelData.atlas,
+      levels: {
+         "hub": {
+            id: "hub",
+            name: levelData.active_level.name || "Generated Hub",
+            description: levelData.active_level.description || "",
+            simulation_mode: "GRID",
+            map_layout: generatedMap.layout,
+            terrain_legend: legend,
+            entities: generatedMap.entities,
+            entity_roster: roster,
+            platformer_config: levelData.active_level.platformer_config || { gravity: 5000, jump_force: -75000, wall_color: 0x444444 }
+         }
+      },
       active_level: {
         ...levelData.active_level,
         map_layout: generatedMap.layout,

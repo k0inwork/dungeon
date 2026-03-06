@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import { forthService } from "../services/WaForthService";
 import { storageService } from "../services/StorageService";
 import { generatorService, WorldData } from "../services/GeneratorService";
+import { architectService, GenerationProgress } from "../services/ArchitectService";
 import { SimulationEngine } from "../services/SimulationEngine";
 import { useKernelManager } from "./useKernelManager";
 import { KernelID, getInstanceID } from "../types/Protocol";
@@ -16,6 +17,7 @@ export const useGameSimulation = (addLog: (msg: string) => void) => {
     const currentLevelIdx = LEVEL_IDS.indexOf(currentLevelId);
     const [gameOver, setGameOver] = useState(false);
     const [saveExists, setSaveExists] = useState(false);
+    const [generationProgress, setGenerationProgress] = useState<GenerationProgress | null>(null);
 
     const loadingLevel = useRef<boolean>(false);
     const initializedLevels = useRef<Set<string>>(new Set());
@@ -65,9 +67,31 @@ export const useGameSimulation = (addLog: (msg: string) => void) => {
             const lIdx = LEVEL_IDS.indexOf(level.id);
             const config = LEVEL_CONFIGS[level.simulation_mode];
 
+            const vfs = architectService.getActiveVFS();
             const kernels = await Promise.all(config.requiredKernels.map(k => {
                 const instId = k.role === KernelID.PLAYER ? "PLAYER" : String(getInstanceID(k.role, lIdx));
-                return ensureKernel(instId, k.dataBlocks || k.blocks, k.logicBlocks || k.blocks, lIdx);
+
+                // If a VFS has been forged, prefer overriding with the dynamically generated logic
+                let dataBlocks = k.dataBlocks || k.blocks;
+                let logicBlocks = k.logicBlocks || k.blocks;
+
+                // Map roles to filenames (simplified mapping for Phase 1)
+                const roleMap: Record<KernelID, string> = {
+                    [KernelID.GRID]: "GridKernel.ajs",
+                    [KernelID.PLATFORM]: "PlatformKernel.ajs",
+                    [KernelID.HIVE]: "HiveKernel.ajs",
+                    [KernelID.BATTLE]: "BattleKernel.ajs",
+                    [KernelID.PLAYER]: "PlayerKernel.ajs"
+                } as any;
+
+                const vfsFile = vfs.get(roleMap[k.role]);
+                if (vfsFile && vfsFile.isModified) {
+                    addLog(`Injecting dynamic VFS blocks for ${instId}`);
+                    dataBlocks = vfsFile.dataBlocks;
+                    logicBlocks = vfsFile.logicBlocks;
+                }
+
+                return ensureKernel(instId, dataBlocks, logicBlocks, lIdx);
             }));
 
             if (kernels.some(k => !k)) return;
@@ -162,11 +186,32 @@ export const useGameSimulation = (addLog: (msg: string) => void) => {
     const handleGenerate = useCallback(async (seed: string, isMock: boolean) => {
         setMode("GENERATING");
         initializedLevels.current = new Set();
-        const world = isMock ? generatorService.generateMockWorld() : await generatorService.generateWorld(seed);
-        setWorldInfo(world);
-        setCurrentLevelId("hub");
-        await loadLevel(world.levels!["hub"]);
-    }, [loadLevel]);
+
+        try {
+            // Stage 1: World Structure
+            const world = await architectService.forgeWorldStructure(seed, isMock, setGenerationProgress);
+
+            // Stage 2: Code Injection (if not mock, or if we want to mock the mock)
+            await architectService.injectSkillLogic(isMock, setGenerationProgress);
+
+            // Stage 3: Validation
+            const isValid = await architectService.validateKernelLogic(setGenerationProgress);
+            if (!isValid) {
+                // If validation fails in Phase 1, we stop and let the user see the errors on the boot screen.
+                addLog("CRITICAL: Generated Kernel Logic Failed Validation.");
+                return;
+            }
+
+            setWorldInfo(world);
+            setCurrentLevelId("hub");
+            setGenerationProgress(null); // Clear progress to hide boot screen
+            await loadLevel(world.levels!["hub"]);
+
+        } catch (e: any) {
+             setGenerationProgress(prev => prev ? { ...prev, errors: [...prev.errors, e.message] } : null);
+             addLog(`Generation Failed: ${e.message}`);
+        }
+    }, [loadLevel, addLog]);
 
     const saveGame = useCallback(async () => {
         if (!worldInfo) return;
@@ -241,7 +286,7 @@ export const useGameSimulation = (addLog: (msg: string) => void) => {
 
     return {
         mode, worldInfo, currentLevelId, currentLevelIdx, gameOver, saveExists,
-        handleGenerate, saveGame, loadGame, engine, handleInspect,
+        handleGenerate, saveGame, loadGame, engine, handleInspect, generationProgress,
         setPlayerMoveHandler: (h: any) => { playerMoveRef.current = h; }
     };
 };
