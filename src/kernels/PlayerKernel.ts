@@ -129,8 +129,6 @@ function run_player_cycle() {
 function player_boot() {
     init_player();
 }
-
-player_boot();
 `;
 
 const IS_DEBUG = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).has('debug') : false;
@@ -145,7 +143,7 @@ export const PLAYER_DATA_BLOCKS = [
 
 export const PLAYER_LOGIC_BLOCKS = [
     _PLAYER_COMPILED.logic,
-    ": INIT_PLAYER_AUTO INIT_PLAYER AJS_INIT_CHANNELS ' HANDLE_EVENTS HANDLE_EVENTS_XT ! ;"
+    ": INIT_PLAYER_AUTO PLAYER_BOOT AJS_INIT_CHANNELS ' HANDLE_EVENTS HANDLE_EVENTS_XT ! ;"
 ];
 
 export const PLAYER_KERNEL_BLOCKS = [...PLAYER_DATA_BLOCKS, ...PLAYER_LOGIC_BLOCKS];
