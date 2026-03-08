@@ -297,9 +297,17 @@ class GeneratorService {
       } catch (parseError) {
         console.error("JSON Parse Error", parseError);
         // Fallback for some models that might not follow JSON instruction perfectly
-        const match = text.match(/\{[\s\S]*\}/);
+        let match = text.match(/\{[\s\S]*\}/);
         if (match) {
-            return JSON.parse(match[0]);
+            let extracted = match[0];
+            // Basic fix for common trailing commas before array/object closing
+            extracted = extracted.replace(/,\s*([\]}])/g, '$1');
+            try {
+                return JSON.parse(extracted);
+            } catch (fallbackError) {
+                console.error("Fallback JSON Parse Error", fallbackError, "Text:", extracted);
+                throw new Error("Failed to parse AI response as JSON after cleanup");
+            }
         }
         throw new Error("Failed to parse AI response as JSON");
       }

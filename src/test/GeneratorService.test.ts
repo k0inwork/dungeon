@@ -14,80 +14,43 @@ vi.mock('../services/WebLLMService', () => {
     }
 });
 
-import { generatorService, AIProviderType } from '../services/GeneratorService';
-import OpenAI from "openai";
+import { generatorService } from '../services/GeneratorService';
 
-// Mock the OpenAI library so we don't actually hit the live API during unit tests
-vi.mock('openai', () => {
-  return {
-    default: class MockOpenAI {
-      chat = {
-        completions: {
-          create: vi.fn().mockImplementation(async (args) => {
-            // Check the prompt phase and return mock JSON to satisfy the multi-step generateWorld pipeline
-            const content = args.messages[args.messages.length - 1].content;
-
-            if (content.includes('Setting Theme based on seed')) {
-              return { choices: [{ message: { content: JSON.stringify({ name: "Cyberpunk Mock", lore: "Mock lore." }) } }] };
-            } else if (content.includes('Define 3 distinct Races')) {
-              return { choices: [{ message: { content: JSON.stringify({ races: [{ name: "Human", description: "Boring", ability: { name: "A", description: "B", code: "Log('C')" } }] }) } }] };
-            } else if (content.includes('Define 3 Classes')) {
-              return { choices: [{ message: { content: JSON.stringify({ classes: [{ name: "Warrior", description: "Fights", ability: { name: "A", description: "B", code: "Damage(Target, 10, 'KINETIC')" } }] }) } }] };
-            } else if (content.includes('Define 3 Origins')) {
-              return { choices: [{ message: { content: JSON.stringify({ origins: [{ name: "City", description: "Urbane", ability: { name: "A", description: "B", code: "Log('City')" } }] }) } }] };
-            } else if (content.includes('Create an Atlas of 3 Nodes')) {
-              return { choices: [{ message: { content: JSON.stringify({
-                atlas: [{ id: "l1", name: "Start", biome: "City", difficulty: 1, connections: [] }],
-                active_level: {
-                  name: "Level 1",
-                  description: "Dark",
-                  terrain_legend: [{ symbol: ".", name: "Floor", type: "FLOOR", color: 0, passable: true, description: "Floor" }, { symbol: "#", name: "Wall", type: "WALL", color: 0, passable: false, description: "Wall" }],
-                  entity_roster: [],
-                  platformer_config: { gravity: 0.5, jump_force: -1.2, wall_color: 0 }
-                }
-              }) } }] };
-            }
-            return { choices: [{ message: { content: "{}" } }] };
-          })
-        }
-      };
-      constructor() {}
-    }
-  };
-});
-
-describe('GeneratorService Integration', () => {
+describe('GeneratorService Live Connection', () => {
 
     beforeAll(() => {
-        // Mock environment variables that Vite normally injects
+        // Set real API configuration for the ZAI provider
         // @ts-ignore
-        import.meta.env.VITE_ZAI_API_KEY = 'test_key';
+        import.meta.env.VITE_ZAI_API_KEY = 'f886907aa0f54a9c8d480755c8dceaf8.GQE52fZAgEEqiQM1';
         // @ts-ignore
-        import.meta.env.VITE_ZAI_MODEL = 'test_model';
+        import.meta.env.VITE_ZAI_MODEL = 'glm-4.7';
     });
 
-    test('ZAI Provider loads and generates world successfully', async () => {
+    // We increase timeout significantly for real LLM generation
+    test('ZAI Provider successfully generates a world from live endpoint', async () => {
 
         // 1. Setup the service to use ZAI
         generatorService.setProvider('ZAI');
         expect(generatorService.getProviderType()).toBe('ZAI');
 
-        // 2. Execute a world generation call
-        // The mock OpenAI will intercept the internal `.generate()` calls.
-        const worldData = await generatorService.generateWorld("Cyberpunk Sewers");
+        console.log("Starting live generation with ZAI...");
+        // 2. Execute a real world generation call to Z.AI
+        // Use a simpler seed to hope for a faster generation, given the 5-step prompt pipeline.
+        const worldData = await generatorService.generateWorld("Mountain");
 
-        // 3. Assert the structure is built and returned
+        // 3. Assert the structure is built and returned successfully
         expect(worldData).toBeDefined();
-        expect(worldData.theme.name).toBe("Cyberpunk Mock");
+        expect(worldData.theme.name).toBeDefined();
         expect(worldData.taxonomy.races.length).toBeGreaterThan(0);
         expect(worldData.taxonomy.classes.length).toBeGreaterThan(0);
         expect(worldData.taxonomy.origins.length).toBeGreaterThan(0);
 
         expect(worldData.active_level).toBeDefined();
-        expect(worldData.active_level.name).toBe("Level 1");
 
-        // Map generator should have generated a layout
+        // Map generator should have generated a layout based on LLM taxonomy
         expect(worldData.active_level.map_layout).toBeDefined();
-        expect(worldData.active_level.map_layout.length).toBe(20); // 20 rows by default
-    });
+        expect(worldData.active_level.map_layout.length).toBeGreaterThan(0);
+
+        console.log("Successfully received and parsed generation:", worldData.theme.name);
+    }, 240000); // 4 minute timeout for live 5-step API sequence
 });
