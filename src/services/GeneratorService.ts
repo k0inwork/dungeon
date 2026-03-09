@@ -1,5 +1,6 @@
 
 import { GoogleGenAI } from "@google/genai";
+import OpenAI from "openai";
 import { MapGenerator } from "./MapGenerator";
 import { MOCK_WORLD_DATA } from "../data/MockWorld";
 import { webLLMService } from "./WebLLMService";
@@ -123,7 +124,7 @@ export interface WorldData {
   levels?: Record<string, LevelData>;
 }
 
-export type AIProviderType = 'GEMINI' | 'WEBLLM';
+export type AIProviderType = 'GEMINI' | 'WEBLLM' | 'ZAI';
 
 interface AIProvider {
     generate(prompt: string, options?: { json?: boolean, phase?: string }): Promise<string>;
@@ -180,6 +181,42 @@ class WebLLMProvider implements AIProvider {
     }
 }
 
+class ZaiProvider implements AIProvider {
+    private openai: OpenAI;
+    private model: string;
+
+    constructor(apiKey: string, model: string) {
+        // We configure OpenAI instance to talk to ZAI endpoint
+        this.openai = new OpenAI({
+            apiKey: apiKey,
+            baseURL: "https://api.z.ai/api/coding/paas/v4",
+            dangerouslyAllowBrowser: true // This is required if running in frontend context
+        });
+        this.model = model;
+    }
+
+    async generate(prompt: string, options?: { json?: boolean }): Promise<string> {
+        try {
+            const system = options?.json ? "Respond ONLY with valid JSON. No conversational text. No markdown blocks." : undefined;
+            const messages: any[] = [];
+            if (system) {
+                messages.push({ role: "system", content: system });
+            }
+            messages.push({ role: "user", content: prompt });
+
+            const response = await this.openai.chat.completions.create({
+                model: this.model,
+                messages: messages,
+            });
+
+            return response.choices[0]?.message?.content || "";
+        } catch (e) {
+            console.error(`[ZaiProvider] Failed to generate content:`, e);
+            throw e;
+        }
+    }
+}
+
 class GeneratorService {
   private provider: AIProvider | null = null;
   private providerType: AIProviderType = 'GEMINI';
@@ -202,6 +239,16 @@ class GeneratorService {
           const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
           if (apiKey) {
               this.provider = new GeminiProvider(apiKey);
+          } else {
+              this.provider = null;
+          }
+      } else if (type === 'ZAI') {
+          // @ts-ignore
+          const zaiApiKey = import.meta.env.VITE_ZAI_API_KEY;
+          // @ts-ignore
+          const zaiModel = import.meta.env.VITE_ZAI_MODEL;
+          if (zaiApiKey) {
+              this.provider = new ZaiProvider(zaiApiKey, zaiModel);
           } else {
               this.provider = null;
           }
@@ -250,9 +297,17 @@ class GeneratorService {
       } catch (parseError) {
         console.error("JSON Parse Error", parseError);
         // Fallback for some models that might not follow JSON instruction perfectly
-        const match = text.match(/\{[\s\S]*\}/);
+        let match = text.match(/\{[\s\S]*\}/);
         if (match) {
-            return JSON.parse(match[0]);
+            let extracted = match[0];
+            // Basic fix for common trailing commas before array/object closing
+            extracted = extracted.replace(/,\s*([\]}])/g, '$1');
+            try {
+                return JSON.parse(extracted);
+            } catch (fallbackError) {
+                console.error("Fallback JSON Parse Error", fallbackError, "Text:", extracted);
+                throw new Error("Failed to parse AI response as JSON after cleanup");
+            }
         }
         throw new Error("Failed to parse AI response as JSON");
       }

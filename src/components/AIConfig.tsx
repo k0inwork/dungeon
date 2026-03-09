@@ -88,6 +88,19 @@ export const AIConfig: React.FC = () => {
                         GOOGLE GEMINI
                     </button>
                     <button
+                        onClick={() => handleProviderChange('ZAI')}
+                        style={{
+                            flex: 1,
+                            padding: '8px',
+                            background: provider === 'ZAI' ? '#0ff' : '#111',
+                            color: provider === 'ZAI' ? '#000' : '#0ff',
+                            border: '1px solid #0ff',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        Z.AI (OPENAI)
+                    </button>
+                    <button
                         onClick={() => handleProviderChange('WEBLLM')}
                         disabled={webGPUSupported === false}
                         style={{
@@ -174,6 +187,12 @@ export const AIConfig: React.FC = () => {
             {provider === 'GEMINI' && (
                 <div style={{ color: '#666', fontSize: '0.9em' }}>
                     Using Google Gemini Flash 1.5. Requires VITE_GEMINI_API_KEY.
+                </div>
+            )}
+
+            {provider === 'ZAI' && (
+                <div style={{ color: '#666', fontSize: '0.9em' }}>
+                    Using Z.AI Custom API. Requires VITE_ZAI_API_KEY and VITE_ZAI_MODEL.
                 </div>
             )}
         </div>
