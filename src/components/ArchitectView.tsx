@@ -12,6 +12,11 @@ export const ArchitectView: React.FC<ArchitectViewProps> = ({ data }) => {
   const [tab, setTab] = useState<'WORLD' | 'TAXONOMY' | 'ATLAS' | 'LEVEL' | 'DEBUG' | 'VFS'>('LEVEL');
   const [logs, setLogs] = useState(generatorService.history);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [collapsedFiles, setCollapsedFiles] = useState<Record<string, boolean>>({});
+
+  const toggleFileCollapse = (filename: string) => {
+    setCollapsedFiles(prev => ({ ...prev, [filename]: !prev[filename] }));
+  };
 
   // Refresh logs when entering debug tab
   useEffect(() => {
@@ -291,37 +296,45 @@ export const ArchitectView: React.FC<ArchitectViewProps> = ({ data }) => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                {Array.from(architectService.getActiveVFS().entries()).map(([filename, vfsFile]) => {
                    let inInjectedBlock = false;
+                   const isCollapsed = collapsedFiles[filename];
                    return (
                    <div key={filename} style={{ border: '1px solid #333', background: '#0a0a0a' }}>
-                       <div style={{ padding: '10px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', background: '#111' }}>
-                           <span style={{ color: '#0ff', fontWeight: 'bold' }}>{filename}</span>
+                       <div
+                           onClick={() => toggleFileCollapse(filename)}
+                           style={{ padding: '10px', borderBottom: '1px solid #333', display: 'flex', justifyContent: 'space-between', background: '#111', cursor: 'pointer' }}
+                       >
+                           <span style={{ color: '#0ff', fontWeight: 'bold' }}>
+                               {isCollapsed ? '▶ ' : '▼ '}{filename}
+                           </span>
                            {vfsFile.isModified && <span style={{ color: '#0f0', fontWeight: 'bold', background: '#030', padding: '2px 5px' }}>[MODIFIED]</span>}
                        </div>
-                       <div style={{ padding: '10px', background: '#000', overflowX: 'auto' }}>
-                           <pre style={{ color: '#aaa', fontSize: '0.8em', margin: 0 }}>
-                               {vfsFile.content.split('\n').map((line, idx) => {
-                                   if (line.includes('// === START LLM INJECTED ===')) {
-                                       inInjectedBlock = true;
-                                   }
+                       {!isCollapsed && (
+                           <div style={{ padding: '10px', background: '#000', overflowX: 'auto', overflowY: 'auto', maxHeight: '400px' }}>
+                               <pre style={{ color: '#aaa', fontSize: '0.8em', margin: 0 }}>
+                                   {vfsFile.content.split('\n').map((line, idx) => {
+                                       if (line.includes('// === START LLM INJECTED ===')) {
+                                           inInjectedBlock = true;
+                                       }
 
-                                   const isHighlighted = inInjectedBlock;
+                                       const isHighlighted = inInjectedBlock;
 
-                                   if (line.includes('// === END LLM INJECTED ===')) {
-                                       inInjectedBlock = false;
-                                   }
+                                       if (line.includes('// === END LLM INJECTED ===')) {
+                                           inInjectedBlock = false;
+                                       }
 
-                                   return (
-                                       <div key={idx} style={{
-                                           background: isHighlighted ? '#131' : 'transparent',
-                                           color: isHighlighted ? '#0f0' : '#aaa',
-                                           padding: isHighlighted ? '0 5px' : '0'
-                                       }}>
-                                           {line || " "}
-                                       </div>
-                                   );
-                               })}
-                           </pre>
-                       </div>
+                                       return (
+                                           <div key={idx} style={{
+                                               background: isHighlighted ? '#131' : 'transparent',
+                                               color: isHighlighted ? '#0f0' : '#aaa',
+                                               padding: isHighlighted ? '0 5px' : '0'
+                                           }}>
+                                               {line || " "}
+                                           </div>
+                                       );
+                                   })}
+                               </pre>
+                           </div>
+                       )}
                    </div>
                )})}
             </div>

@@ -448,22 +448,28 @@ export class ForthProcess {
   isWordDefined(wordName: string): boolean {
     if (!this.forth || this.status === "FLASHED") return false;
     const oldEmit = this.forth.onEmit;
-    this.forth.onEmit = () => {}; // Mute output during check
+    let isDefined = true;
 
-    // Mute console.error because WAForth uses it for "undefined word"
+    let emitBuffer = "";
+    this.forth.onEmit = (char: string) => { emitBuffer += char; };
+
+    // Mute console.error just in case
     const oldConsoleError = console.error;
     console.error = () => {};
 
     try {
-        this.forth.interpret(`' ${wordName} DROP`);
-        this.forth.onEmit = oldEmit;
-        console.error = oldConsoleError;
-        return true;
+        this.forth.interpret(`' ${wordName} DROP\n`);
+        if (emitBuffer.includes("undefined word")) {
+            isDefined = false;
+        }
     } catch (e) {
+        isDefined = false;
+    } finally {
         this.forth.onEmit = oldEmit;
         console.error = oldConsoleError;
-        return false;
     }
+
+    return isDefined;
   }
 
   getMemory(): ArrayBuffer {
